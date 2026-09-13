@@ -125,9 +125,9 @@ type BatchInput struct {
 
 // BatchResult 是批量核验的结果。
 type BatchResult struct {
-	Matched int
-	Applied int
-	Failed  int
+	Matched  int
+	Applied  int
+	Failed   int
 	FirstErr error
 }
 

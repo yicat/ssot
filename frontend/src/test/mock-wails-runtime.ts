@@ -38,11 +38,15 @@ export const CallID = {
   BatchPreview: 4077936422,
   BatchReject: 473055153,
   Conflicts: 641064245,
+  DecisionStats: 3422876767,
+  Decisions: 2489111685,
+  DeferDecision: 61710908,
   History: 3004648246,
   Pending: 1871646081,
   ProjectDir: 50586622,
   Queue: 3654268873,
   Reject: 888414013,
+  ResolveDecision: 4168258356,
   Stats: 268982341,
 } as const;
 
@@ -84,6 +88,8 @@ export const wailsMock = {
       Any: identity,
       Array: () => identity,
       Map: () => identity,
+      // 指针字段（例如未裁决时的 resolution）会用到它
+      Nullable: () => identity,
     },
     CancellablePromise: class {},
     Events: { On: events.on, Off: events.off, OffAll: vi.fn(), Emit: vi.fn() },

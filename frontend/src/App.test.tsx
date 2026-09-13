@@ -64,6 +64,13 @@ beforeEach(() => {
     .on(CallID.Stats, () => statsFixture())
     .on(CallID.Queue, () => [queueFixture()])
     .on(CallID.Conflicts, () => [])
+    .on(CallID.DecisionStats, () => ({
+      open: 0,
+      deferred: 0,
+      decided: 0,
+      missing: 0,
+      stale: 0,
+    }))
     .on(CallID.History, () => []);
 });
 

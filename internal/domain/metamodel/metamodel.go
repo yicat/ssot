@@ -71,11 +71,11 @@ type Field struct {
 
 // Entity 是一个实体类型的 schema。
 type Entity struct {
-	Name         string
-	Description  string
-	MetaVersion  int
-	SchemaRev    string
-	Fields       []Field
+	Name        string
+	Description string
+	MetaVersion int
+	SchemaRev   string
+	Fields      []Field
 }
 
 // Problem 是一条 schema 结构问题，带位置。

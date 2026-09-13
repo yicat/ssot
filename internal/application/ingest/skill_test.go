@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,52 @@ const guhuoniao = `{
      "upgrades":[{"level":5,"effect":"全体伤害增至41%，劈斩伤害增至108%。若目标生命值低于60%则是最后1个目标，则劈斩伤害提升至200%"}]}
   ]
 }`
+
+// 多次命中但取值相同 —— **不是歧义**，就是那个值。
+//
+// 实测踩过：按「命中次数」判定歧义，会让「每次造成攻击50%伤害，若…则额外
+// 造成攻击50%伤害」这类技能永远卡在待判定里，白白消耗人力。
+func TestRepeatedSameValueIsNotAmbiguous(t *testing.T) {
+	const same = `{
+	  "id": 302,
+	  "name": {"cn": "同类"},
+	  "skills": [
+	    {"id":"302_03","name":"两段同值","cost":3,
+	     "description":"对敌方目标造成攻击50%伤害；若目标已被减速，则追加造成攻击50%伤害。",
+	     "upgrades":[]}
+	  ]
+	}`
+	ex, err := SkillsJSON("Data:Character/302.json", []byte(same), "revid:1", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := valueOf(ex, "302_03", "ratio")
+	if !ok {
+		t.Fatalf("命中两次但取值相同时应正常抽出，实际未解决项 %+v", ex.Unresolved)
+	}
+	if n != 50 {
+		t.Errorf("倍率应为 50，实际 %v", n)
+	}
+	for _, u := range ex.Unresolved {
+		if u.Subject == "302_03" && u.Predicate == "ratio" {
+			t.Error("取值相同不得记为歧义")
+		}
+	}
+	if ex.Stats.RatioMultiple != 0 {
+		t.Errorf("多值歧义计数应为 0，实际 %d", ex.Stats.RatioMultiple)
+	}
+	if ex.Stats.RatioUnique != 1 {
+		t.Errorf("唯一命中计数应为 1，实际 %d", ex.Stats.RatioUnique)
+	}
+	// 锚点指向**首次出现**的那一次，也就是主叙述
+	for _, c := range ex.Candidates {
+		if c.Subject == "302_03" && c.Predicate == "ratio" {
+			if c.Anchor != "skills[0].description" {
+				t.Errorf("锚点应指向主叙述那一次，实际 %s", c.Anchor)
+			}
+		}
+	}
+}
 
 func extract(t *testing.T) SkillExtract {
 	t.Helper()
@@ -100,6 +147,49 @@ func TestMultipleRatiosAreUnresolvedNotGuessed(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("多倍率情形应记为未解决，实际 %+v", ex.Unresolved)
+	}
+}
+
+// 未解决项必须携带**全部候选**（值 + 锚点 + 上下文），而不是只报一句数量。
+//
+// 只报数量的话，人打开界面看到的是一句抱怨，还得自己回去翻原文——
+// 那就等于没把问题交出去。
+func TestUnresolvedCarriesAllCandidatesWithContext(t *testing.T) {
+	ex := extract(t)
+	var target *Unresolved
+	for i := range ex.Unresolved {
+		if ex.Unresolved[i].Subject == "262_03" && ex.Unresolved[i].Predicate == "ratio" {
+			target = &ex.Unresolved[i]
+		}
+	}
+	if target == nil {
+		t.Fatal("应有 262_03 的一级倍率歧义项")
+	}
+	if len(target.Candidates) < 2 {
+		t.Fatalf("歧义项必须携带全部候选，实际 %d 个", len(target.Candidates))
+	}
+	seen := map[string]bool{}
+	for _, c := range target.Candidates {
+		if c.Anchor == "" {
+			t.Error("候选缺少原文锚点")
+		}
+		if c.Context == "" {
+			t.Errorf("候选 %s 缺少上下文片段——只给一个数字人无法判断", c.Value.String())
+		}
+		if !strings.Contains(c.Context, "伤害") {
+			t.Errorf("上下文里应含判定所需的原文，实际 %q", c.Context)
+		}
+		if c.Parsing != ParsingText {
+			t.Errorf("候选解析方式应为 text，实际 %s", c.Parsing)
+		}
+		k := c.Value.String()
+		if seen[k] {
+			t.Errorf("候选 %s 重复出现", k)
+		}
+		seen[k] = true
+	}
+	if target.Context == "" {
+		t.Error("歧义项应带原文片段")
 	}
 }
 

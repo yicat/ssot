@@ -98,17 +98,17 @@ type Derivation struct {
 
 // Assertion 是一条断言。
 type Assertion struct {
-	ID         string        `json:"id"`
-	Entity     string        `json:"entity"`    // 所属实体类型
-	Subject    string        `json:"subject"`   // 主体，稳定标识
-	Predicate  string        `json:"predicate"` // 谓词：属性名或关系名
-	Value      value.Value   `json:"value"`
-	Qualifiers Qualifiers    `json:"qualifiers"`
-	Source     Source        `json:"source"`
-	Provenance Provenance    `json:"provenance"`
-	Confidence Confidence    `json:"confidence"`
-	Status     Status        `json:"status"`
-	Derived    *Derivation   `json:"derived,omitempty"`
+	ID         string      `json:"id"`
+	Entity     string      `json:"entity"`    // 所属实体类型
+	Subject    string      `json:"subject"`   // 主体，稳定标识
+	Predicate  string      `json:"predicate"` // 谓词：属性名或关系名
+	Value      value.Value `json:"value"`
+	Qualifiers Qualifiers  `json:"qualifiers"`
+	Source     Source      `json:"source"`
+	Provenance Provenance  `json:"provenance"`
+	Confidence Confidence  `json:"confidence"`
+	Status     Status      `json:"status"`
+	Derived    *Derivation `json:"derived,omitempty"`
 }
 
 // Key 是断言的身份：主体 + 谓词 + 限定条件。

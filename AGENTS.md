@@ -22,17 +22,19 @@
 │  │  ├─ schema/            # 实体集合与双向漂移检测
 │  │  ├─ validate/          # 六类校验
 │  │  ├─ expr/              # 表达式求值器（含量纲检查）
-│  │  ├─ assertion/         # 断言模型与变更集
-│  │  └─ verification/      # 核验记录：四级方法、参与者、责任归属
+│  │  ├─ assertion/         # 断言模型与变更集（含解析方式→分级上限）
+│  │  ├─ verification/      # 核验记录：四级方法、参与者、责任归属
+│  │  └─ decision/          # 待判定：歧义事项、候选与裁决规则
 │  ├─ application/          # 应用层：用例编排
 │  │  ├─ ingest/            # 接入：原件 → 候选
 │  │  ├─ admit/             # 准入：候选 → 变更集
 │  │  ├─ formula/           # 公式加载、算例验证与求值
 │  │  ├─ derive/            # 派生：由断言产出 L3 断言
 │  │  ├─ review/            # 核验编排：优先级、冲突、批量
+│  │  ├─ disambig/          # 待判定编排：歧义登记、排队、裁决
 │  │  └─ scenario/          # 场景：requires 检查与运行
 │  ├─ infrastructure/       # 基础设施：外部适配
-│  │  ├─ store/             # SQLite 断言库与核验记录（原子应用）
+│  │  ├─ store/             # SQLite 断言库、核验记录与待判定事项（原子应用）
 │  │  ├─ schemafile/        # YAML schema 与单位表加载
 │  │  └─ artifact/          # 原件存档读取
 │  └─ api/                  # 接口层：核验工作台后端（wails3 bindings）

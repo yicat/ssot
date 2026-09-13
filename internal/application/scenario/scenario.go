@@ -124,12 +124,12 @@ const (
 
 // Requirement 是一项 requires 的检查结果。
 type Requirement struct {
-	Want      string
-	Status    Status
-	Have      int
-	Total     int
-	Coverage  float64
-	Detail    string
+	Want     string
+	Status   Status
+	Have     int
+	Total    int
+	Coverage float64
+	Detail   string
 }
 
 // FormulaStatus 是一个依赖公式的状态。

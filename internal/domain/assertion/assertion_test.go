@@ -105,7 +105,7 @@ func TestConfidenceValidity(t *testing.T) {
 
 func TestMissingRequiredFields(t *testing.T) {
 	cases := []struct {
-		name  string
+		name   string
 		mutate func(*Assertion)
 	}{
 		{"缺主体", func(a *Assertion) { a.Subject = "" }},

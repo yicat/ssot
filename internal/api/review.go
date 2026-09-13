@@ -91,9 +91,9 @@ type BatchPreview struct {
 
 // BatchResult 是批量操作的结果。
 type BatchResult struct {
-	Matched int    `json:"matched"`
-	Applied int    `json:"applied"`
-	Failed  int    `json:"failed"`
+	Matched  int    `json:"matched"`
+	Applied  int    `json:"applied"`
+	Failed   int    `json:"failed"`
 	FirstErr string `json:"firstErr"`
 }
 

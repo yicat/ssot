@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -28,54 +28,66 @@ export function Approve(id: string, by: string, method: string, reason: string, 
  * BatchApprove 批量批准。每条断言各自留下核验记录，审计轨迹不合并。
  */
 export function BatchApprove(f: $models.FilterInput, by: string, method: string, reason: string, evidence: string): $CancellablePromise<$models.BatchResult> {
-    return $Call.ByID(2878733075, f, by, method, reason, evidence).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(2878733075, f, by, method, reason, evidence);
 }
 
 /**
  * BatchPreview 展示批量操作会选中什么——**执行前必须能看见影响面**。
  */
 export function BatchPreview(f: $models.FilterInput): $CancellablePromise<$models.BatchPreview> {
-    return $Call.ByID(4077936422, f).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(4077936422, f);
 }
 
 /**
  * BatchReject 批量驳回。
  */
 export function BatchReject(f: $models.FilterInput, by: string, reason: string): $CancellablePromise<$models.BatchResult> {
-    return $Call.ByID(473055153, f, by, reason).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(473055153, f, by, reason);
 }
 
 /**
  * Conflicts 返回冲突分组。**系统不裁决**，只把同一件事的说法摆在一起。
  */
-export function Conflicts(): $CancellablePromise<$models.ConflictGroup[]> {
-    return $Call.ByID(641064245).then(($result: any) => {
-        return $$createType3($result);
-    });
+export function Conflicts(): $CancellablePromise<$models.ConflictGroup[] | null> {
+    return $Call.ByID(641064245);
+}
+
+/**
+ * DecisionStats 返回各状态的计数。
+ */
+export function DecisionStats(): $CancellablePromise<$models.DecisionStats> {
+    return $Call.ByID(3422876767);
+}
+
+/**
+ * Decisions 返回待判定队列。
+ * 
+ * status 为空表示「还需要人看的」：待判定 + 已暂缓 + 需复核。
+ * 暂缓不是结论，因此**仍在队列里**，只是换个标记。
+ */
+export function Decisions(status: string, limit: number): $CancellablePromise<$models.DecisionItem[] | null> {
+    return $Call.ByID(2489111685, status, limit);
+}
+
+/**
+ * DeferDecision 暂缓一条事项：不产生断言，它仍在待判定队列里。
+ */
+export function DeferDecision(id: string, by: string, reason: string): $CancellablePromise<void> {
+    return $Call.ByID(61710908, id, by, reason);
 }
 
 /**
  * History 返回某断言的核验历史。
  */
-export function History(id: string): $CancellablePromise<$models.HistoryItem[]> {
-    return $Call.ByID(3004648246, id).then(($result: any) => {
-        return $$createType5($result);
-    });
+export function History(id: string): $CancellablePromise<$models.HistoryItem[] | null> {
+    return $Call.ByID(3004648246, id);
 }
 
 /**
  * Pending 返回待核验队列（不排序，按主体谓词）。
  */
-export function Pending(entity: string, status: string, limit: number): $CancellablePromise<$models.Item[]> {
-    return $Call.ByID(1871646081, entity, status, limit).then(($result: any) => {
-        return $$createType7($result);
-    });
+export function Pending(entity: string, status: string, limit: number): $CancellablePromise<$models.Item[] | null> {
+    return $Call.ByID(1871646081, entity, status, limit);
 }
 
 /**
@@ -88,10 +100,8 @@ export function ProjectDir(): $CancellablePromise<string> {
 /**
  * Queue 返回**按优先级排序**的核验队列，并强制包含抽检项。
  */
-export function Queue(entity: string, status: string, limit: number, sampleRatio: number): $CancellablePromise<$models.QueueItem[]> {
-    return $Call.ByID(3654268873, entity, status, limit, sampleRatio).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function Queue(entity: string, status: string, limit: number, sampleRatio: number): $CancellablePromise<$models.QueueItem[] | null> {
+    return $Call.ByID(3654268873, entity, status, limit, sampleRatio);
 }
 
 /**
@@ -102,23 +112,18 @@ export function Reject(id: string, by: string, reason: string): $CancellableProm
 }
 
 /**
+ * ResolveDecision 裁决一条待判定事项。
+ * 
+ * choice >= 0 选中该序号候选；choice == -1 表示「都不对」。
+ * by 必须是人——agent 可以提出候选与取证，但不能自己决定什么算数。
+ */
+export function ResolveDecision(id: string, choice: number, by: string, method: string, reason: string, evidence: string): $CancellablePromise<$models.DecisionResult> {
+    return $Call.ByID(4168258356, id, choice, by, method, reason, evidence);
+}
+
+/**
  * Stats 返回库的整体状态。
  */
 export function Stats(): $CancellablePromise<$models.Stats> {
-    return $Call.ByID(268982341).then(($result: any) => {
-        return $$createType10($result);
-    });
+    return $Call.ByID(268982341);
 }
-
-// Private type creation functions
-const $$createType0 = $models.BatchResult.createFrom;
-const $$createType1 = $models.BatchPreview.createFrom;
-const $$createType2 = $models.ConflictGroup.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.HistoryItem.createFrom;
-const $$createType5 = $Create.Array($$createType4);
-const $$createType6 = $models.Item.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = $models.QueueItem.createFrom;
-const $$createType9 = $Create.Array($$createType8);
-const $$createType10 = $models.Stats.createFrom;

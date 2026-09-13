@@ -15,16 +15,19 @@ import (
 	"github.com/ngnl5/ssot/internal/domain/value"
 )
 
-// Parsing 是候选的解析方式。它决定准入层能给的最高分级。
-type Parsing string
+// Parsing 是候选的解析方式。
+//
+// 它是 assertion.Parsing 的别名：**「回退解析不得定为 L1」是领域规则**，
+// 定义在 domain 层；接入层只负责如实标注自己是怎么读出来的。
+type Parsing = assertion.Parsing
 
 const (
 	// ParsingDirect 结构化直取：字段就在结构化数据里，可逐字比对 → L1
-	ParsingDirect Parsing = "direct"
+	ParsingDirect = assertion.ParsingDirect
 	// ParsingText 从文本解析得出 → L2
-	ParsingText Parsing = "text"
+	ParsingText = assertion.ParsingText
 	// ParsingFallback 回退或推测解析 → **不得定为 L1**
-	ParsingFallback Parsing = "fallback"
+	ParsingFallback = assertion.ParsingFallback
 )
 
 // Candidate 是一个候选：值 + 命中位置 + 解析方式。
@@ -38,24 +41,18 @@ type Candidate struct {
 
 	Artifact string
 	Anchor   string
+	// Context 是该候选周围的原文片段。
+	//
+	// 只有歧义候选需要它：唯一命中时锚点已足够定位；而人要在几个候选间取舍时，
+	// 只给一个数字他无法判断。领域层要求「候选必须带上下文」，此处照实收集。
+	Context  string
 	Revision string
 
 	Parsing Parsing
 }
 
-// MaxConfidence 返回该解析方式允许的最高分级。
-//
-// 这是「回退解析不得定为 L1」这条规则的唯一实现处。
-func (p Parsing) MaxConfidence() assertion.Confidence {
-	switch p {
-	case ParsingDirect:
-		return assertion.L1
-	case ParsingText:
-		return assertion.L2
-	default:
-		return assertion.L4
-	}
-}
+// 注意：MaxConfidence 定义在 domain/assertion 上。因为 Parsing 是别名，
+// 别名类型上**不允许**再定义方法（非本地类型），所以这里只做类型转发。
 
 // attributeRecord 是 Data:Attribute.json 中的一条。
 //

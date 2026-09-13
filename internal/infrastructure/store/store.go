@@ -69,6 +69,30 @@ CREATE TABLE IF NOT EXISTS verification (
   at            TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_verification_assertion ON verification(assertion_id);
+
+-- 待判定事项：原文里有多个说得通的取值，必须由人选。
+-- 它不是断言——在裁决并通过准入之前，它只是「原文里出现过的几种说法」。
+-- 候选与裁决都以 JSON 整体保存：候选列表必须**原样保留**，
+-- 「当时还有哪些说法」是可追溯性的一部分，不能只留选中的那个。
+CREATE TABLE IF NOT EXISTS decision (
+  id            TEXT PRIMARY KEY,
+  entity        TEXT NOT NULL,
+  subject       TEXT NOT NULL,
+  predicate     TEXT NOT NULL,
+  reason        TEXT NOT NULL,
+  context       TEXT NOT NULL,
+  artifact      TEXT NOT NULL,
+  revision      TEXT NOT NULL,
+  captured_at   TEXT NOT NULL,
+  source_name   TEXT NOT NULL,
+  candidates    TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  resolution    TEXT,
+  deferral      TEXT,
+  history       TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_decision_status ON decision(status);
+CREATE INDEX IF NOT EXISTS ix_decision_subject ON decision(entity, subject, predicate);
 `
 
 // assertionCols 是断言表的列清单，供各处 SELECT 复用。
@@ -109,13 +133,28 @@ type ApplyResult struct {
 // 冲突断言**并存**而非覆盖：同一件事的不同说法都要保留，
 // 由人裁决——系统不替用户选。
 func (s *Store) Apply(cs assertion.ChangeSet) (ApplyResult, error) {
-	var res ApplyResult
 	tx, err := s.db.Begin()
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	defer tx.Rollback()
+	res, err := applyTx(tx, cs)
 	if err != nil {
 		return res, err
 	}
-	defer tx.Rollback()
+	if err := tx.Commit(); err != nil {
+		return res, err
+	}
+	return res, nil
+}
 
+// applyTx 在给定事务内应用变更集。
+//
+// 抽出来是因为待判定事项的裁决也要用同一条写入路径——
+// 「裁决产出的断言」与「普通接入产出的断言」必须是同一种东西，
+// 否则分级、冲突标记、幂等性就会各走一套。
+func applyTx(tx *sql.Tx, cs assertion.ChangeSet) (ApplyResult, error) {
+	var res ApplyResult
 	conflict := map[string]bool{}
 	for _, id := range cs.Conflict {
 		conflict[id] = true
@@ -139,9 +178,6 @@ func (s *Store) Apply(cs assertion.ChangeSet) (ApplyResult, error) {
 		} else {
 			res.Inserted++
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return res, err
 	}
 	return res, nil
 }

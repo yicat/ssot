@@ -6,6 +6,7 @@
 //	go run ./cmd/ssot sync    projects/onmyoji --artifacts .huiji/raw --manifest .huiji/manifest.json
 //	go run ./cmd/ssot derive  projects/onmyoji crit_factor
 //	go run ./cmd/ssot status  projects/onmyoji
+//	go run ./cmd/ssot decision projects/onmyoji list
 //	go run ./cmd/ssot run     projects/onmyoji damage-calc 262 --bind def_reduction="0.5 fraction"
 package main
 
@@ -16,17 +17,20 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/application/admit"
 	"github.com/ngnl5/ssot/internal/application/derive"
+	"github.com/ngnl5/ssot/internal/application/disambig"
 	"github.com/ngnl5/ssot/internal/application/formula"
 	"github.com/ngnl5/ssot/internal/application/ingest"
 	"github.com/ngnl5/ssot/internal/application/review"
 	"github.com/ngnl5/ssot/internal/application/scenario"
 	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
+	"github.com/ngnl5/ssot/internal/domain/decision"
 	"github.com/ngnl5/ssot/internal/domain/verification"
 	"github.com/ngnl5/ssot/internal/infrastructure/artifact"
 	"github.com/ngnl5/ssot/internal/infrastructure/store"
@@ -52,6 +56,8 @@ func main() {
 		err = cmdStatus(args)
 	case "review":
 		err = cmdReview(args)
+	case "decision":
+		err = cmdDecision(args)
 	case "run":
 		err = cmdRun(args)
 	case "-h", "--help", "help":
@@ -80,6 +86,10 @@ func usage() {
   ssot review <项目目录> approve <ID> [选项]   批准（批准者必须是人）
   ssot review <项目目录> reject  <ID> [选项]   驳回
   ssot review <项目目录> log     <ID>          查看某断言的核验历史
+  ssot decision <项目目录> list  [选项]        查看待判定事项（原文里的歧义）
+  ssot decision <项目目录> show  <ID>          看某个事项的全部候选与原文片段
+  ssot decision <项目目录> resolve <ID> <序号> 裁决：选中第 N 个候选（-1 表示都不对）
+  ssot decision <项目目录> defer <ID> [选项]   暂缓（不产生断言，仍在队列里）
   ssot run    <项目目录> <场景名> <主体> [选项] 运行场景
 
 sync 选项：
@@ -112,10 +122,13 @@ func loadProject(dir string, withStore bool) (*project, error) {
 // Go 的 flag 包遇到第一个位置参数就停止解析，因此 `run <目录> <场景> <主体> --bind x=y`
 // 里的 --bind 会被整个忽略。本函数先做一次预扫描把两者分开。
 // 本工具的选项**全部带值**，因此预扫描是安全的。
+//
+// 例外：**负数不是选项**。`decision resolve <ID> -1` 里的 -1 是「都不对」，
+// 若按前缀判断它就成了一个未定义的 flag，人会看到一句莫名其妙的 usage。
 func splitFlags(args []string) (flags, pos []string) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if !strings.HasPrefix(a, "-") {
+		if !isFlag(a) {
 			pos = append(pos, a)
 			continue
 		}
@@ -126,6 +139,27 @@ func splitFlags(args []string) (flags, pos []string) {
 		}
 	}
 	return flags, pos
+}
+
+// isFlag 报告该参数是不是一个选项。-0 到 -9 开头的纯数字当作位置参数。
+func isFlag(a string) bool {
+	if !strings.HasPrefix(a, "-") {
+		return false
+	}
+	return !isNegativeNumber(a)
+}
+
+func isNegativeNumber(a string) bool {
+	body := strings.TrimPrefix(a, "-")
+	if body == "" {
+		return false
+	}
+	for _, r := range body {
+		if r != '.' && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // ── schema ─────────────────────────────────────────────────────────────────
@@ -368,7 +402,11 @@ func syncSkills(p *project, arts *artifact.Store, pages []revInfo) error {
 	}
 
 	if len(unresolved) > 0 {
-		fmt.Printf("\n未解决（文本里有多个候选值，无法确定——**不猜**，需人工判定）：共 %d 项\n", len(unresolved))
+		up, err := disambig.Record(p.Store, unresolved, "huijiwiki")
+		if err != nil {
+			return err
+		}
+		fmt.Printf("\n待判定（文本里有多个候选值，无法确定——**不猜**，交给人裁决）：\n  %s\n", up)
 		byPred := map[string]int{}
 		for _, u := range unresolved {
 			byPred[u.Predicate]++
@@ -376,14 +414,7 @@ func syncSkills(p *project, arts *artifact.Store, pages []revInfo) error {
 		for _, k := range sortedKeys(byPred) {
 			fmt.Printf("  %-12s %d 项\n", k, byPred[k])
 		}
-		fmt.Printf("  示例（前 6）：\n")
-		for i, u := range unresolved {
-			if i >= 6 {
-				fmt.Printf("    … 另有 %d 项\n", len(unresolved)-6)
-				break
-			}
-			fmt.Printf("    %s\n", u)
-		}
+		fmt.Printf("  用 `ssot decision <项目目录> list` 看待判定队列。\n")
 	}
 	return nil
 }
@@ -585,6 +616,227 @@ func cmdReview(args []string) error {
 		return reviewLog(p, pos[2])
 	default:
 		return fmt.Errorf("未知子命令 %q（可用：queue / list / conflicts / batch / approve / reject / log）", sub)
+	}
+}
+
+// ── decision：待判定（原文里的歧义，必须由人选）─────────────────────────────
+
+func cmdDecision(args []string) error {
+	fs := flag.NewFlagSet("decision", flag.ContinueOnError)
+	status := fs.String("status", "", "限定状态：open / deferred / decided / stale（空 = 还需要人看的）")
+	limit := fs.Int("limit", 20, "最多列出多少条（0 = 不限）")
+	by := fs.String("by", "", "裁决人（必须是**人**）")
+	method := fs.String("method", "editorial", "核验方法：editorial / measurement")
+	reason := fs.String("reason", "", "理由（必填）")
+	evidence := fs.String("evidence", "", "依据。以 measurement 裁决时必填：版本、配置、样本数")
+	proposedBy := fs.String("proposed-by", "ingest-pipeline", "提出候选者（agent 标识）")
+
+	fargs, pos := splitFlags(args)
+	if err := fs.Parse(fargs); err != nil {
+		return err
+	}
+	if len(pos) < 2 {
+		return fmt.Errorf("需要项目目录与子命令（list / show / resolve / defer）")
+	}
+	dir, sub := pos[0], pos[1]
+
+	p, err := loadProject(dir, true)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+
+	opts := admit.Options{
+		Entity: "", Source: assertion.Source{Name: "huijiwiki", Tier: "semi-official"},
+		CapturedAt: time.Now().UTC(), Units: p.Units,
+		UniqueExists: p.Store.UniqueExists, RefExists: p.Store.RefExists,
+	}
+	_ = opts
+
+	switch sub {
+	case "list":
+		return decisionList(p, *status, *limit)
+	case "show":
+		if len(pos) < 3 {
+			return fmt.Errorf("show 需要事项 ID（或其前缀）")
+		}
+		return decisionShow(p, pos[2])
+	case "resolve":
+		if len(pos) < 4 {
+			return fmt.Errorf("resolve 需要事项 ID 与候选序号（-1 表示都不对）")
+		}
+		choice, err := strconv.Atoi(pos[3])
+		if err != nil {
+			return fmt.Errorf("候选序号必须是整数：%q", pos[3])
+		}
+		return decisionResolve(p, pos[2], choice, *by, *method, *reason, *evidence, *proposedBy)
+	case "defer":
+		if len(pos) < 3 {
+			return fmt.Errorf("defer 需要事项 ID")
+		}
+		return decisionDefer(p, pos[2], *by, *reason)
+	default:
+		return fmt.Errorf("未知子命令 %q（可用：list / show / resolve / defer）", sub)
+	}
+}
+
+// decisionOpts 构造该事项所在实体的准入上下文。
+//
+// Source 与 CapturedAt 取自被裁决候选自己的溯源——裁决不是一次新的采集，
+// 它是「对已有原件的一次判断」，因此必须沿用原件的来源与采集时间。
+func decisionOpts(p *project, it decision.Item) admit.Options {
+	src := assertion.Source{Name: it.Source, Tier: "semi-official"}
+	if it.Source == "" {
+		src.Name = "huijiwiki"
+	}
+	captured := time.Now().UTC()
+	if len(it.Candidates) > 0 {
+		captured = time.Now().UTC()
+	}
+	return admit.Options{
+		Entity: it.Entity, Source: src, CapturedAt: captured, Units: p.Units,
+		UniqueExists: p.Store.UniqueExists, RefExists: p.Store.RefExists,
+	}
+}
+
+func decisionList(p *project, status string, limit int) error {
+	entries, err := disambig.Queue(p.Store, status, limit)
+	if err != nil {
+		return err
+	}
+	st, err := disambig.Summary(p.Store)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("待判定：待判定 %d，已暂缓 %d，需复核 %d，已裁决 %d（其中判为缺失 %d）\n",
+		st.Open, st.Deferred, st.Stale, st.Decided, st.Missing)
+	if len(entries) == 0 {
+		fmt.Println("没有需要人看的待判定事项。")
+		return nil
+	}
+	fmt.Printf("\n%-12s %-10s %-10s %-6s %s\n", "ID", "主体", "谓词", "候选", "为什么排在前面")
+	for _, e := range entries {
+		fmt.Printf("%-12s %-10s %-10s %-6d %s\n",
+			e.Item.ID, e.Item.Subject, e.Item.Predicate, len(e.Item.Candidates), e.Reason)
+	}
+	fmt.Printf("\n用 `ssot decision <项目目录> show <ID>` 看候选，`resolve <ID> <序号>` 裁决。\n")
+	return nil
+}
+
+func decisionShow(p *project, prefix string) error {
+	it, err := findDecision(p, prefix)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("事项 %s\n", it.ID)
+	fmt.Printf("  %s.%s  %s\n", it.Subject, it.Predicate, it.Status.Label())
+	fmt.Printf("  歧义原因：%s\n", it.Reason)
+	fmt.Printf("  来源：%s %s\n", it.Artifact, it.Revision)
+	fmt.Printf("  原文片段：%s\n", it.Context)
+	fmt.Printf("\n候选（%d 个）：\n", len(it.Candidates))
+	for i, c := range it.Candidates {
+		fmt.Printf("  [%d] %-14s %s\n", i, c.Value.String(), c.Anchor)
+		fmt.Printf("      上下文：%s\n", c.Context)
+		if c.Note != "" {
+			fmt.Printf("      说明：%s\n", c.Note)
+		}
+	}
+	if it.Resolution != nil {
+		fmt.Printf("\n裁决：%s（由 %s，%s）\n", chosenText(it), it.Resolution.By.String(),
+			it.Resolution.At.Format(time.RFC3339))
+		fmt.Printf("  理由：%s\n", it.Resolution.Reason)
+		if it.Resolution.AssertionID != "" {
+			fmt.Printf("  断言：%s\n", it.Resolution.AssertionID)
+		}
+	}
+	for i, h := range it.History {
+		fmt.Printf("\n历史结论 %d：%s（由 %s，%s）—— %s\n", i+1, chosenTextOf(h),
+			h.By.String(), h.At.Format(time.RFC3339), h.Reason)
+	}
+	if it.Deferral != nil {
+		fmt.Printf("\n暂缓：由 %s，%s —— %s\n", it.Deferral.By.String(),
+			it.Deferral.At.Format(time.RFC3339), it.Deferral.Reason)
+	}
+	if it.Status.NeedsAttention() {
+		fmt.Printf("\n裁决：`ssot decision <项目目录> resolve %s <候选序号>`（-1 表示都不对）\n", it.ID)
+	}
+	return nil
+}
+
+func chosenText(it decision.Item) string {
+	if it.Resolution == nil {
+		return "—"
+	}
+	return chosenTextOf(*it.Resolution)
+}
+
+func chosenTextOf(r decision.Resolution) string {
+	if r.IsNone() {
+		return "都不对（该谓词记为缺失）"
+	}
+	return r.ChosenValue.String()
+}
+
+func decisionResolve(p *project, prefix string, choice int, by, method, reason, evidence, proposedBy string) error {
+	it, err := findDecision(p, prefix)
+	if err != nil {
+		return err
+	}
+	res, err := disambig.Resolve(p.Store, p.Schema, decisionOpts(p, it), disambig.ResolveInput{
+		ID:       it.ID,
+		Choice:   choice,
+		By:       verification.Actor{Kind: verification.Human, ID: by},
+		Method:   verification.Method(method),
+		Reason:   reason,
+		Evidence: evidence,
+		Proposed: verification.Actor{Kind: verification.Agent, ID: proposedBy},
+	}, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	fmt.Println(res.Message)
+	if res.AssertionID != "" {
+		fmt.Printf("断言 %s（%s）\n", res.AssertionID, it.Entity)
+	}
+	return nil
+}
+
+func decisionDefer(p *project, prefix, by, reason string) error {
+	it, err := findDecision(p, prefix)
+	if err != nil {
+		return err
+	}
+	next, err := disambig.Defer(p.Store, it.ID,
+		verification.Actor{Kind: verification.Human, ID: by}, reason, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	fmt.Printf("已暂缓 %s——它仍在待判定队列里，只是标为「人已看过、先放着」。\n", next.ID)
+	return nil
+}
+
+// findDecision 支持用 ID 前缀定位，省去每次复制长 ID。
+func findDecision(p *project, prefix string) (decision.Item, error) {
+	items, err := p.Store.Decisions("all", 0)
+	if err != nil {
+		return decision.Item{}, err
+	}
+	var hit []decision.Item
+	for _, it := range items {
+		if it.ID == prefix {
+			return it, nil
+		}
+		if strings.HasPrefix(it.ID, prefix) {
+			hit = append(hit, it)
+		}
+	}
+	switch len(hit) {
+	case 1:
+		return hit[0], nil
+	case 0:
+		return decision.Item{}, fmt.Errorf("找不到待判定事项 %q", prefix)
+	default:
+		return decision.Item{}, fmt.Errorf("%q 匹配到 %d 个事项，请写全 ID", prefix, len(hit))
 	}
 }
 

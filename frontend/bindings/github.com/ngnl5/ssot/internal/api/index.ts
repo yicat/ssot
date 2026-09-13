@@ -6,10 +6,15 @@ export {
     ReviewService
 };
 
-export {
+export type {
     BatchPreview,
     BatchResult,
     ConflictGroup,
+    DecisionCandidate,
+    DecisionItem,
+    DecisionResolution,
+    DecisionResult,
+    DecisionStats,
     FilterInput,
     HistoryItem,
     Item,

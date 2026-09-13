@@ -18,6 +18,7 @@ import {
   BatchPreview,
   BatchReject,
   Conflicts,
+  DecisionStats,
   History,
   ProjectDir,
   Queue,
@@ -27,6 +28,7 @@ import {
 import type {
   BatchPreview as BatchPreviewData,
   ConflictGroup,
+  DecisionStats as DecisionStatsData,
   FilterInput,
   HistoryItem,
   Item,
@@ -34,6 +36,7 @@ import type {
   Stats as StatsData,
 } from "../bindings/github.com/ngnl5/ssot/internal/api/models";
 
+import Decision from "./components/custom/Decision";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -105,9 +108,10 @@ function TierBadge({ q }: { q: QueueItem }) {
 }
 
 export default function App() {
-  const [view, setView] = useState<"queue" | "conflicts">("queue");
+  const [view, setView] = useState<"queue" | "conflicts" | "decision">("queue");
   const [dir, setDir] = useState("");
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [dstats, setDstats] = useState<DecisionStatsData | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [conflicts, setConflicts] = useState<ConflictGroup[]>([]);
   const [sel, setSel] = useState<Item | null>(null);
@@ -132,14 +136,18 @@ export default function App() {
   const refresh = useCallback(async () => {
     setBusy(true);
     try {
-      const [s, q, c] = await Promise.all([
+      const [s, q, c, d] = await Promise.all([
         Stats(),
         Queue(entity, status, 300, sampleRatio),
         Conflicts(),
+        DecisionStats(),
       ]);
       setStats(s);
-      setQueue(q);
-      setConflicts(c);
+      // Go 的 nil 切片序列化成 null，绑定层因此把数组标成可空——
+      // 这里补成空数组，免得后面到处判空。
+      setQueue(q ?? []);
+      setConflicts(c ?? []);
+      setDstats(d);
       // 刻意不清 flash：刷新发生在操作之后，清掉会把刚产生的提示抹掉
     } catch (e) {
       setFlash({ ok: false, text: String(e) });
@@ -160,7 +168,7 @@ export default function App() {
     setSel(it);
     setFlash(null);
     try {
-      setHist(await History(it.id));
+      setHist((await History(it.id)) ?? []);
     } catch {
       setHist([]);
     }
@@ -258,13 +266,16 @@ export default function App() {
             <span className={conflicts.length ? "text-orange-400" : "text-muted-foreground"}>
               冲突 <b className="tabular-nums">{conflicts.length}</b>
             </span>
+            <span className={dstats?.open ? "text-sky-400" : "text-muted-foreground"}>
+              待判定 <b className="tabular-nums">{dstats?.open ?? 0}</b>
+            </span>
             <span className="text-muted-foreground">
               核验记录 <b className="tabular-nums">{stats?.verifications ?? 0}</b>
             </span>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="flex rounded-md border border-border text-xs">
-              {(["queue", "conflicts"] as const).map((v) => (
+              {(["queue", "conflicts", "decision"] as const).map((v) => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -273,7 +284,10 @@ export default function App() {
                     (view === v ? "bg-accent text-accent-foreground" : "text-muted-foreground")
                   }
                 >
-                  {v === "queue" ? "队列" : "冲突"}
+                  {v === "queue" ? "队列" : v === "conflicts" ? "冲突" : "待判定"}
+                  {v === "decision" && (dstats?.open ?? 0) > 0 && (
+                    <span className="ml-1 tabular-nums text-sky-400">{dstats?.open}</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -320,6 +334,9 @@ export default function App() {
           </div>
         )}
 
+        {view === "decision" ? (
+          <Decision by={by} onByChange={setBy} onFlash={setFlash} />
+        ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_26rem] gap-4">
           <section className="flex min-h-0 flex-col rounded-lg border border-border">
             {view === "queue" ? (
@@ -404,7 +421,7 @@ export default function App() {
                       <div className="mb-2 text-sm font-medium">
                         {g.subject}.{g.predicate}
                       </div>
-                      {g.claims.map((c) => (
+                      {(g.claims ?? []).map((c) => (
                         <div
                           key={c.id}
                           className="mb-2 flex items-start gap-3 border-l-2 border-border pl-3"
@@ -637,6 +654,7 @@ export default function App() {
             </div>
           </aside>
         </div>
+        )}
       </div>
     </div>
   );
