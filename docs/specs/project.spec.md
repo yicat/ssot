@@ -37,7 +37,10 @@
 │  ├─ pvp-team/           斗技阵容分析
 │  │  ├─ scenario.yml     requires / inputs / preferences / outputs
 │  │  ├─ formulas/        场景私有公式
-│  │  └─ views/           该场景的视角
+│  │  ├─ views/           该场景的视角
+│  │  └─ experience/      经验（场景级）
+│  │     ├─ entries/      经验条目（责任级别、推导链、适用条件）
+│  │     └─ sessions/     会话记录（= 依据／原件）
 │  ├─ daily-tasks/
 │  ├─ monthly-savings/
 │  └─ event-prep/
