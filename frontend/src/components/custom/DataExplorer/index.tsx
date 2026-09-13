@@ -33,6 +33,7 @@ import {
 } from "../../ui/table";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import {
+  Artifact,
   AssertionStatus,
   Confidence,
   Entity,
@@ -42,6 +43,7 @@ import {
   Type,
   Unit,
 } from "../Term";
+import { Em } from "../Prose";
 import { useDataExplorer } from "./useDataExplorer";
 
 // 状态枚举由领域定义，界面只列出来——自己维护一份迟早会与后端不一致。
@@ -313,7 +315,7 @@ export default function DataExplorer() {
                     <CardHeader className="py-3">
                       <CardTitle className="text-sm"><Entity name={es.entity} /></CardTitle>
                       <CardDescription>
-                        {es.description || "（未写描述）"} · schemaRev {es.schemaRev || "—"}
+                        <Em>{es.description || "（未写描述）"}</Em> · schemaRev {es.schemaRev || "—"}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="px-0">
@@ -345,7 +347,7 @@ export default function DataExplorer() {
                                   .join(" ") || "—"}
                               </TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {f.description}
+                                <Em>{f.description}</Em>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -368,7 +370,7 @@ export default function DataExplorer() {
                 <CardTitle className="text-sm">点一条断言看它的主体</CardTitle>
               </CardHeader>
               <CardContent className="text-xs leading-relaxed text-muted-foreground">
-                这里看的是**数据本身**，不是核验。核验在「核验」分区里，
+                这里看的是<strong>数据本身</strong>，不是核验。核验在「核验」分区里，
                 那里才记录「谁、何时、凭什么」。
               </CardContent>
             </Card>
@@ -393,7 +395,7 @@ export default function DataExplorer() {
                       </Badge>
                     </div>
                     <div className="text-muted-foreground">
-                      <AssertionStatus value={a.status} /> · {a.artifact} {a.anchor} @ <Revision value={a.revision} />
+                      <AssertionStatus value={a.status} /> · <Artifact value={a.artifact} /> {a.anchor} @ <Revision value={a.revision} />
                     </div>
                   </div>
                 ))}

@@ -16,6 +16,7 @@ import { Badge } from "../../components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
+import { Em } from "../../components/custom/Prose";
 import {
   Table,
   TableBody,
@@ -93,7 +94,7 @@ export default function FormulaList() {
                   </span>
                 )}
               </div>
-              <CardDescription>{f.description}</CardDescription>
+              <CardDescription><Em>{f.description}</Em></CardDescription>
               <div className="text-[11px] text-muted-foreground">{f.file}</div>
             </CardHeader>
             <CardContent className="grid gap-3">
@@ -134,7 +135,7 @@ export default function FormulaList() {
                               <TableCell className="text-xs">{p.type}</TableCell>
                               <TableCell className="text-xs">{p.unit || "—"}</TableCell>
                               <TableCell className="text-xs text-muted-foreground">
-                                {p.note}
+                                <Em>{p.note}</Em>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -173,7 +174,7 @@ export default function FormulaList() {
                     </div>
                     {(f.cases ?? []).length === 0 ? (
                       <p className="text-xs text-amber-700">
-                        没有算例。允许使用，但**产出必须标注「公式未验证」**——
+                        没有算例。允许使用，但<strong>产出必须标注「公式未验证」</strong>——
                         这不等于已验证。
                       </p>
                     ) : (

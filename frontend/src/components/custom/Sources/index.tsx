@@ -76,6 +76,18 @@ export default function Sources() {
 
         <CardContent className="min-h-0 flex-1 overflow-hidden px-0">
           <ScrollArea className="h-full">
+            {s.notFound && (
+              <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                <div>
+                  原件 <span className="font-mono">{s.notFound}</span> 还没有登记为文档——
+                  它是一条断言的依据，但系统里没有它的正文、修订与时效。
+                </div>
+                <div className="mt-1 text-[11px]">
+                  这不是加载失败。切到「未登记依据」可以看到它压着多少条断言；
+                  补登记之后，这个入口就会打开原文。
+                </div>
+              </div>
+            )}
             {tab === "list" && (
               <>
                 <Table>
@@ -92,7 +104,7 @@ export default function Sources() {
                     {s.docs.map((d) => (
                       <TableRow
                         key={d.revId}
-                        onClick={() => void s.open(d.revId)}
+                        onClick={() => void s.pick(d.revId)}
                         className={"cursor-pointer " + (s.selectedRevId === d.revId ? "bg-secondary" : "")}
                       >
                         <TableCell className="whitespace-nowrap">
@@ -142,7 +154,7 @@ export default function Sources() {
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     <div>没有未登记的依据——每条断言的溯源都指得到一份文档。</div>
                     <div className="mt-1 text-xs">
-                      这正是这一页存在的意义：**溯源的终点不该是一个字符串**。
+                      这正是这一页存在的意义：<strong>溯源的终点不该是一个字符串</strong>。
                     </div>
                   </div>
                 ) : (
@@ -182,13 +194,13 @@ export default function Sources() {
                 <CardTitle className="text-sm">从左侧选一份文档</CardTitle>
               </CardHeader>
               <CardContent className="text-xs leading-relaxed text-muted-foreground">
-                文档与断言并列，**不参与计算，只作为依据**。
+                文档与断言并列，<strong>不参与计算，只作为依据</strong>。
                 <br />
                 它的价值在于：任何一条断言被质疑时，能回到原文。
                 <br />
                 <Separator className="my-3" />
                 可拆成 (主体, 谓词, 取值) 的东西进断言库；
-                **拆了就失真或根本拆不了的**，留在这里。
+                <strong>拆了就失真或根本拆不了的</strong>，留在这里。
               </CardContent>
             </Card>
           ) : (
@@ -257,7 +269,7 @@ export default function Sources() {
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">核验这份原文</CardTitle>
                     <CardDescription>
-                      核验的是「这份原文可信」，**不是**「原文里的事实已被验证」——两者必须分开。
+                      核验的是「这份原文可信」，<strong>不是</strong>「原文里的事实已被验证」——两者必须分开。
                       一个人读过并背书不构成「多源」，因此方法只能是编审。
                     </CardDescription>
                   </CardHeader>
@@ -314,7 +326,7 @@ export default function Sources() {
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm">引用它的断言（{s.usage.length}）</CardTitle>
                   <CardDescription>
-                    关联方式是**文档标题**——断言的溯源里写的原件标识就是它
+                    关联方式是<strong>文档标题</strong>——断言的溯源里写的原件标识就是它
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="px-0">
@@ -444,7 +456,7 @@ function RegisterForm({
       <CardHeader className="py-3">
         <CardTitle className="text-sm">登记一份自撰文档</CardTitle>
         <CardDescription>
-          机制说明、依据声明、版本叙事——**拆不出 (主体, 谓词, 取值) 的东西留在这里**，
+          机制说明、依据声明、版本叙事——<strong>拆不出 (主体, 谓词, 取值) 的东西留在这里</strong>，
           不要为了「变成数据」而强行拆。
         </CardDescription>
       </CardHeader>
@@ -516,7 +528,7 @@ function RegisterForm({
           登记
         </Button>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          登记之后**正文不可改**：更正只能登记新修订，旧修订保留。
+          登记之后<strong>正文不可改</strong>：更正只能登记新修订，旧修订保留。
           改了修订，引用这份文档的断言会回到待核验——变更不会被静默吞掉。
         </p>
       </CardContent>

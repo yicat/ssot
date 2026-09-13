@@ -13,6 +13,7 @@ import { useDataStore } from "./components/custom/DataExplorer/store";
 import { useRunStore } from "./components/custom/ScenarioRun/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { expectBold, expectNoMarkers } from "./test/prose";
 import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 // ── 夹具 ────────────────────────────────────────────────────────────────────
@@ -423,7 +424,9 @@ describe("场景运行", () => {
     // 依赖的断言显示「主体名 + 字段中文名」
     expect(screen.getByText(/姑获鸟/)).toBeInTheDocument();
     expect(screen.getAllByText(/攻击/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/外部输入——\*\*始终未核验\*\*/)).toBeInTheDocument();
+    // 强调渲染为加粗，且页面上不留 markdown 记号
+    expectBold("始终未核验");
+    expectNoMarkers();
   });
 
   // 运行失败时保留已填输入：那正是人最需要保留刚才填了什么的时候。

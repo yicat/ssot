@@ -14,6 +14,7 @@ import { useDecisionStore } from "./components/custom/Decision/store";
 import { useReviewStore } from "./components/custom/Review/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { expectBold, expectNoMarkers } from "./test/prose";
 import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 // ── 夹具 ────────────────────────────────────────────────────────────────────
@@ -397,6 +398,15 @@ describe("场景概览", () => {
     expect(screen.getAllByText(/小数/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("fraction").length).toBeGreaterThan(0);
     expect(screen.getByText(/范围 0 ~ 1/)).toBeInTheDocument();
+  });
+
+  // 验收：说明文字里的记号渲染成效果，而不是原样显示成星号。
+  // 项目定义（YAML）里的 description 也是这么写的，因此这条同时管两边。
+  it("项目定义里的 **强调** 渲染为加粗，页面上不留星号", async () => {
+    await goScenario();
+    // fixture 原文是「防御减免。**无权威来源**，必须由调用方提供」
+    expectBold("无权威来源");
+    expectNoMarkers();
   });
 
   it("拒绝运行时逐项列出缺失原因", async () => {

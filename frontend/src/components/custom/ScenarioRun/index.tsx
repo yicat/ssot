@@ -30,6 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../ui/table";
+import { Em } from "../Prose";
 import { useScenarioRun } from "./useScenarioRun";
 import {
   AssertionStatus,
@@ -103,7 +104,7 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                     className="h-8"
                   />
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    {inp.description}
+                    <Em>{inp.description}</Em>
                   </p>
                 </div>
               ))}
@@ -141,7 +142,7 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    {ref.description}
+                    <Em>{ref.description}</Em>
                   </p>
                 </div>
               ))}
@@ -213,7 +214,7 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
               <CardContent className="text-xs leading-relaxed text-muted-foreground">
                 选主体、填外部输入、选引用来源，然后运行。
                 <br />
-                产出会带上它依赖的**未核验比例**——一个没有可信度标注的数字，
+                产出会带上它依赖的<strong>未核验比例</strong>——一个没有可信度标注的数字，
                 比没有数字更危险。
               </CardContent>
             </Card>
@@ -254,7 +255,7 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                       {(r.result.external ?? []).length > 0 && (
                         <div>
                           <div className="mb-1 text-xs font-medium text-amber-700">
-                            外部输入——**始终未核验**
+                            外部输入——<strong>始终未核验</strong>
                           </div>
                           {(r.result.external ?? []).map((e) => (
                             <div key={e.name} className="text-xs text-muted-foreground">

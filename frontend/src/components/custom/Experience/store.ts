@@ -85,5 +85,5 @@ export const STATUS_CLASS: Record<string, string> = {
 export const KINDS = [
   { value: "derived", label: "推导型", hint: "按公式从事实算出，算例可复现" },
   { value: "judgment", label: "判定型", hint: "人工裁定，依据可查、可推翻" },
-  { value: "summary", label: "总结型", hint: "从多次实践归纳——**必须带样本量**" },
+  { value: "summary", label: "总结型", hint: "从多次实践归纳——必须带样本量" },
 ];

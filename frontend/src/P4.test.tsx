@@ -9,9 +9,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import App from "./App";
+import { useReviewStore } from "./components/custom/Review/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { useSourcesStore } from "./components/custom/Sources/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { expectBold, expectNoMarkers } from "./test/prose";
 import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 const session = {
@@ -127,10 +129,32 @@ async function goSources() {
   await userEvent.click(btn);
 }
 
+/** 到核验队列，并选中第一条（详情区里才有「原件」）。 */
+async function goQueueAndPick(subject: RegExp) {
+  render(<App />);
+  await screen.findByRole("navigation");
+  const btn = within(navGroup("核验")).getByRole("button", { name: "队列" });
+  await waitFor(() => expect(btn).toBeEnabled());
+  await userEvent.click(btn);
+  await userEvent.click(await screen.findByText(subject));
+}
+
+function queueItem(over: Record<string, unknown> = {}) {
+  return {
+    item: item(over),
+    tier: "影响面",
+    reason: "被 1 条派生断言引用",
+    score: 1010,
+    sampled: false,
+  };
+}
+
 beforeEach(() => {
   callMock.reset();
   useSessionStore.getState().reset();
   useSourcesStore.getState().reset();
+  // 核验详情区的选中项也是会话状态：不清就会把上一条测试的断言留在详情里
+  useReviewStore.getState().reset();
   backend();
 });
 
@@ -207,7 +231,10 @@ describe("来源", () => {
 
   it("界面说明核验的是原文，不是原文里的事实", async () => {
     await goSources();
-    expect(await screen.findByText(/不是\*\*「原文里的事实已被验证」/)).toBeInTheDocument();
+    expect(await screen.findByText(/「原文里的事实已被验证」/)).toBeInTheDocument();
+    // 强调渲染为加粗，且页面上不留 markdown 记号
+    expectBold("不是");
+    expectNoMarkers();
     expect(screen.getByText(/一个人读过并背书不构成「多源」/)).toBeInTheDocument();
   });
 
@@ -282,5 +309,53 @@ describe("来源", () => {
     await goSources();
     expect(await screen.findByText(/还没有登记任何文档/)).toBeInTheDocument();
     expect(screen.getByText(/跑一次 sync 会把归档的原件登记进来/)).toBeInTheDocument();
+  });
+
+  // 验收：断言的任何呈现处都能跳到它的依据文档，并定位到那一份
+  it("从断言点「查看依据」直接打开那一份，而不是打开列表首项", async () => {
+    callMock
+      .on(CallID.Queue, () => [queueItem({ artifact: "Data:Character/262.json" })])
+      .on(CallID.DocList, () => [
+        doc(),
+        doc({
+          revId: "rev2",
+          docId: "doc2",
+          title: "Data:Character/262.json",
+          artifactPath: ".huiji/raw/Data_Character_262.json",
+          usageCount: 5,
+        }),
+      ]);
+
+    await goQueueAndPick(/姑获鸟/);
+    await userEvent.click(await screen.findByTitle("查看依据：Data:Character/262.json"));
+
+    // 打开的必须是 262 那一份——打开第一份等于没跳
+    expect(await screen.findByText(/\.huiji\/raw\/Data_Character_262\.json/)).toBeInTheDocument();
+    expect(screen.queryByText(/\.huiji\/raw\/Data_Attribute\.json/)).not.toBeInTheDocument();
+  });
+
+  // 验收：依据未登记时，入口明说「依据未登记」，而不是打开一个空白页
+  it("依据未登记时说明是未登记，不是加载失败", async () => {
+    callMock
+      .on(CallID.Queue, () => [queueItem({ artifact: "formula:crit_factor" })])
+      // 文档列表里没有 formula:crit_factor 这一份
+      .on(CallID.DocList, () => [doc()]);
+
+    await goQueueAndPick(/姑获鸟/);
+    await userEvent.click(await screen.findByTitle("查看依据：formula:crit_factor"));
+
+    expect(await screen.findByText(/还没有登记为文档/)).toBeInTheDocument();
+    expect(screen.getAllByText(/formula:crit_factor/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/这不是加载失败/)).toBeInTheDocument();
+  });
+
+  // 派生断言没有原件：不显示空的原件入口
+  it("没有原件的断言不显示依据入口", async () => {
+    callMock
+      .on(CallID.Queue, () => [queueItem({ artifact: "", confidence: "L3" })])
+      .on(CallID.DocList, () => [doc()]);
+
+    await goQueueAndPick(/姑获鸟/);
+    expect(screen.queryByTitle(/^查看依据：/)).not.toBeInTheDocument();
   });
 });

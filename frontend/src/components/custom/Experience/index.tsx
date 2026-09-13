@@ -125,7 +125,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                     <CardHeader className="py-2">
                       <CardTitle className="text-sm font-medium">{g.topic}</CardTitle>
                       <CardDescription>
-                        **系统不替你裁决**——两条相反的经验并存，因为它们是两个判断
+                        <strong>系统不替你裁决</strong>——两条相反的经验并存，因为它们是两个判断
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-2">
@@ -183,7 +183,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                 </div>
                 {e.sessions.length === 0 && (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    还没有会话记录。它是经验的**依据**——没有它，经验无从回溯到
+                    还没有会话记录。它是经验的<strong>依据</strong>——没有它，经验无从回溯到
                     「哪次对话的哪一句」。
                   </p>
                 )}
@@ -234,7 +234,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                         </Button>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        只能追加。**可删改的依据不是依据**——经验指向的
+                        只能追加。<strong>可删改的依据不是依据</strong>——经验指向的
                         「第 3 段」必须永远是当初那句话。
                       </p>
                     </CardContent>
@@ -254,7 +254,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                 <CardTitle className="text-sm">从左侧选一条经验</CardTitle>
               </CardHeader>
               <CardContent className="text-xs leading-relaxed text-muted-foreground">
-                经验是**判断**，不是事实：它围绕用途，带提出者与批准者。
+                经验是<strong>判断</strong>，不是事实：它围绕用途，带提出者与批准者。
                 <br />
                 责任级别由参与者与依据推导——同时有人与 agent 参与是 1 级，
                 只有 agent 且无推导链是 4 级。界面不提供修改入口，
@@ -336,7 +336,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">确认</CardTitle>
                     <CardDescription>
-                      批准者必须是**人**。agent 可以提出候选与取证，但不能自己决定什么算数。
+                      批准者必须是<strong>人</strong>。agent 可以提出候选与取证，但不能自己决定什么算数。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-2">
@@ -384,7 +384,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                       </Button>
                     </div>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      驳回只改状态，**条目保留**——驳回是审计轨迹，不是删除。
+                      驳回只改状态，<strong>条目保留</strong>——驳回是审计轨迹，不是删除。
                     </p>
                   </CardContent>
                 </Card>
@@ -450,7 +450,7 @@ function ProposeForm({
       <CardHeader className="py-3">
         <CardTitle className="text-sm">记一条判断</CardTitle>
         <CardDescription>
-          提出的是**候选**，不会直接生效。级别由「谁参与 + 有没有依据」推导。
+          提出的是<strong>候选</strong>，不会直接生效。级别由「谁参与 + 有没有依据」推导。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2">
@@ -534,7 +534,7 @@ function ProposeForm({
           提出候选
         </Button>
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          推导型必须给推导链（`assert:&lt;ID&gt;` 或 `formula:&lt;名&gt;@&lt;版本&gt;`）；
+          推导型必须给推导链（<code className="rounded bg-muted px-1 font-mono text-[11px]">assert:&lt;ID&gt;</code> 或 <code className="rounded bg-muted px-1 font-mono text-[11px]">formula:&lt;名&gt;@&lt;版本&gt;</code>）；
           总结型必须给样本量——没有样本量的「经验」只是意见。
         </p>
       </CardContent>

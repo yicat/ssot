@@ -12,6 +12,7 @@
 import type { ReactNode } from "react";
 
 import { useGlossary, type Named } from "../Session/glossary";
+import { useSessionStore } from "../Session/store";
 
 function render(named: Named, className: string): ReactNode {
   if (!named.key) return <span className={className}>—</span>;
@@ -112,6 +113,34 @@ export function Subject({
 export function Dep({ value, className }: { value: string; className?: string }) {
   const g = useGlossary();
   return <span className={className}>{g.dep(value)}</span>;
+}
+
+/**
+ * 依据（原件）：`Data:Character/262.json` → 点得开的那份文档
+ *
+ * **溯源的终点不该是一个字符串**（`document.spec.md`）。核验的人要先读得到原文，
+ * 才谈得上核验；所以这里把它做成入口：一点就去依据页，并定位到那一份。
+ *
+ * 派生断言没有原件（值是算出来的，不是读出来的），此时**什么都不渲染**——
+ * 摆一个空的「原件」比不摆更让人以为数据坏了。
+ */
+export function Artifact({ value, className }: { value?: string; className?: string }) {
+  const openSource = useSessionStore((x) => x.openSource);
+  if (!value) return null;
+  return (
+    <button
+      type="button"
+      title={`查看依据：${value}`}
+      className={
+        "font-mono text-[11px] text-sky-800 underline decoration-dotted underline-offset-2 " +
+        "hover:text-sky-950 " +
+        (className ?? "")
+      }
+      onClick={() => openSource(value)}
+    >
+      {value}
+    </button>
+  );
 }
 
 /** 修订标识：`revid:8053` → 修订 8053 */

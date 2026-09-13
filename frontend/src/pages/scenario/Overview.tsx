@@ -13,6 +13,7 @@ import { Requirement, Unit } from "../../components/custom/Term";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
+import { Em } from "../../components/custom/Prose";
 import {
   Table,
   TableBody,
@@ -79,13 +80,13 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
           >
             {data.runnable ? "可以运行" : "不可运行"}
           </Badge>
-          <p className="text-xs text-muted-foreground">{data.description}</p>
+          <p className="text-xs text-muted-foreground"><Em>{data.description}</Em></p>
         </div>
 
         {!data.runnable && (
           <Card className="border-rose-200 bg-rose-50">
             <CardContent className="pt-4 text-sm text-rose-800">
-              <div className="font-medium">requires 未满足，**拒绝运行**</div>
+              <div className="font-medium">requires 未满足，<strong>拒绝运行</strong></div>
               <ul className="mt-2 list-disc pl-5 text-xs">
                 {(data.missing ?? []).map((m) => (
                   <li key={m}>{m}</li>
@@ -101,7 +102,7 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">需要什么（requires）</CardTitle>
-            <CardDescription>库里**应当有**的数据；缺失即不可运行</CardDescription>
+            <CardDescription>库里<strong>应当有</strong>的数据；缺失即不可运行</CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             <Table>
@@ -155,7 +156,7 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">外部输入（inputs）</CardTitle>
-              <CardDescription>库**本来就不该有**的值，由调用方在运行时给出</CardDescription>
+              <CardDescription>库<strong>本来就不该有</strong>的值，由调用方在运行时给出</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {(data.inputs ?? []).length === 0 && (
@@ -176,13 +177,13 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
                     ) : null}
                   </div>
                   <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                    {inp.description}
+                    <Em>{inp.description}</Em>
                   </p>
                 </div>
               ))}
               <Separator />
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                外部输入**始终标注未核验**：它与断言的区别是没有来源。
+                外部输入<strong>始终标注未核验</strong>：它与断言的区别是没有来源。
               </p>
             </CardContent>
           </Card>
@@ -190,7 +191,7 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">依赖公式</CardTitle>
-              <CardDescription>算例未通过的公式**拒绝使用**</CardDescription>
+              <CardDescription>算例未通过的公式<strong>拒绝使用</strong></CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               {(data.formulas ?? []).length === 0 && (

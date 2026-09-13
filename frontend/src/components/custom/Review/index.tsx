@@ -10,6 +10,8 @@
  *  3. 冲突成组呈现，且**系统不裁决**——只把同一件事的说法摆在一起
  *  4. 批量最容易造成大面积错误，因此**先预览影响面**
  */
+import type { ReactNode } from "react";
+
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
@@ -37,6 +39,7 @@ import { useSessionStore } from "../Session/store";
 import { useGlossary } from "../Session/glossary";
 import {
   Actor,
+  Artifact,
   Confidence,
   Field,
   Quantity,
@@ -152,7 +155,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
             </div>
           ) : (
             <span className="ml-auto text-xs text-muted-foreground">
-              **系统不替你裁决**，只把同一件事的说法摆在一起
+              <strong>系统不替你裁决</strong>，只把同一件事的说法摆在一起
             </span>
           )}
         </CardHeader>
@@ -239,7 +242,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                           <div className="flex-1">
                             <div className="text-sm">{c.value}</div>
                             <div className="text-[11px] text-muted-foreground">
-                              {c.source} · {c.confidence} · {c.artifact} {c.anchor} @ {c.revision}
+                              {c.source} · {c.confidence} · <Artifact value={c.artifact} /> {c.anchor} @ {c.revision}
                             </div>
                           </div>
                           <Button size="sm" variant="outline" disabled={r.loading} onClick={() => void r.pick(c)}>
@@ -296,7 +299,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                   </div>
                   <dl className="mt-3 grid gap-1 border-t pt-3 text-xs">
                     <Row k="来源" v={r.selected.source} />
-                    <Row k="原件" v={r.selected.artifact} />
+                    <Row k="原件" v={<Artifact value={r.selected.artifact} />} />
                     <Row k="锚点" v={r.selected.anchor} />
                     <Row k="修订" v={g.revision(r.selected.revision)} />
                     <Row k="断言 ID" v={r.selected.id} mono />
@@ -428,7 +431,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
             </CardHeader>
             <CardContent className="grid gap-2">
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                批量最容易造成大面积错误，因此**先预览**。每条断言会各自留下核验记录——
+                批量最容易造成大面积错误，因此<strong>先预览</strong>。每条断言会各自留下核验记录——
                 审计轨迹不合并，批量不等于免责。
               </p>
               <div className="flex gap-2">
@@ -499,7 +502,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
   );
 }
 
-function Row({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) {
+function Row({ k, v, mono = false }: { k: string; v: ReactNode; mono?: boolean }) {
   return (
     <div className="flex gap-2">
       <dt className="w-16 shrink-0 text-muted-foreground">{k}</dt>

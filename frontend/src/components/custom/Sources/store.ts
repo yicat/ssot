@@ -18,6 +18,14 @@ export type SourcesStore = {
   history: DocView[];
   usage: Item[];
 
+  /**
+   * 从断言跳过来、但没有对应文档的原件标题。
+   *
+   * **必须显示出来**：那个原件是被点开的依据，它不在列表里这件事
+   * 只能说明「依据未登记」——不能让页面看起来像加载失败或点错了。
+   */
+  notFound: string | null;
+
   by: string;
   reason: string;
 
@@ -29,6 +37,7 @@ export type SourcesStore = {
   select: (revId: string) => void;
   setHistory: (v: DocView[]) => void;
   setUsage: (v: Item[]) => void;
+  setNotFound: (v: string | null) => void;
   setBy: (v: string) => void;
   setReason: (v: string) => void;
   setLoading: (v: boolean) => void;
@@ -42,6 +51,7 @@ const initial = {
   selectedRevId: "",
   history: [],
   usage: [],
+  notFound: null,
   by: "",
   reason: "",
   loading: false,
@@ -55,6 +65,7 @@ export const useSourcesStore = create<SourcesStore>((set) => ({
   select: (selectedRevId) => set({ selectedRevId }),
   setHistory: (history) => set({ history }),
   setUsage: (usage) => set({ usage }),
+  setNotFound: (notFound) => set({ notFound }),
   setBy: (by) => set({ by }),
   setReason: (reason) => set({ reason }),
   setLoading: (loading) => set({ loading }),

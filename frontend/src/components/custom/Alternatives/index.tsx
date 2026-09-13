@@ -8,6 +8,7 @@
 import { useState } from "react";
 
 import { Badge } from "../../ui/badge";
+import { Em } from "../Prose";
 import { Button } from "../../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
 import { Input } from "../../ui/input";
@@ -92,7 +93,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
 
             {ev && (ev.preferenceInferred ?? "") !== "" && (
               <div className="mx-3 mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
-                从历史选择推测你偏好「{ev.preferenceInferred}」——这只是**建议**，
+                从历史选择推测你偏好「{ev.preferenceInferred}」——这只是<strong>建议</strong>，
                 必须你自己确认才生效。其他备选没有被删掉。
               </div>
             )}
@@ -131,7 +132,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                     </div>
                     <CardDescription>
                       目标：{p.objective}
-                      {p.preference ? ` · 假设偏好：${p.preference}` : " · **未标注假设的偏好**"}
+                      {p.preference ? ` · 假设偏好：${p.preference}` : <Em>{" · **未标注假设的偏好**"}</Em>}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-3">
@@ -259,7 +260,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
             <CardHeader className="py-3">
               <CardTitle className="text-sm">对比</CardTitle>
               <CardDescription>
-                **系统不替你做取舍**：它把取舍、代价、依据摊开，让选择可见。
+                <strong>系统不替你做取舍</strong>：它把取舍、代价、依据摊开，让选择可见。
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-2">
@@ -275,7 +276,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                   className="h-8"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  留空时，备选必须覆盖**至少两种偏好**——否则后端会拒绝，
+                  留空时，备选必须覆盖<strong>至少两种偏好</strong>——否则后端会拒绝，
                   因为它会变成「针对某个人的单一方案」，而你没说自己是谁。
                 </p>
               </div>
@@ -303,7 +304,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                   className="h-8"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  不合并会产生**伪多样性**：一排看着不同的方案，选哪个都一样。
+                  不合并会产生<strong>伪多样性</strong>：一排看着不同的方案，选哪个都一样。
                 </p>
               </div>
               <Button size="sm" disabled={a.loading} onClick={() => void a.compare()}>
@@ -343,7 +344,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                 />
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                选定之后**其他备选仍在列表里**：偏好只影响顺序，不删除任何东西。
+                选定之后<strong>其他备选仍在列表里</strong>：偏好只影响顺序，不删除任何东西。
                 理由会被保留——它是推断偏好的原料。
               </p>
             </CardContent>

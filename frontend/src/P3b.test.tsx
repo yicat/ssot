@@ -13,6 +13,7 @@ import App from "./App";
 import { useAlternativesStore } from "./components/custom/Alternatives/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { expectBold, expectNoMarkers } from "./test/prose";
 import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 const session = {
@@ -264,7 +265,10 @@ describe("备选方案", () => {
     await goAlternatives();
     await userEvent.click(await screen.findByRole("button", { name: "对比并剪枝" }));
 
-    expect(await screen.findByText(/这只是\*\*建议\*\*/)).toBeInTheDocument();
+    await screen.findByText(/这只是/);
+    // 强调渲染为加粗，且页面上不留 markdown 记号
+    expectBold("建议");
+    expectNoMarkers();
     expect(screen.getByText("省资源那条线")).toBeInTheDocument();
   });
 

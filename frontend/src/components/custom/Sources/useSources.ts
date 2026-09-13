@@ -1,11 +1,13 @@
 /**
  * 来源页的交互逻辑。
  *
- * 三条规格要求落在这里（docs/specs/document.spec.md）：
+ * 四条规格要求落在这里（docs/specs/document.spec.md）：
  *  1. 文档核验人必须是人，理由必填，方法只能是编审
  *  2. **变更传导必须说出来**——一次同步让多少条断言回到待核验，
  *     不告知人的批量回退就是最坏的那种静默
  *  3. 依据未登记的数量必须可见——「溯源的终点是一个字符串」正是要消灭的状态
+ *  4. 从断言点「查看依据」要**定位到那一份**，依据未登记时明说，
+ *     不能打开一个空白页让人以为是加载失败
  */
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -20,6 +22,7 @@ import {
   Verify,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/documentservice";
 import type { DocInput, DocView } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useSessionStore } from "../Session/store";
 import { useSourcesStore } from "./store";
 
 export function useSources(scenario: string | null) {
@@ -30,16 +33,38 @@ export function useSources(scenario: string | null) {
   const reload = useCallback(async () => {
     s.setLoading(true);
     s.setError(null);
+    // 重新取一遍就是重新看一眼事实源，上一次「没找到」的提示不再成立
+    s.setNotFound(null);
     try {
       // 场景名传空：来源是项目级的，换场景不该让文档列表变样
       const [docs, unregistered] = await Promise.all([List(""), Unregistered()]);
       const list = docs ?? [];
       s.setDocs(list);
       s.setUnregistered(unregistered ?? []);
-      const still = list.some((d: DocView) => d.revId === s.selectedRevId);
       if (list.length === 0) {
         s.select("");
-      } else if (!still) {
+        return;
+      }
+
+      // 从断言跳过来的目标优先于「默认选中第一份」——
+      // 人点的是「查看**这条**依据」，打开列表首项等于没跳。
+      // 目标是一次性意图：消费掉就清空，否则每次回到这一页都被它劫持。
+      const target = useSessionStore.getState().sourceTarget;
+      if (target) {
+        useSessionStore.getState().setSourceTarget(null);
+        const hit = list.find((d: DocView) => d.title === target);
+        if (hit) {
+          await openRef.current(hit.revId);
+          return;
+        }
+        // 依据未登记：明说，别打开一个空白页
+        s.setNotFound(target);
+        await openRef.current(list[0].revId);
+        return;
+      }
+
+      const still = list.some((d: DocView) => d.revId === s.selectedRevId);
+      if (!still) {
         // 选中第一份之后**必须把它的详情取回来**（引用与修订历史），
         // 否则详情区一直是空的——看起来像「这份文档没有断言引用」，
         // 而事实是「压根没去查」。
@@ -57,7 +82,13 @@ export function useSources(scenario: string | null) {
     void reload();
   }, [reload, scenario]);
 
-  /** 选中一份文档：同时取它的修订历史与引用它的断言。 */
+  /**
+   * 选中一份文档：同时取它的修订历史与引用它的断言。
+   *
+   * **不清「未找到目标」的提示**——清提示是人的动作（见 pick），
+   * 不是「打开了某一份」的副作用：从断言跳进来而依据未登记时，
+   * 页面会把列表首项打开给人看，那不是人做的选择。
+   */
   const open = useCallback(
     async (revId: string) => {
       s.select(revId);
@@ -75,6 +106,15 @@ export function useSources(scenario: string | null) {
     [],
   );
   openRef.current = open;
+
+  /** 人自己点了某一份：这时「未找到目标」的提示才该消失。 */
+  const pick = useCallback(
+    async (revId: string) => {
+      useSourcesStore.getState().setNotFound(null);
+      await openRef.current(revId);
+    },
+    [],
+  );
 
   const act = useCallback(
     async (fn: () => Promise<string>) => {
@@ -139,5 +179,5 @@ export function useSources(scenario: string | null) {
     [act],
   );
 
-  return { ...s, reload, open, verify, reject, register };
+  return { ...s, reload, open, pick, verify, reject, register };
 }

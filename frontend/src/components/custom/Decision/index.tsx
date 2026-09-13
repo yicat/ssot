@@ -31,7 +31,7 @@ import {
 } from "../../ui/table";
 import { useSessionStore } from "../Session/store";
 import { useGlossary } from "../Session/glossary";
-import { Field, Subject, Unit } from "../Term";
+import { Artifact, Field, Subject, Unit } from "../Term";
 import { DECISION_METHODS, useDecision } from "./useDecision";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -134,7 +134,7 @@ export default function Decision() {
                 <CardTitle className="text-sm">从左侧选择一条待判定事项</CardTitle>
               </CardHeader>
               <CardContent className="text-xs leading-relaxed text-muted-foreground">
-                这类条目是**文本里有多个候选值、无法确定取哪一个**的项。工具在这里刻意不猜：
+                这类条目是<strong>文本里有多个候选值、无法确定取哪一个</strong>的项。工具在这里刻意不猜：
                 猜错的值会带着「已抽取」的样子进入事实源，比缺失更危险。
               </CardContent>
             </Card>
@@ -158,7 +158,7 @@ export default function Decision() {
                   <dl className="mt-3 grid gap-1 border-t pt-3 text-xs">
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">原件</dt>
-                      <dd className="break-all">{it.artifact}</dd>
+                      <dd className="break-all"><Artifact value={it.artifact} /></dd>
                     </div>
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">修订</dt>
@@ -338,7 +338,7 @@ export default function Decision() {
                       </Button>
                     </div>
                     <p className="text-[11px] leading-relaxed text-muted-foreground">
-                      「都不对」是**结论**：该谓词记为缺失，谁都别猜。「暂缓」是**未处理**：
+                      「都不对」是<strong>结论</strong>：该谓词记为缺失，谁都别猜。「暂缓」是<strong>未处理</strong>：
                       条目仍留在队列里。两者不可混为一谈。
                     </p>
                   </CardContent>
