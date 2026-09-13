@@ -1,0 +1,30 @@
+.task
+bin
+frontend/dist
+frontend/node_modules
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+# Mobile generated (per-machine; overlays hold absolute paths)
+build/ios/xcode/overlay.json
+build/ios/xcode/gen/
+build/android/overlay.json
+build/android/gen/
+
+# dsh 沙箱：Go 构建缓存必须在工作区内，否则 go vet/test/tidy 被拒绝
+.gocache/
+
+# 抓取灰机 wiki 时用的 Chrome CDP profile（过 Cloudflare 用，体积大）
+.chrome-cdp/
+.chrome-visible/
+.huiji-profile/
+
+# 抓取凭据与原始缓存（含会话 cookie，属凭据，禁止提交）
+.huiji/
+
+# dsh 本地覆盖（个人机器专属，不提交）
+AGENTS.local.md
+CLAUDE.local.md
+
+# 编辑器与系统
+.DS_Store
+.idea/

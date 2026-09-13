@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A yys-go application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/yys-go.exe %u
+Terminal=false
+Type=Application
+Icon=yys-go.exe
+Categories=Utility;
+StartupWMClass=yys-go.exe
+
+ 
