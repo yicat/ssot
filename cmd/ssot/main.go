@@ -83,7 +83,8 @@ sync 选项：
   --parser <名>        解析器（默认 attribute-json）
 
 run 选项：
-  --bind <路径=字面量> 提供外部输入，可重复
+  --bind <路径=字面量>   外部输入（库中本不该有的值），可重复
+  --ref  <路径=实体:主体> 取自其他实体（例如技能倍率在 skill 实体上），可重复
 
 项目目录结构：
   project.yml  units.yml  schema/  formulas/  scenarios/  .data/
@@ -210,7 +211,7 @@ func cmdSync(args []string) error {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	artifacts := fs.String("artifacts", ".huiji/raw", "原件目录")
 	manifestPath := fs.String("manifest", ".huiji/manifest.json", "同步清单")
-	entity := fs.String("entity", "shikigami", "实体类型")
+	entity := fs.String("entity", "all", "实体类型（all / shikigami / skill）")
 	parser := fs.String("parser", "attribute-json", "解析器")
 	fargs, pos := splitFlags(args)
 	if err := fs.Parse(fargs); err != nil {
@@ -231,15 +232,70 @@ func cmdSync(args []string) error {
 	if err != nil {
 		return err
 	}
-
-	// 从清单取修订标识与采集时间 —— 溯源的本体
-	rev, capturedAt, err := lookupRevision(*manifestPath, "Data:Attribute.json")
+	revs, err := loadRevisions(*manifestPath)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("接入：原件 %s，修订 %s，采集 %s\n", *artifacts, rev, capturedAt.Format(time.RFC3339))
 
-	name, err := arts.Find("Data:Attribute.json")
+	entities := []string{*entity}
+	if *entity == "all" {
+		entities = []string{"shikigami", "skill"}
+	}
+
+	fmt.Printf("接入：原件目录 %s\n", *artifacts)
+	for _, ent := range entities {
+		switch ent {
+		case "shikigami":
+			if err := syncShikigami(p, arts, revs, *parser); err != nil {
+				return err
+			}
+		case "skill":
+			if err := syncSkills(p, arts, revs); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("未知实体 %q", ent)
+		}
+	}
+	n, _ := p.store.Count()
+	fmt.Printf("\n库中现有断言 %d 条\n", n)
+	return nil
+}
+
+// revInfo 是一个原件的修订标识与采集时间——溯源的本体。
+type revInfo struct {
+	Revision   string
+	CapturedAt time.Time
+}
+
+func loadRevisions(path string) (map[string]revInfo, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取清单失败：%w", err)
+	}
+	var m manifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("解析清单失败：%w", err)
+	}
+	fallback, _ := time.Parse(time.RFC3339, m.FetchedAt)
+	out := map[string]revInfo{}
+	for _, pg := range m.Pages {
+		t, _ := time.Parse(time.RFC3339, pg.Anchor)
+		if t.IsZero() {
+			t = fallback
+		}
+		out[pg.Title] = revInfo{Revision: fmt.Sprintf("revid:%d", pg.Revid), CapturedAt: t}
+	}
+	return out, nil
+}
+
+func syncShikigami(p *project, arts *artifact.Store, revs map[string]revInfo, parser string) error {
+	const title = "Data:Attribute.json"
+	ri, ok := revs[title]
+	if !ok {
+		return fmt.Errorf("清单中没有 %s", title)
+	}
+	name, err := arts.Find(title)
 	if err != nil {
 		return err
 	}
@@ -249,33 +305,116 @@ func cmdSync(args []string) error {
 	}
 
 	var cands []ingest.Candidate
-	switch *parser {
+	switch parser {
 	case "attribute-json":
-		cands, err = ingest.AttributeJSON("Data:Attribute.json", body, rev, capturedAt)
+		cands, err = ingest.AttributeJSON(title, body, ri.Revision, ri.CapturedAt)
 	default:
-		return fmt.Errorf("未知解析器 %q", *parser)
+		return fmt.Errorf("未知解析器 %q", parser)
 	}
 	if err != nil {
 		return err
 	}
-	fmt.Printf("解析：%d 个候选\n", len(cands))
+	fmt.Printf("\n── 式神 ──\n修订 %s，解析 %d 个候选\n", ri.Revision, len(cands))
+	return applyCandidates(p, "shikigami", cands, ri.CapturedAt)
+}
 
-	existing, err := p.store.KeysFor(*entity)
+func syncSkills(p *project, arts *artifact.Store, revs map[string]revInfo) error {
+	files, err := arts.List()
 	if err != nil {
 		return err
 	}
+	var cands []ingest.Candidate
+	var unresolved []ingest.Unresolved
+	var stats ingest.SkillStats
+	filesRead := 0
+	var latest time.Time
 
+	for _, f := range files {
+		title := artifact.Title(f)
+		if !strings.HasPrefix(title, "Data:Character/") {
+			continue
+		}
+		ri, ok := revs[title]
+		if !ok {
+			ri = revInfo{Revision: "unknown"}
+		}
+		body, _, err := arts.Read(f)
+		if err != nil {
+			return err
+		}
+		ex, err := ingest.SkillsJSON(title, body, ri.Revision, ri.CapturedAt)
+		if err != nil {
+			// 单个文件解析失败不应中断整批，但必须报告
+			fmt.Printf("  ⚠ 跳过 %s：%v\n", title, err)
+			continue
+		}
+		cands = append(cands, ex.Candidates...)
+		unresolved = append(unresolved, ex.Unresolved...)
+		stats.Add(ex.Stats)
+		filesRead++
+		if ri.CapturedAt.After(latest) {
+			latest = ri.CapturedAt
+		}
+	}
+
+	fmt.Printf("\n── 技能 ──\n读取 %d 个角色文件，解析 %d 个候选\n", filesRead, len(cands))
+	if err := applyCandidates(p, "skill", cands, latest); err != nil {
+		return err
+	}
+
+	// 打印抽取分布：没有这组数字，就无法判断低命中率是抽取不足还是数据本来如此
+	fmt.Printf("\n抽取分布：技能 %d（被动 %d，无升级数据 %d）\n",
+		stats.Skills, stats.Passive, stats.MaxNoUpgrade)
+	fmt.Printf("  一级倍率  唯一命中 %4d   多值歧义 %3d   文本无倍率 %4d\n",
+		stats.RatioUnique, stats.RatioMultiple, stats.RatioNone)
+	fmt.Printf("  满级倍率  唯一命中 %4d   多值歧义 %3d   文本无数值 %4d\n",
+		stats.MaxUnique, stats.MaxMultiple, stats.MaxNone)
+	note := stats.RatioNone - stats.Passive
+	if note > 0 {
+		fmt.Printf("  说明：文本无倍率的 %d 个中，%d 个是被动；其余 %d 个是治疗/控制/增益类技能，**本来就不该有伤害倍率**\n",
+			stats.RatioNone, stats.Passive, note)
+	}
+
+	if len(unresolved) > 0 {
+		fmt.Printf("\n未解决（文本里有多个候选值，无法确定——**不猜**，需人工判定）：共 %d 项\n", len(unresolved))
+		byPred := map[string]int{}
+		for _, u := range unresolved {
+			byPred[u.Predicate]++
+		}
+		for _, k := range sortedKeys(byPred) {
+			fmt.Printf("  %-12s %d 项\n", k, byPred[k])
+		}
+		fmt.Printf("  示例（前 6）：\n")
+		for i, u := range unresolved {
+			if i >= 6 {
+				fmt.Printf("    … 另有 %d 项\n", len(unresolved)-6)
+				break
+			}
+			fmt.Printf("    %s\n", u)
+		}
+	}
+	return nil
+}
+
+// applyCandidates 走完准入到原子应用。两个实体共用。
+func applyCandidates(p *project, entity string, cands []ingest.Candidate, capturedAt time.Time) error {
+	existing, err := p.store.KeysFor(entity)
+	if err != nil {
+		return err
+	}
 	cs, rep, err := admit.Run(cands, p.schema, existing, admit.Options{
-		Entity:     *entity,
-		Source:     assertion.Source{Name: "huijiwiki", Tier: "semi-official"},
-		CapturedAt: capturedAt,
-		Units:      p.units,
+		Entity:       entity,
+		Source:       assertion.Source{Name: "huijiwiki", Tier: "semi-official"},
+		CapturedAt:   capturedAt,
+		Units:        p.units,
+		UniqueExists: p.store.UniqueExists,
+		RefExists:    p.store.RefExists,
 	})
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("\n准入：%s\n", rep.Summary())
+	fmt.Printf("准入：%s\n", rep.Summary())
 	if len(rep.Undeclared) > 0 {
 		fmt.Printf("  ⚠ 数据中出现的、schema 未声明的谓词（漂移）：%s\n", strings.Join(rep.Undeclared, " "))
 	}
@@ -304,30 +443,8 @@ func cmdSync(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\n应用（原子）：新增 %d，重复跳过 %d，标记冲突 %d\n", res.Inserted, res.Duplicated, res.Conflicted)
-	n, _ := p.store.Count()
-	fmt.Printf("库中现有断言 %d 条\n", n)
+	fmt.Printf("应用（原子）：新增 %d，重复跳过 %d，标记冲突 %d\n", res.Inserted, res.Duplicated, res.Conflicted)
 	return nil
-}
-
-func lookupRevision(manifestPath, title string) (string, time.Time, error) {
-	b, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("读取清单失败：%w", err)
-	}
-	var m manifest
-	if err := json.Unmarshal(b, &m); err != nil {
-		return "", time.Time{}, fmt.Errorf("解析清单失败：%w", err)
-	}
-	for _, pg := range m.Pages {
-		if pg.Title == title {
-			t, _ := time.Parse(time.RFC3339, pg.Anchor)
-			return fmt.Sprintf("revid:%d", pg.Revid), t, nil
-		}
-	}
-	// 清单里没有该页面时，退化为清单自身的抓取时间
-	t, _ := time.Parse(time.RFC3339, m.FetchedAt)
-	return "unknown", t, nil
 }
 
 // ── derive ─────────────────────────────────────────────────────────────────
@@ -477,10 +594,20 @@ func (b *bindFlags) Set(v string) error {
 	return nil
 }
 
+type refFlags []string
+
+func (r *refFlags) String() string { return strings.Join(*r, ",") }
+func (r *refFlags) Set(v string) error {
+	*r = append(*r, v)
+	return nil
+}
+
 func cmdRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	var binds bindFlags
+	var refs refFlags
 	fs.Var(&binds, "bind", "外部输入，格式 路径=字面量，可重复")
+	fs.Var(&refs, "ref", "取自其他实体，格式 路径=实体:主体，可重复")
 	fargs, pos := splitFlags(args)
 	if err := fs.Parse(fargs); err != nil {
 		return err
@@ -563,13 +690,31 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("公式 %s 的算例未通过，拒绝运行", fname)
 	}
 
-	in := scenario.RunInput{Entity: "shikigami", Subject: subject, Values: map[string]string{}}
+	in := scenario.RunInput{
+		Entity:  "shikigami",
+		Subject: subject,
+		Extra:   map[string]scenario.Ref{},
+		Values:  map[string]string{},
+	}
 	for _, b := range binds {
 		i := strings.Index(b, "=")
 		if i < 0 {
 			return fmt.Errorf("--bind 需要 路径=字面量 形式，收到 %q", b)
 		}
 		in.Values[strings.TrimSpace(b[:i])] = strings.TrimSpace(b[i+1:])
+	}
+	for _, rf := range refs {
+		i := strings.Index(rf, "=")
+		if i < 0 {
+			return fmt.Errorf("--ref 需要 路径=实体:主体 形式，收到 %q", rf)
+		}
+		path := strings.TrimSpace(rf[:i])
+		v := strings.TrimSpace(rf[i+1:])
+		j := strings.Index(v, ":")
+		if j < 0 {
+			return fmt.Errorf("--ref 的主体部分需要 实体:主体 形式，收到 %q", v)
+		}
+		in.Extra[path] = scenario.Ref{Entity: v[:j], Subject: v[j+1:]}
 	}
 
 	out, err := scenario.Execute(spec, f, p.store, p.units, in, fst)

@@ -30,6 +30,11 @@ type Options struct {
 	Source     assertion.Source
 	CapturedAt time.Time
 	Units      *unit.Table
+
+	// 集合级校验需要查库，因此由调用方注入。
+	// 唯一性必须由**存储层**保证，不得在应用层「先查再插」——后者在并发下有竞态。
+	UniqueExists func(entity, field string, v any) (bool, error)
+	RefExists    func(entity string, id any) (bool, error)
 }
 
 // Problem 是一条被拒绝的候选原因。
@@ -101,7 +106,11 @@ func Run(cands []ingest.Candidate, set *schema.Set, existing map[string][]string
 	sort.Strings(rep.Undeclared)
 	sort.Strings(order)
 
-	ck := validate.Checkers{Units: opts.Units}
+	ck := validate.Checkers{
+		Units:        opts.Units,
+		UniqueExists: opts.UniqueExists,
+		RefExists:    opts.RefExists,
+	}
 	var cs assertion.ChangeSet
 
 	for _, subject := range order {

@@ -1,0 +1,56 @@
+# 技能。
+#
+# 倍率写在 description 自由文本里，不在结构化字段中——
+# 这是本项目最典型的 L2 抽取：由文本解析得出，最高只能到 L2。
+#
+# 实测的三个难点（见 internal/application/ingest/skill.go 的说明）：
+#   · 被动技能的 "30%概率" 不是伤害倍率，不得抽取
+#   · 一个技能可能有两个伤害倍率（如"每次造成攻击33%伤害…劈斩造成攻击88%伤害"），
+#     无法确定取哪个，**不得猜**
+#
+# 因此 ratio / ratio_max 都是**非必填**：被动技能与多段技能本来就没有单一倍率。
+# 「没有这个数据」与「文本里有但无法确定」是两回事，后者被记为未解决项。
+entity: skill
+description: 技能
+metamodelVersion: 1
+schemaRev: "1"
+
+fields:
+  - key: id
+    description: 技能唯一 ID，形如 262_01
+    type: text
+    required: true
+    identity: true
+
+  - key: character_id
+    description: 所属式神
+    type: ref
+    target: shikigami
+    required: true
+
+  - key: name
+    description: 技能名
+    type: text
+    required: true
+
+  - key: cost
+    description: 鬼火消耗（-1 表示被动）
+    type: number
+    unit: point
+    required: true
+
+  - key: passive
+    description: 是否被动技能
+    type: bool
+    required: true
+
+  # 以下两项非必填：被动与多段技能没有单一倍率。
+  - key: ratio
+    description: 一级伤害倍率（从 description 文本抽取，L2）
+    type: number
+    unit: percent
+
+  - key: ratio_max
+    description: 满级伤害倍率（从最后一条 upgrade 文本抽取，L2）
+    type: number
+    unit: percent

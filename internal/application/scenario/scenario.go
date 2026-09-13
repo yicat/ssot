@@ -239,14 +239,30 @@ type ValueReader interface {
 	BySubject(entity, subject string) ([]assertion.Assertion, error)
 }
 
+// Ref 指向另一个实体上的主体。
+//
+// 场景的输入不必都来自同一个实体：伤害计算需要式神的攻击与暴击系数、
+// 以及技能的倍率——后者在另一个实体上。
+type Ref struct {
+	Entity  string
+	Subject string
+}
+
 // RunInput 是运行场景的输入。
 //
-// 注意 def_reduction（防御减免）：**我们没有它的权威来源**，
-// 因此它是外部输入而非内置公式——缺的部分必须显式标注，不能猜。
+// 三类来源，必须分清：
+//
+//	Entity/Subject —— 主实体（例如式神）
+//	Extra          —— 其他实体上的引用（例如技能）
+//	Values         —— 库中本不该有的外部输入（例如防御减免）
+//
+// 注意 def_reduction：**我们没有它的权威来源**，因此它是外部输入而非内置常量。
+// 缺的部分必须显式标注，不能猜。
 type RunInput struct {
 	Entity  string
 	Subject string
-	Values  map[string]string // 绑定路径 → 字面量，例如 {"def_reduction": "0.5 fraction"}
+	Extra   map[string]Ref    // 绑定路径 -> 其他实体引用
+	Values  map[string]string // 绑定路径 -> 字面量
 }
 
 // Output 是场景产出。
@@ -273,6 +289,7 @@ func Execute(spec Spec, f *formula.Formula, r ValueReader, units *unit.Table, in
 	}
 
 	for name, path := range f.Bindings {
+		// 1. 外部输入优先（调用方显式提供）
 		if lit, ok := in.Values[path]; ok {
 			v, err := formula.ParseLiteral(lit)
 			if err != nil {
@@ -283,7 +300,29 @@ func Execute(spec Spec, f *formula.Formula, r ValueReader, units *unit.Table, in
 			out.Unverified = append(out.Unverified, path)
 			continue
 		}
+
+		// 2. 主实体上的断言
 		a, ok := byPred[path]
+
+		// 3. 其他实体上的断言（例如技能的倍率）
+		if !ok {
+			if ref, hasRef := in.Extra[path]; hasRef {
+				other, err := r.BySubject(ref.Entity, ref.Subject)
+				if err != nil {
+					return out, err
+				}
+				for _, x := range other {
+					if x.Predicate == path {
+						a, ok = x, true
+						break
+					}
+				}
+				if !ok {
+					return out, fmt.Errorf("%s=%s 上没有 %s", ref.Entity, ref.Subject, path)
+				}
+			}
+		}
+
 		if !ok {
 			if spec.IsInput(path) {
 				return out, fmt.Errorf("缺少外部输入 %s，请用 --bind %s=<字面量> 提供", path, path)
