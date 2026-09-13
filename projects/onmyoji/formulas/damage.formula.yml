@@ -1,0 +1,59 @@
+# 伤害估算 = 攻击 × 技能倍率 × 期望暴击系数 × 防御减免
+#
+# 诚实声明：**防御减免没有权威来源**（见 docs/notes/case-requirements.md）。
+# 因此它是 params 而非内置常量——由调用方提供，并在产出中标注未核验。
+# 缺的部分必须显式标注，不能猜。
+formula: damage
+version: "1"
+description: 伤害估算（不含防御减免规则，该项由调用方提供）
+
+params:
+  atk:
+    type: number
+    unit: point
+    note: 面板攻击
+  ratio:
+    type: number
+    unit: percent
+    note: 技能倍率
+  crit_factor:
+    type: number
+    unit: fraction
+    note: 期望暴击系数（派生自 cri 与 crid）
+  def_reduction:
+    type: number
+    unit: fraction
+    note: 防御减免。**无权威来源，须由调用方提供并标注未核验**
+
+bindings:
+  atk: atk
+  ratio: ratio
+  crit_factor: crit_factor
+  def_reduction: def_reduction
+
+result: atk * ratio * crit_factor * def_reduction
+
+cases:
+  - name: 姑获鸟 伞剑1级 期望暴击 防御减免0.5
+    given:
+      atk: "3082 point"
+      ratio: "80 percent"
+      crit_factor: "1.6 fraction"
+      def_reduction: "0.5 fraction"
+    expect: "1972.48 point"
+
+  - name: 防御减免为1（不打折）时等于面板×倍率×暴击系数
+    given:
+      atk: "1000 point"
+      ratio: "100 percent"
+      crit_factor: "1 fraction"
+      def_reduction: "1 fraction"
+    expect: "1000 point"
+
+  - name: 暴击倍率以百分数给出时结果一致
+    given:
+      atk: "1000 point"
+      ratio: "50 percent"
+      crit_factor: "2 fraction"
+      def_reduction: "1 fraction"
+    expect: "1000 point"

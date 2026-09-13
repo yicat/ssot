@@ -1,0 +1,46 @@
+# 期望暴击系数 = 1 + 暴击率 × 暴击伤害
+#
+# 这是**上下文中立**的派生：与任何场景无关，伤害、配速、斗技都要用，
+# 因此固化为项目级 L3 断言（见 docs/specs/derivation.spec.md）。
+#
+# params 给出静态类型（用于撰写期检查），bindings 给出运行期取值来源。
+# 二者分开，是为了在没有数据时也能完成静态检查。
+formula: crit_factor
+version: "1"
+description: 期望暴击系数
+
+params:
+  cri:
+    type: number
+    unit: fraction
+    note: 暴击率
+  crid:
+    type: number
+    unit: fraction
+    note: 暴击伤害
+
+bindings:
+  cri: cri
+  crid: crid
+
+result: 1 + cri * crid
+
+# 算例：给定输入 → 期望输出。有算例且全部通过，公式才算已验证。
+cases:
+  - name: 姑获鸟 暴击率0.5 暴伤1.2
+    given:
+      cri: "0.5 fraction"
+      crid: "1.2 fraction"
+    expect: "1.6"
+
+  - name: 零暴击率时系数为 1
+    given:
+      cri: "0 fraction"
+      crid: "1.5 fraction"
+    expect: "1"
+
+  - name: 百分数口径与小数口径等价
+    given:
+      cri: "50 percent"
+      crid: "120 percent"
+    expect: "1.6"

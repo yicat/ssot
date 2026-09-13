@@ -1,0 +1,9 @@
+# 单位与换算表。
+#
+# 引擎内置基础单位（fraction / percent / point / day / week / month / year / gem），
+# 此处只追加项目专属单位。换算关系是**数据**，可扩展、可被核验。
+#
+# 关键：percent 与 fraction 同属 ratio 维度，50 与 0.5 归一后一致。
+# 实测依据：同一式神的暴击在 Data:Attribute.json 记为 0.5、
+# 在 Data:Character/<id>.json 记为 50——不归一会把「一致」误判成「冲突」。
+units: []

@@ -24,14 +24,38 @@ wails3 task build
 ## 结构
 
 ```
-├─ main.go                  # 入口：Wails 应用装配
+├─ cmd/ssot/                # CLI 入口（MVP 阶段用它验证机制）
+├─ main.go                  # Wails 桌面应用入口
 ├─ internal/
-│  ├─ domain/               # 领域层：纯业务规则，只允许标准库
-│  ├─ application/          # 应用层：用例编排
-│  ├─ api/                  # 接口层：wails3 bindings 暴露给前端
-│  └─ infrastructure/       # 基础设施：外部适配
-├─ frontend/                # Vite + React + shadcn
-└─ docs/specs/              # 规格文档（SDD 唯一事实源）
+│  ├─ domain/               # 领域层：值/量纲/元模型/schema/校验/表达式/断言
+│  ├─ application/          # 用例：接入、准入、公式、派生、场景
+│  ├─ infrastructure/       # 适配器：SQLite 断言库、YAML 加载、原件读取
+│  └─ api/                  # wails3 bindings
+├─ projects/onmyoji/        # 一个项目 = 一个领域
+└─ docs/
+   ├─ specs/                # 规格（唯一事实源）
+   ├─ notes/                # 调研与实测记录
+   └─ mvp-scope.md          # MVP 实施范围
 ```
 
-开发规范见 `AGENTS.md`，规格流程见 `docs/specs/`。
+## CLI（MVP）
+
+```powershell
+# 校验项目的 schema 与单位表
+go run ./cmd/ssot schema projects/onmyoji
+
+# 接入 + 准入 + 原子应用（数据来自本地已存档的原件）
+go run ./cmd/ssot sync projects/onmyoji
+
+# 按公式派生 L3 断言（会先验证公式的算例）
+go run ./cmd/ssot derive projects/onmyoji crit_factor
+
+# 查看断言库状态
+go run ./cmd/ssot status projects/onmyoji
+
+# 运行场景
+go run ./cmd/ssot run projects/onmyoji damage-calc 262 `
+  --bind "ratio=80 percent" --bind "def_reduction=0.5 fraction"
+```
+
+开发规范见 `AGENTS.md`，规格见 `docs/specs/`。

@@ -1,0 +1,29 @@
+# 场景 = 项目内的一个用途。
+#
+# 场景是「缺什么」的载体：它声明 requires，系统据此报告缺什么，
+# 把数据缺口从「事后发现」变成「事前可见」。
+#
+# requires 与 inputs 的区别是根本性的：
+#   requires —— 库里**应当有**的数据；缺失即不可运行
+#   inputs   —— 库**本来就不该有**的值，由调用方在运行时给出
+#
+# requires 的每一项必须**可判定**——要么有数据，要么没有。
+# 不得声明「游戏理解」这类无法判定的需求。
+scenario: damage-calc
+description: 伤害计算——给定式神与技能倍率，估算期望伤害
+
+requires:
+  - shikigami.atk           # 来自 Data:Attribute.json
+  - shikigami.crit_factor   # 由 crit_factor 公式派生（L3）
+
+inputs:
+  - name: ratio
+    description: 技能倍率。技能数据尚未接入 MVP，暂由调用方提供
+  - name: def_reduction
+    description: 防御减免。**无权威来源**（见 docs/notes/case-requirements.md），必须由调用方提供并在产出中标注未核验
+
+formulas:
+  - damage
+
+outputs:
+  - damage-estimate

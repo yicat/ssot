@@ -11,12 +11,35 @@
 ## 目录约定
 
 ```
-├─ main.go                  # 入口
+├─ main.go                  # 入口（Wails 桌面应用）
+├─ cmd/ssot/                # CLI 入口（MVP 用它验证机制）
 ├─ internal/
-│  ├─ domain/               # 领域层：纯业务规则，只允许标准库
+│  ├─ domain/               # 领域层：纯规则，只允许标准库
+│  │  ├─ value/             # 值的三态（有值/未知/空/缺失）
+│  │  ├─ unit/              # 量纲与换算
+│  │  ├─ metamodel/         # 类型与约束原语
+│  │  ├─ schema/            # 实体集合与双向漂移检测
+│  │  ├─ validate/          # 六类校验
+│  │  ├─ expr/              # 表达式求值器（含量纲检查）
+│  │  └─ assertion/         # 断言模型与变更集
 │  ├─ application/          # 应用层：用例编排
-│  ├─ api/                  # 接口层：wails3 bindings 暴露给前端
-│  └─ infrastructure/       # 基础设施：存储/设备/日志等外部适配
+│  │  ├─ ingest/            # 接入：原件 → 候选
+│  │  ├─ admit/             # 准入：候选 → 变更集
+│  │  ├─ formula/           # 公式加载、算例验证与求值
+│  │  ├─ derive/            # 派生：由断言产出 L3 断言
+│  │  └─ scenario/          # 场景：requires 检查与运行
+│  ├─ infrastructure/       # 基础设施：外部适配
+│  │  ├─ store/             # SQLite 断言库（变更集原子应用）
+│  │  ├─ schemafile/        # YAML schema 与单位表加载
+│  │  └─ artifact/          # 原件存档读取
+│  └─ api/                  # 接口层：wails3 bindings 暴露给前端
+├─ projects/onmyoji/        # 一个项目 = 一个领域（阴阳师）
+│  ├─ project.yml
+│  ├─ units.yml
+│  ├─ schema/               # 定义：可版本控制、可分享
+│  ├─ formulas/             # 公式与算例
+│  ├─ scenarios/            # 场景：一个用途一个目录
+│  └─ .data/                # 实例：断言库（gitignore，可重建）
 ├─ frontend/
 │  ├─ components/ui/        # shadcn 生成，勿手改
 │  ├─ components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts

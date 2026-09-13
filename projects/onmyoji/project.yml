@@ -1,0 +1,5 @@
+# 项目 = 一个领域。
+# 机制由引擎提供且全局统一；本项目只提供内容：schema、公式、视角、数据源。
+project: onmyoji
+description: 阴阳师
+metamodelVersion: 1

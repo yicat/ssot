@@ -10,6 +10,9 @@ build/ios/xcode/gen/
 build/android/overlay.json
 build/android/gen/
 
+# 项目实例数据（可由「定义 + 数据源」重建，不进版本控制）
+projects/*/.data/
+
 # dsh 沙箱：Go 构建缓存必须在工作区内，否则 go vet/test/tidy 被拒绝
 .gocache/
 
