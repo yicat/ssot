@@ -229,13 +229,105 @@ scenarios/<name>/experience/
 
 ## 前后端契约
 
-**待定**，取决于对外接口形态。已确定的约束：
+### 责任级别由参与者与依据**推导**，不由人填
 
-- **核验与经验确认是队列，人与 agent 都能消费**——不是只给人点的界面
-- agent 需要能：读取待处理队列、提交候选经验与依据、查询冲突、获取上下文
-- 批量操作必须可脚本化（agent 不会一条条点）
-- 每条经验的责任级别与推导链必须可被外部读取
-- **人机分工必须可审计**：能回答「这条经验是谁提的、谁批的、依据什么」
+给级别留一个输入框，就一定会有人填错；而级别错会让整层可信度失真。
+因此它由两个客观事实算出：
+
+| 参与者 | 依据 | 级别 |
+|---|---|---|
+| 同时有人与 agent | — | **1**（协作） |
+| 只有人 | — | **2**（人工确认） |
+| 只有 agent | 有推导链或算例 | **3**（可复现） |
+| 只有 agent | 无推导链 | **4**（推断） |
+
+「协作」判据是**参与者里同时出现人与 agent**，不是「记不清是谁做的」。
+
+### 可信度上限
+
+责任级别决定可信度上限。级别 1 与 2 的上限同为 L2——
+两者的差别在**来源**（有没有 agent 参与），不在分级本身；
+把协作直接抬到 L1 会让「可与原文逐字比对」这个含义被稀释。
+
+| 级别 | 上限 |
+|---|---|
+| 1 / 2 | L2 |
+| 3 | L3 |
+| 4 | L4 |
+
+### 冲突的比较键
+
+「与既有经验比」需要一把尺子。同一条经验的身份是
+**(场景, 话题)**：同一场景下、同一个话题的两条不同说法即为冲突。
+因此 `话题` 是必填项——没有它，冲突检测无从落地。
+
+### 方法
+
+方法挂在 `ExperienceService` 上。
+
+| 方法 | 参数 | 返回 | 说明 |
+|---|---|---|---|
+| `List` | `scenario string` | `EntryView[]` | 空场景名表示全部 |
+| `Propose` | `Proposal` | `EntryView` | 提出候选经验；**不直接生效** |
+| `Approve` | `id, by, reason string` | `EntryView` | `by` 必须是人 |
+| `Reject` | `id, by, reason string` | `EntryView` | |
+| `Conflicts` | `scenario string` | `ConflictView[]` | 同一 (场景, 话题) 的不同说法 |
+| `Sessions` | `scenario string` | `SessionView[]` | |
+| `AppendTurn` | `sessionID, role, kind, text string` | `SessionView` | **只能追加**；不存在删除/修改方法 |
+| `OpenSession` | `scenario, title string` | `SessionView` | |
+| `Refresh` | — | `RefreshResult` | 重算失效/待重算状态 |
+
+`Proposal`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `scenario` | string | 是 | 归属场景；无归属拒绝记录 |
+| `topic` | string | 是 | 冲突比较键 |
+| `kind` | string | 是 | `derived` / `judgment` / `summary` |
+| `statement` | string | 是 | 判断本身 |
+| `rationale` | string | 否 | 为什么这么判断 |
+| `chain` | string[] | 推导型必填 | 依赖的断言 ID 与公式名 |
+| `sampleSize` | int | 总结型必填且 > 0 | 样本量 |
+| `sampleFrom` | string | 否 | 样本来自哪 |
+| `conditions` | string | 否 | 适用条件范围 |
+| `preference` | string | 否 | 该判断假设的偏好 |
+| `sessionId` | string | 是 | 依据所在会话 |
+| `anchor` | string | 是 | 会话中的具体位置 |
+| `proposedByKind` | string | 是 | `human` / `agent` |
+| `proposedById` | string | 是 | |
+| `collaborators` | `{kind,id}[]` | 否 | 其他参与者；含人即判为协作 |
+
+`EntryView`：
+
+| 字段 | 类型 | 可空 | 说明 |
+|---|---|---|---|
+| `id` | string | 否 | |
+| `scenario` / `topic` / `kind` | string | 否 | |
+| `statement` / `rationale` | string | 否 | |
+| `chain` | string[] | 否 | |
+| `sampleSize` | int | 否 | 0 表示不适用 |
+| `sampleFrom` | string | 否 | |
+| `conditions` / `preference` | string | 否 | |
+| `level` | int | 否 | 1–4，推导得出 |
+| `levelLabel` | string | 否 | |
+| `maxConfidence` | string | 否 | 该级别允许的最高分级 |
+| `proposedBy` | string | 否 | `human:x` / `agent:y` |
+| `approvedBy` | string | **是** | null 表示尚未批准 |
+| `status` | string | 否 | `candidate`/`effective`/`rejected`/`stale`/`recompute` |
+| `statusText` | string | 否 | |
+| `sessionsId` / `anchor` | string | 否 | 依据 |
+| `at` | string | 否 | RFC3339 |
+| `supersedes` | string | 否 | 被取代的旧条目 ID；空串表示没有 |
+| `conflictsWith` | string[] | 否 | 与之冲突的条目 ID |
+
+`SessionView`：`{ id, scenario, title, at, turns: {seq, role, kind, text, at}[] }`
+
+### 级别与状态的可观测性
+
+- 每条经验的**责任级别、推导链、依据**必须可被外部读取，而不只显示在界面上
+- 级别 3/4 的经验被引用时，引用方必须标注其级别
+- 界面**不得**提供修改级别的入口——它由参与者与依据推导
+
 
 ## 待确认
 

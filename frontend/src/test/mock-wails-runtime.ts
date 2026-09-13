@@ -73,6 +73,18 @@ export const CallID = {
   DataSubjects: 558894975,
   // 公式
   FormulaList: 1903130150,
+  // 经验
+  ExpAppendTurn: 2834441657,
+  ExpApprove: 1723415335,
+  ExpConflicts: 1629546965,
+  ExpList: 1692919082,
+  ExpOpenSession: 3487814834,
+  ExpPropose: 3385494116,
+  ExpRefresh: 4187308293,
+  ExpReject: 647860061,
+  ExpSessions: 2931335891,
+  ExpSupersede: 1592503570,
+  // 备选方案（P3，尚未实现）
 } as const;
 
 type Handler = (args: unknown[]) => unknown;

@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "../../ui/table";
 import type { Item, QueueItem } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useSessionStore } from "../Session/store";
 import { METHODS } from "./store";
 import { CONFIDENCE_HINT, STATUS_CLASS, STATUS_LABEL, useReview } from "./useReview";
 
@@ -76,6 +77,9 @@ function TierBadge({ q }: { q: QueueItem }) {
 
 export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
   const r = useReview();
+  // 使用者身份是**会话级**的：在核验里填一次，经验与待判定里不该再填一次。
+  const sessionBy = useSessionStore((s) => s.by);
+  const sessionSetBy = useSessionStore((s) => s.setBy);
   const byStatus = r.stats?.byStatus ?? {};
 
   return (
@@ -283,8 +287,8 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                     </Label>
                     <Input
                       id="by"
-                      value={r.by}
-                      onChange={(e) => r.setBy(e.target.value)}
+                      value={sessionBy}
+                      onChange={(e) => sessionSetBy(e.target.value)}
                       placeholder="你的名字"
                       className="h-8"
                     />

@@ -17,7 +17,6 @@ type DecisionState = {
   /** 当前勾选的候选序号；-1 表示「都不对」 */
   choice: number;
 
-  by: string;
   method: string;
   reason: string;
   evidence: string;
@@ -29,7 +28,6 @@ type DecisionState = {
   setStats: (stats: DecisionStats | null) => void;
   select: (id: string) => void;
   setChoice: (choice: number) => void;
-  setBy: (v: string) => void;
   setMethod: (v: string) => void;
   setReason: (v: string) => void;
   setEvidence: (v: string) => void;
@@ -43,7 +41,6 @@ const initial = {
   stats: null,
   selectedId: "",
   choice: 0,
-  by: "",
   method: "editorial",
   reason: "",
   evidence: "",
@@ -57,7 +54,6 @@ export const useDecisionStore = create<DecisionState>((set) => ({
   setStats: (stats) => set({ stats }),
   select: (id) => set({ selectedId: id, choice: 0 }),
   setChoice: (choice) => set({ choice }),
-  setBy: (by) => set({ by }),
   setMethod: (method) => set({ method }),
   setReason: (reason) => set({ reason }),
   setEvidence: (evidence) => set({ evidence }),

@@ -26,7 +26,6 @@ export type ReviewState = {
   status: string;
   sampleRatio: number;
 
-  by: string;
   method: string;
   reason: string;
   evidence: string;
@@ -46,7 +45,6 @@ export type ReviewState = {
   setEntity: (v: string) => void;
   setStatus: (v: string) => void;
   setSampleRatio: (v: number) => void;
-  setBy: (v: string) => void;
   setMethod: (v: string) => void;
   setReason: (v: string) => void;
   setEvidence: (v: string) => void;
@@ -67,7 +65,6 @@ const initial = {
   entity: "",
   status: "pending",
   sampleRatio: 0.05,
-  by: "",
   method: "editorial",
   reason: "",
   evidence: "",
@@ -88,7 +85,6 @@ export const useReviewStore = create<ReviewState>((set) => ({
   setEntity: (entity) => set({ entity }),
   setStatus: (status) => set({ status }),
   setSampleRatio: (sampleRatio) => set({ sampleRatio }),
-  setBy: (by) => set({ by }),
   setMethod: (method) => set({ method }),
   setReason: (reason) => set({ reason }),
   setEvidence: (evidence) => set({ evidence }),

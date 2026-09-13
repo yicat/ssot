@@ -21,6 +21,7 @@ import {
   Stats,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/reviewservice";
 import type { FilterInput, Item } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useSessionStore } from "../Session/store";
 import { useReviewStore } from "./store";
 
 export function useReview() {
@@ -69,7 +70,8 @@ export function useReview() {
       const sel = useReviewStore.getState().selected;
       if (!sel) return;
       const st = useReviewStore.getState();
-      if (!st.by.trim()) {
+      const by = useSessionStore.getState().by.trim();
+      if (!by) {
         toast.error("必须填写批准者——无追责的核验等于没有核验");
         return;
       }
@@ -81,9 +83,9 @@ export function useReview() {
       st.setError(null);
       try {
         if (kind === "approve") {
-          await Approve(sel.id, st.by.trim(), st.method, st.reason.trim(), st.evidence.trim());
+          await Approve(sel.id, by, st.method, st.reason.trim(), st.evidence.trim());
         } else {
-          await Reject(sel.id, st.by.trim(), st.reason.trim());
+          await Reject(sel.id, by, st.reason.trim());
         }
         toast.success(`${kind === "approve" ? "已批准" : "已驳回"}　${sel.subject}.${sel.predicate}`);
         st.setReason("");
@@ -130,7 +132,8 @@ export function useReview() {
   const batch = useCallback(
     async (kind: "approve" | "reject") => {
       const st = useReviewStore.getState();
-      if (!st.by.trim()) {
+      const by = useSessionStore.getState().by.trim();
+      if (!by) {
         toast.error("必须填写批准者");
         return;
       }
@@ -144,8 +147,8 @@ export function useReview() {
         const f = buildFilter();
         const r =
           kind === "approve"
-            ? await BatchApprove(f, st.by.trim(), st.method, st.reason.trim(), st.evidence.trim())
-            : await BatchReject(f, st.by.trim(), st.reason.trim());
+            ? await BatchApprove(f, by, st.method, st.reason.trim(), st.evidence.trim())
+            : await BatchReject(f, by, st.reason.trim());
         toast.success(`批量${kind === "approve" ? "批准" : "驳回"}：成功 ${r.applied}，失败 ${r.failed}`);
         st.setPreview(null);
         await refresh();

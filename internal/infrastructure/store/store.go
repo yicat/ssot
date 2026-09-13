@@ -93,6 +93,45 @@ CREATE TABLE IF NOT EXISTS decision (
 );
 CREATE INDEX IF NOT EXISTS ix_decision_status ON decision(status);
 CREATE INDEX IF NOT EXISTS ix_decision_subject ON decision(entity, subject, predicate);
+
+-- 会话记录：经验的**依据**。只追加，不提供修改与删除方法——
+-- 可删改的依据不是依据，而「哪次对话的哪一句」正是经验的溯源锚点。
+CREATE TABLE IF NOT EXISTS experience_session (
+  id         TEXT PRIMARY KEY,
+  scenario   TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  turns      TEXT NOT NULL,   -- JSON
+  at         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_experience_session_scenario ON experience_session(scenario);
+
+-- 经验条目：修订只追加新条目，旧条目保留（被标为「已被取代」）。
+CREATE TABLE IF NOT EXISTS experience_entry (
+  id             TEXT PRIMARY KEY,
+  scenario       TEXT NOT NULL,
+  topic          TEXT NOT NULL,
+  kind           TEXT NOT NULL,
+  statement      TEXT NOT NULL,
+  rationale      TEXT NOT NULL,
+  chain          TEXT NOT NULL,
+  sample_size    INTEGER NOT NULL DEFAULT 0,
+  sample_from    TEXT NOT NULL DEFAULT '',
+  conditions     TEXT NOT NULL DEFAULT '',
+  preference     TEXT NOT NULL DEFAULT '',
+  proposed_kind  TEXT NOT NULL,
+  proposed_id    TEXT NOT NULL,
+  collaborators  TEXT NOT NULL,
+  approved_kind  TEXT NOT NULL DEFAULT '',
+  approved_id    TEXT NOT NULL DEFAULT '',
+  approve_reason TEXT NOT NULL DEFAULT '',
+  session_id     TEXT NOT NULL,
+  anchor         TEXT NOT NULL,
+  status         TEXT NOT NULL,
+  at             TEXT NOT NULL,
+  supersedes     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_experience_scenario ON experience_entry(scenario);
+CREATE INDEX IF NOT EXISTS ix_experience_topic ON experience_entry(scenario, topic);
 `
 
 // assertionCols 是断言表的列清单，供各处 SELECT 复用。

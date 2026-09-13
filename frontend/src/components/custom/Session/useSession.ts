@@ -23,6 +23,8 @@ export type SessionApi = {
   session: SessionSnapshot | null;
   overview: ProjectOverview | null;
   route: Route;
+  by: string;
+  setBy: (v: string) => void;
   loading: boolean;
   error: string | null;
   scenario: string | null;
@@ -112,6 +114,8 @@ export function useSession(): SessionApi {
     session,
     overview: s.overview,
     route: s.route,
+    by: s.by,
+    setBy: s.setBy,
     loading: s.loading,
     error: s.error,
     scenario,

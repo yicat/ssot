@@ -16,6 +16,7 @@ import {
   ResolveDecision,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/reviewservice";
 import type { DecisionItem } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useSessionStore } from "../Session/store";
 import { selectedItem, useDecisionStore } from "./store";
 
 /** 界面上只允许这两种方法：在原文候选间取舍不是重算，也不是多源。 */
@@ -58,7 +59,8 @@ export function useDecision(status = "", limit = 500) {
       const st = useDecisionStore.getState();
       const it = selectedItem(st);
       if (!it) return;
-      if (!st.by.trim()) {
+      const by = useSessionStore.getState().by.trim();
+      if (!by) {
         toast.error("必须填写裁决人——无追责的裁决等于没有裁决");
         return;
       }
@@ -76,7 +78,7 @@ export function useDecision(status = "", limit = 500) {
         const r = await ResolveDecision(
           it.id,
           choice,
-          st.by.trim(),
+          by,
           st.method,
           st.reason.trim(),
           st.evidence.trim(),
@@ -100,7 +102,8 @@ export function useDecision(status = "", limit = 500) {
     const st = useDecisionStore.getState();
     const it = selectedItem(st);
     if (!it) return;
-    if (!st.by.trim()) {
+    const by = useSessionStore.getState().by.trim();
+      if (!by) {
       toast.error("必须填写裁决人");
       return;
     }
@@ -111,7 +114,7 @@ export function useDecision(status = "", limit = 500) {
     st.setLoading(true);
     st.setError(null);
     try {
-      await DeferDecision(it.id, st.by.trim(), st.reason.trim());
+      await DeferDecision(it.id, by, st.reason.trim());
       await reload();
       toast.success("已暂缓——它仍在待判定队列里，只是标为「人已看过、先放着」");
       st.setReason("");

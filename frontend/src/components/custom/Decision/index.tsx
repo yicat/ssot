@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../ui/table";
+import { useSessionStore } from "../Session/store";
 import { DECISION_METHODS, useDecision } from "./useDecision";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -48,6 +49,9 @@ export function DecisionStatusBadge({ status, text }: { status: string; text: st
 
 export default function Decision() {
   const d = useDecision();
+  // 使用者身份是**会话级**的（同核验页）。
+  const sessionBy = useSessionStore((s) => s.by);
+  const sessionSetBy = useSessionStore((s) => s.setBy);
   const s = d.stats;
   const it = d.selected;
 
@@ -249,8 +253,8 @@ export default function Decision() {
                       </Label>
                       <Input
                         id="decision-by"
-                        value={d.by}
-                        onChange={(e) => d.setBy(e.target.value)}
+                        value={sessionBy}
+                        onChange={(e) => sessionSetBy(e.target.value)}
                         placeholder="你的名字"
                         className="h-8"
                       />
