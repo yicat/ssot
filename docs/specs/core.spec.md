@@ -153,6 +153,8 @@
 |---|---|
 | **本规格** | 断言的**结构**与校验规则 |
 | `metamodel.spec.md` | 断言可用的**类型与约束原语**（通用引擎的封闭集合） |
+| `ingestion.spec.md` | **接入层**：取回、存档、解析 → 候选 |
+| `admission.spec.md` | **准入层**：候选 → 断言的守门人，产出变更集 |
 | `migration.spec.md` | schema 变更时**既有数据怎么办** |
 | `verification.spec.md` | 断言的**核验状态与可信度** |
 | `player-profile.spec.md` | **个人状态与偏好**断言（同结构，不同信任域） |
