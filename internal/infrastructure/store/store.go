@@ -17,6 +17,7 @@ import (
 
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/value"
+	"github.com/ngnl5/ssot/internal/domain/verification"
 
 	_ "modernc.org/sqlite"
 )
@@ -50,7 +51,29 @@ CREATE TABLE IF NOT EXISTS assertion (
 CREATE INDEX IF NOT EXISTS ix_assertion_key ON assertion(key);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_assertion_key_value ON assertion(key, value_json);
 CREATE INDEX IF NOT EXISTS ix_assertion_entity ON assertion(entity);
+CREATE INDEX IF NOT EXISTS ix_assertion_status ON assertion(status);
+
+-- 核验记录：必须能回答「谁、何时、凭什么、核验到哪一部分」。
+-- 只追加，不修改——它是审计轨迹。
+CREATE TABLE IF NOT EXISTS verification (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  assertion_id  TEXT NOT NULL,
+  decision      TEXT NOT NULL,
+  method        TEXT NOT NULL,
+  proposed_kind TEXT NOT NULL,
+  proposed_id   TEXT NOT NULL,
+  approved_kind TEXT NOT NULL,
+  approved_id   TEXT NOT NULL,
+  reason        TEXT NOT NULL,
+  evidence      TEXT NOT NULL,
+  at            TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_verification_assertion ON verification(assertion_id);
 `
+
+// assertionCols 是断言表的列清单，供各处 SELECT 复用。
+const assertionCols = `id, entity, subject, predicate, qualifiers, value_kind, value_json,
+	value_unit, confidence, status, source_name, source_tier, artifact, anchor, revision, captured_at, derived_json`
 
 // Open 打开（或创建）库并建表。
 func Open(path string) (*Store, error) {
@@ -154,9 +177,7 @@ func insertTx(tx *sql.Tx, a assertion.Assertion, status assertion.Status) (int, 
 
 // All 返回全部断言。
 func (s *Store) All() ([]assertion.Assertion, error) {
-	rows, err := s.db.Query(`SELECT id, entity, subject, predicate, qualifiers, value_kind, value_json,
-		value_unit, confidence, status, source_name, source_tier, artifact, anchor, revision, captured_at, derived_json
-		FROM assertion ORDER BY entity, subject, predicate`)
+	rows, err := s.db.Query(`SELECT ` + assertionCols + ` FROM assertion ORDER BY entity, subject, predicate`)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +187,7 @@ func (s *Store) All() ([]assertion.Assertion, error) {
 
 // ByEntity 返回某实体的全部断言。
 func (s *Store) ByEntity(entity string) ([]assertion.Assertion, error) {
-	rows, err := s.db.Query(`SELECT id, entity, subject, predicate, qualifiers, value_kind, value_json,
-		value_unit, confidence, status, source_name, source_tier, artifact, anchor, revision, captured_at, derived_json
-		FROM assertion WHERE entity = ? ORDER BY subject, predicate`, entity)
+	rows, err := s.db.Query(`SELECT `+assertionCols+` FROM assertion WHERE entity = ? ORDER BY subject, predicate`, entity)
 	if err != nil {
 		return nil, err
 	}
@@ -178,9 +197,7 @@ func (s *Store) ByEntity(entity string) ([]assertion.Assertion, error) {
 
 // BySubject 返回某主体的全部断言。
 func (s *Store) BySubject(entity, subject string) ([]assertion.Assertion, error) {
-	rows, err := s.db.Query(`SELECT id, entity, subject, predicate, qualifiers, value_kind, value_json,
-		value_unit, confidence, status, source_name, source_tier, artifact, anchor, revision, captured_at, derived_json
-		FROM assertion WHERE entity = ? AND subject = ? ORDER BY predicate`, entity, subject)
+	rows, err := s.db.Query(`SELECT `+assertionCols+` FROM assertion WHERE entity = ? AND subject = ? ORDER BY predicate`, entity, subject)
 	if err != nil {
 		return nil, err
 	}
@@ -310,18 +327,141 @@ func (s *Store) RefExists(entity string, id any) (bool, error) {
 	return n > 0, err
 }
 
+// ── 核验 ────────────────────────────────────────────────────────────────────
+
+// FindByIDPrefix 按 ID 前缀查找断言。
+//
+// 返回全部匹配项，**由调用方判断是否有歧义**——前缀匹配到多条时不得猜，
+// 必须报歧义让人指定。
+func (s *Store) FindByIDPrefix(prefix string) ([]assertion.Assertion, error) {
+	rows, err := s.db.Query(`SELECT `+assertionCols+` FROM assertion WHERE id LIKE ? ORDER BY id`, prefix+"%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAll(rows)
+}
+
+// PendingByEntity 返回某实体上待核验的断言。
+//
+// 这是核验队列的数据源。status 为空时默认取 pending。
+func (s *Store) PendingByEntity(entity, status string, limit int) ([]assertion.Assertion, error) {
+	if status == "" {
+		status = string(assertion.StatusPending)
+	}
+	q := `SELECT ` + assertionCols + ` FROM assertion WHERE status = ?`
+	args := []any{status}
+	if entity != "" {
+		q += ` AND entity = ?`
+		args = append(args, entity)
+	}
+	q += ` ORDER BY entity, subject, predicate`
+	if limit > 0 {
+		q += fmt.Sprintf(` LIMIT %d`, limit)
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAll(rows)
+}
+
+// Verify 应用一条核验记录：写入审计轨迹 + 流转断言状态，二者原子。
+//
+// 只追加，不修改历史记录——核验是审计轨迹，不是可编辑的字段。
+func (s *Store) Verify(rec verification.Record) error {
+	if err := rec.Validate(); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var n int
+	if err := tx.QueryRow(`SELECT count(*) FROM assertion WHERE id = ?`, rec.AssertionID).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("断言 %s 不存在", rec.AssertionID)
+	}
+
+	if _, err := tx.Exec(`
+		INSERT INTO verification
+		(assertion_id, decision, method, proposed_kind, proposed_id,
+		 approved_kind, approved_id, reason, evidence, at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		rec.AssertionID, string(rec.Decision), string(rec.Method),
+		string(rec.ProposedBy.Kind), rec.ProposedBy.ID,
+		string(rec.ApprovedBy.Kind), rec.ApprovedBy.ID,
+		rec.Reason, rec.Evidence, rec.At.UTC().Format(time.RFC3339),
+	); err != nil {
+		return fmt.Errorf("写入核验记录失败：%w", err)
+	}
+
+	if _, err := tx.Exec(`UPDATE assertion SET status = ? WHERE id = ?`,
+		rec.Decision.StatusFor(), rec.AssertionID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// Verifications 返回某断言的核验历史（按时间正序）。
+func (s *Store) Verifications(assertionID string) ([]verification.Record, error) {
+	rows, err := s.db.Query(`
+		SELECT assertion_id, decision, method, proposed_kind, proposed_id,
+		       approved_kind, approved_id, reason, evidence, at
+		FROM verification WHERE assertion_id = ? ORDER BY id`, assertionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []verification.Record
+	for rows.Next() {
+		var (
+			r                                         verification.Record
+			dec, meth                                 string
+			pk, pid, ak, aid, reason, evidence, atStr string
+		)
+		if err := rows.Scan(&r.AssertionID, &dec, &meth, &pk, &pid, &ak, &aid, &reason, &evidence, &atStr); err != nil {
+			return nil, err
+		}
+		r.Decision = verification.Decision(dec)
+		r.Method = verification.Method(meth)
+		r.ProposedBy = verification.Actor{Kind: verification.ActorKind(pk), ID: pid}
+		r.ApprovedBy = &verification.Actor{Kind: verification.ActorKind(ak), ID: aid}
+		r.Reason = reason
+		r.Evidence = evidence
+		if t, err := time.Parse(time.RFC3339, atStr); err == nil {
+			r.At = t
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// VerificationCount 返回核验记录总数。
+func (s *Store) VerificationCount() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM verification`).Scan(&n)
+	return n, err
+}
+
 func scanAll(rows *sql.Rows) ([]assertion.Assertion, error) {
 	var out []assertion.Assertion
 	for rows.Next() {
 		var (
-			a          assertion.Assertion
-			qual, vk   string
-			vj, vu     string
-			conf, st   string
-			sn, stier  string
-			art, anc   string
-			rev, cap   string
-			derived    sql.NullString
+			a         assertion.Assertion
+			qual, vk  string
+			vj, vu    string
+			conf, st  string
+			sn, stier string
+			art, anc  string
+			rev, cap  string
+			derived   sql.NullString
 		)
 		err := rows.Scan(&a.ID, &a.Entity, &a.Subject, &a.Predicate, &qual, &vk, &vj, &vu,
 			&conf, &st, &sn, &stier, &art, &anc, &rev, &cap, &derived)

@@ -2,11 +2,13 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/value"
+	"github.com/ngnl5/ssot/internal/domain/verification"
 )
 
 func openTemp(t *testing.T) *Store {
@@ -138,5 +140,146 @@ func TestUniqueAndRefCheckers(t *testing.T) {
 	ok, _ = st.RefExists("shikigami", float64(999))
 	if ok {
 		t.Error("不存在的身份值不应被找到")
+	}
+}
+
+// ── 核验 ────────────────────────────────────────────────────────────────────
+
+func TestVerifyTransitionsStatusAndKeepsAuditTrail(t *testing.T) {
+	st := openTemp(t)
+	a := sample("262", "atk", value.OfUnit(float64(3082), "point"))
+	if _, err := st.Apply(assertion.ChangeSet{Insert: []assertion.Assertion{a}}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := verification.Record{
+		AssertionID: a.ID,
+		Decision:    verification.Approved,
+		Method:      verification.Editorial,
+		ProposedBy:  verification.Actor{Kind: verification.Agent, ID: "ingest-pipeline"},
+		ApprovedBy:  &verification.Actor{Kind: verification.Human, ID: "yicat"},
+		Reason:      "与原文逐字比对一致",
+		At:          time.Now(),
+	}
+	if err := st.Verify(rec); err != nil {
+		t.Fatal(err)
+	}
+
+	as, err := st.BySubject("shikigami", "262")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(as) != 1 || as[0].Status != assertion.StatusVerified {
+		t.Errorf("断言状态应流转为 verified，实际 %v", as[0].Status)
+	}
+
+	hist, err := st.Verifications(a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hist) != 1 {
+		t.Fatalf("应有 1 条核验记录，实际 %d", len(hist))
+	}
+	if !strings.Contains(hist[0].Summarize(), "human:yicat") {
+		t.Errorf("核验记录必须能回答是谁批准的，实际 %q", hist[0].Summarize())
+	}
+}
+
+// 缺批准者的核验必须被拒绝，且断言状态不变。
+func TestVerifyRejectsIncompleteRecord(t *testing.T) {
+	st := openTemp(t)
+	a := sample("262", "atk", value.OfUnit(float64(1), "point"))
+	if _, err := st.Apply(assertion.ChangeSet{Insert: []assertion.Assertion{a}}); err != nil {
+		t.Fatal(err)
+	}
+	rec := verification.Record{
+		AssertionID: a.ID,
+		Decision:    verification.Approved,
+		Method:      verification.Editorial,
+		ProposedBy:  verification.Actor{Kind: verification.Agent, ID: "x"},
+		Reason:      "r",
+		At:          time.Now(),
+	}
+	if err := st.Verify(rec); err == nil {
+		t.Error("缺批准者必须被拒绝")
+	}
+	as, _ := st.BySubject("shikigami", "262")
+	if as[0].Status != assertion.StatusPending {
+		t.Errorf("被拒的核验不得改变断言状态，实际 %s", as[0].Status)
+	}
+	n, _ := st.VerificationCount()
+	if n != 0 {
+		t.Errorf("被拒的核验不得留下记录，实际 %d", n)
+	}
+}
+
+func TestVerifyRejectsUnknownAssertion(t *testing.T) {
+	st := openTemp(t)
+	rec := verification.Record{
+		AssertionID: "nope",
+		Decision:    verification.Approved,
+		Method:      verification.Editorial,
+		ProposedBy:  verification.Actor{Kind: verification.Agent, ID: "x"},
+		ApprovedBy:  &verification.Actor{Kind: verification.Human, ID: "y"},
+		Reason:      "r",
+		At:          time.Now(),
+	}
+	if err := st.Verify(rec); err == nil {
+		t.Error("核验不存在的断言必须被拒绝")
+	}
+}
+
+// 前缀匹配返回全部命中，由调用方判断歧义 —— 不猜。
+func TestFindByIDPrefixReturnsAllMatches(t *testing.T) {
+	st := openTemp(t)
+	if _, err := st.Apply(assertion.ChangeSet{Insert: []assertion.Assertion{
+		sample("262", "atk", value.OfUnit(float64(1), "point")),
+		sample("262", "hp", value.OfUnit(float64(2), "point")),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	all, err := st.FindByIDPrefix("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Errorf("空前缀应返回全部 2 条，实际 %d", len(all))
+	}
+	none, _ := st.FindByIDPrefix("zzzz")
+	if len(none) != 0 {
+		t.Errorf("无匹配应返回空，实际 %d", len(none))
+	}
+}
+
+func TestPendingByEntityFiltersByStatus(t *testing.T) {
+	st := openTemp(t)
+	a := sample("262", "atk", value.OfUnit(float64(1), "point"))
+	b := sample("262", "hp", value.OfUnit(float64(2), "point"))
+	if _, err := st.Apply(assertion.ChangeSet{Insert: []assertion.Assertion{a, b}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Verify(verification.Record{
+		AssertionID: a.ID,
+		Decision:    verification.Rejected,
+		Method:      verification.Editorial,
+		ProposedBy:  verification.Actor{Kind: verification.Agent, ID: "x"},
+		ApprovedBy:  &verification.Actor{Kind: verification.Human, ID: "y"},
+		Reason:      "取值可疑",
+		At:          time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := st.PendingByEntity("shikigami", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].ID != b.ID {
+		t.Errorf("队列应只剩 1 条待核验，实际 %d 条", len(pending))
+	}
+
+	rejected, _ := st.PendingByEntity("shikigami", "rejected", 0)
+	if len(rejected) != 1 {
+		t.Errorf("按 rejected 过滤应返回 1 条，实际 %d", len(rejected))
 	}
 }

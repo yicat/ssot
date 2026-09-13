@@ -27,6 +27,7 @@ import (
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/schema"
 	"github.com/ngnl5/ssot/internal/domain/unit"
+	"github.com/ngnl5/ssot/internal/domain/verification"
 	"github.com/ngnl5/ssot/internal/infrastructure/artifact"
 	"github.com/ngnl5/ssot/internal/infrastructure/schemafile"
 	"github.com/ngnl5/ssot/internal/infrastructure/store"
@@ -50,6 +51,8 @@ func main() {
 		err = cmdDerive(args)
 	case "status":
 		err = cmdStatus(args)
+	case "review":
+		err = cmdReview(args)
 	case "run":
 		err = cmdRun(args)
 	case "-h", "--help", "help":
@@ -74,6 +77,10 @@ func usage() {
   ssot sync   <项目目录> [选项]                接入并准入原件
   ssot derive <项目目录> <公式名>              按公式派生 L3 断言
   ssot status <项目目录>                       查看断言库状态
+  ssot review <项目目录> list [选项]           查看待核验队列
+  ssot review <项目目录> approve <ID> [选项]   批准（批准者必须是人）
+  ssot review <项目目录> reject  <ID> [选项]   驳回
+  ssot review <项目目录> log     <ID>          查看某断言的核验历史
   ssot run    <项目目录> <场景名> <主体> [选项] 运行场景
 
 sync 选项：
@@ -522,6 +529,158 @@ func formulaNames(m map[string]*formula.Formula) string {
 	}
 	sort.Strings(out)
 	return strings.Join(out, ", ")
+}
+
+// ── review ─────────────────────────────────────────────────────────────────
+
+func cmdReview(args []string) error {
+	fs := flag.NewFlagSet("review", flag.ContinueOnError)
+	entity := fs.String("entity", "", "限定实体（空表示全部）")
+	status := fs.String("status", "pending", "限定状态")
+	limit := fs.Int("limit", 20, "最多列出多少条")
+	by := fs.String("by", "", "批准者（必须是**人**）")
+	method := fs.String("method", "editorial", "核验方法：measurement / recompute / cross-source / editorial")
+	reason := fs.String("reason", "", "理由（必填）")
+	evidence := fs.String("evidence", "", "依据。以 measurement 核验时必填：版本、配置、样本数")
+	proposedBy := fs.String("proposed-by", "ingest-pipeline", "提出者（agent 标识）")
+
+	fargs, pos := splitFlags(args)
+	if err := fs.Parse(fargs); err != nil {
+		return err
+	}
+	if len(pos) < 2 {
+		return fmt.Errorf("需要项目目录与子命令（list / approve / reject / log）")
+	}
+	dir, sub := pos[0], pos[1]
+
+	p, err := loadProject(dir, true)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+
+	switch sub {
+	case "list":
+		return reviewList(p, *entity, *status, *limit)
+	case "approve", "reject":
+		if len(pos) < 3 {
+			return fmt.Errorf("%s 需要断言 ID（或其前缀）", sub)
+		}
+		dec := verification.Approved
+		if sub == "reject" {
+			dec = verification.Rejected
+		}
+		return reviewDecide(p, pos[2], dec, *by, *method, *reason, *evidence, *proposedBy)
+	case "log":
+		if len(pos) < 3 {
+			return fmt.Errorf("log 需要断言 ID（或其前缀）")
+		}
+		return reviewLog(p, pos[2])
+	default:
+		return fmt.Errorf("未知子命令 %q（可用：list / approve / reject / log）", sub)
+	}
+}
+
+func reviewList(p *project, entity, status string, limit int) error {
+	as, err := p.store.PendingByEntity(entity, status, limit)
+	if err != nil {
+		return err
+	}
+	if len(as) == 0 {
+		fmt.Printf("没有状态为 %s 的断言", status)
+		if entity != "" {
+			fmt.Printf("（实体 %s）", entity)
+		}
+		fmt.Println()
+		return nil
+	}
+	fmt.Printf("核验队列（状态 %s）：%d 条\n\n", status, len(as))
+	fmt.Printf("%-18s %-11s %-10s %-14s %-22s %-4s\n", "断言 ID", "实体", "主体", "谓词", "取值", "分级")
+	for _, a := range as {
+		v := a.Value.String()
+		if len(v) > 20 {
+			v = v[:20] + "…"
+		}
+		fmt.Printf("%-18s %-11s %-10s %-14s %-22s %-4s\n", a.ID, a.Entity, a.Subject, a.Predicate, v, a.Confidence)
+	}
+	fmt.Printf("\n批准：ssot review %s approve <ID> --by <你的名字> --reason \"...\"\n", p.dir)
+	fmt.Printf("驳回：ssot review %s reject  <ID> --by <你的名字> --reason \"...\"\n", p.dir)
+	return nil
+}
+
+// resolveOne 按前缀唯一定位一条断言。
+//
+// **前缀匹配到多条时报歧义，不猜**——与准入层处理主体歧义的原则一致。
+func resolveOne(p *project, prefix string) (assertion.Assertion, error) {
+	ms, err := p.store.FindByIDPrefix(prefix)
+	if err != nil {
+		return assertion.Assertion{}, err
+	}
+	switch len(ms) {
+	case 0:
+		return assertion.Assertion{}, fmt.Errorf("没有 ID 以 %q 开头的断言", prefix)
+	case 1:
+		return ms[0], nil
+	default:
+		fmt.Printf("前缀 %q 匹配到 %d 条，**不猜**——请给出更长的前缀：\n", prefix, len(ms))
+		for _, m := range ms {
+			fmt.Printf("  %s  %s.%s = %s\n", m.ID, m.Subject, m.Predicate, m.Value)
+		}
+		return assertion.Assertion{}, fmt.Errorf("断言 ID 前缀有歧义")
+	}
+}
+
+func reviewDecide(p *project, prefix string, dec verification.Decision, by, method, reason, evidence, proposed string) error {
+	a, err := resolveOne(p, prefix)
+	if err != nil {
+		return err
+	}
+	if by == "" {
+		return fmt.Errorf("必须用 --by 指明批准者（必须是人）——无追责的核验等于没有核验")
+	}
+	if reason == "" {
+		return fmt.Errorf("必须用 --reason 说明理由——只有状态没有理由的不是核验")
+	}
+	rec := verification.Record{
+		AssertionID: a.ID,
+		Decision:    dec,
+		Method:      verification.Method(method),
+		ProposedBy:  verification.Actor{Kind: verification.Agent, ID: proposed},
+		ApprovedBy:  &verification.Actor{Kind: verification.Human, ID: by},
+		Reason:      reason,
+		Evidence:    evidence,
+		At:          time.Now().UTC(),
+	}
+	if err := p.store.Verify(rec); err != nil {
+		return err
+	}
+	fmt.Printf("%s.%s = %s\n", a.Subject, a.Predicate, a.Value)
+	fmt.Printf("→ 状态 %s（%s，由 %s 批准）\n", dec.StatusFor(), verification.Method(method).Label(), by)
+	fmt.Printf("  溯源：%s %s @ %s\n", a.Provenance.Artifact, a.Provenance.Anchor, a.Provenance.Revision)
+	return nil
+}
+
+func reviewLog(p *project, prefix string) error {
+	a, err := resolveOne(p, prefix)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s.%s = %s（当前状态 %s，分级 %s）\n\n", a.Subject, a.Predicate, a.Value, a.Status, a.Confidence)
+	recs, err := p.store.Verifications(a.ID)
+	if err != nil {
+		return err
+	}
+	if len(recs) == 0 {
+		fmt.Println("尚无核验记录——该断言尚未被任何人核验")
+		return nil
+	}
+	for _, r := range recs {
+		fmt.Printf("  %s  %s\n", r.At.Format(time.RFC3339), r.Summarize())
+		if r.Evidence != "" {
+			fmt.Printf("      依据：%s\n", r.Evidence)
+		}
+	}
+	return nil
 }
 
 // ── status ─────────────────────────────────────────────────────────────────
