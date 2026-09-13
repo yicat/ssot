@@ -24,13 +24,10 @@ import (
 	"github.com/ngnl5/ssot/internal/application/formula"
 	"github.com/ngnl5/ssot/internal/application/ingest"
 	"github.com/ngnl5/ssot/internal/application/scenario"
+	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
-	"github.com/ngnl5/ssot/internal/domain/schema"
-	"github.com/ngnl5/ssot/internal/domain/unit"
 	"github.com/ngnl5/ssot/internal/domain/verification"
 	"github.com/ngnl5/ssot/internal/infrastructure/artifact"
-	"github.com/ngnl5/ssot/internal/infrastructure/schemafile"
-	"github.com/ngnl5/ssot/internal/infrastructure/store"
 )
 
 func main() {
@@ -100,45 +97,12 @@ run 选项：
 
 // ── 项目装载 ────────────────────────────────────────────────────────────────
 
-type project struct {
-	dir    string
-	units  *unit.Table
-	schema *schema.Set
-	store  *store.Store
-}
+// 项目装配统一走组合根（internal/compose），CLI 与 GUI 共用同一套加载逻辑。
+// 各自实现一套的话，两边对「schema 校验失败怎么办」迟早会有分歧。
+type project = compose.Project
 
 func loadProject(dir string, withStore bool) (*project, error) {
-	units, err := schemafile.LoadUnits(filepath.Join(dir, "units.yml"))
-	if err != nil {
-		return nil, fmt.Errorf("加载单位表：%w", err)
-	}
-	set, problems, err := schemafile.LoadSet(filepath.Join(dir, "schema"), units)
-	if err != nil {
-		return nil, fmt.Errorf("加载 schema：%w", err)
-	}
-	if len(problems) > 0 {
-		var sb strings.Builder
-		sb.WriteString("schema 校验未通过：\n")
-		for _, p := range problems {
-			sb.WriteString("  " + p.String() + "\n")
-		}
-		return nil, fmt.Errorf("%s", sb.String())
-	}
-	p := &project{dir: dir, units: units, schema: set}
-	if withStore {
-		st, err := store.Open(filepath.Join(dir, ".data", "store.db"))
-		if err != nil {
-			return nil, err
-		}
-		p.store = st
-	}
-	return p, nil
-}
-
-func (p *project) close() {
-	if p.store != nil {
-		p.store.Close()
-	}
+	return compose.Load(dir, withStore)
 }
 
 // splitFlags 把参数拆成「选项」与「位置参数」。
@@ -173,10 +137,10 @@ func cmdSchema(args []string) error {
 		return err
 	}
 	fmt.Printf("✓ schema 与单位表校验通过\n\n")
-	fmt.Printf("单位（%d）：%s\n", len(p.units.Names()), strings.Join(p.units.Names(), " "))
-	fmt.Printf("\n实体（%d）：\n", len(p.schema.Names()))
-	for _, name := range p.schema.Names() {
-		e, _ := p.schema.Lookup(name)
+	fmt.Printf("单位（%d）：%s\n", len(p.Units.Names()), strings.Join(p.Units.Names(), " "))
+	fmt.Printf("\n实体（%d）：\n", len(p.Schema.Names()))
+	for _, name := range p.Schema.Names() {
+		e, _ := p.Schema.Lookup(name)
 		id := "-"
 		if f := e.Identity(); f != nil {
 			id = f.Key
@@ -233,7 +197,7 @@ func cmdSync(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer p.close()
+	defer p.Close()
 
 	arts, err := artifact.New(*artifacts)
 	if err != nil {
@@ -264,7 +228,7 @@ func cmdSync(args []string) error {
 			return fmt.Errorf("未知实体 %q", ent)
 		}
 	}
-	n, _ := p.store.Count()
+	n, _ := p.Store.Count()
 	fmt.Printf("\n库中现有断言 %d 条\n", n)
 	return nil
 }
@@ -405,17 +369,17 @@ func syncSkills(p *project, arts *artifact.Store, revs map[string]revInfo) error
 
 // applyCandidates 走完准入到原子应用。两个实体共用。
 func applyCandidates(p *project, entity string, cands []ingest.Candidate, capturedAt time.Time) error {
-	existing, err := p.store.KeysFor(entity)
+	existing, err := p.Store.KeysFor(entity)
 	if err != nil {
 		return err
 	}
-	cs, rep, err := admit.Run(cands, p.schema, existing, admit.Options{
+	cs, rep, err := admit.Run(cands, p.Schema, existing, admit.Options{
 		Entity:       entity,
 		Source:       assertion.Source{Name: "huijiwiki", Tier: "semi-official"},
 		CapturedAt:   capturedAt,
-		Units:        p.units,
-		UniqueExists: p.store.UniqueExists,
-		RefExists:    p.store.RefExists,
+		Units:        p.Units,
+		UniqueExists: p.Store.UniqueExists,
+		RefExists:    p.Store.RefExists,
 	})
 	if err != nil {
 		return err
@@ -446,7 +410,7 @@ func applyCandidates(p *project, entity string, cands []ingest.Candidate, captur
 		}
 	}
 
-	res, err := p.store.Apply(cs)
+	res, err := p.Store.Apply(cs)
 	if err != nil {
 		return err
 	}
@@ -466,9 +430,9 @@ func cmdDerive(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer p.close()
+	defer p.Close()
 
-	formulas, err := formula.LoadDir(filepath.Join(dir, "formulas"), p.units)
+	formulas, err := formula.LoadDir(filepath.Join(dir, "formulas"), p.Units)
 	if err != nil {
 		return err
 	}
@@ -477,7 +441,7 @@ func cmdDerive(args []string) error {
 		return fmt.Errorf("找不到公式 %q（可用：%s）", formulaName, formulaNames(formulas))
 	}
 
-	cases, st := f.Verify(p.units)
+	cases, st := f.Verify(p.Units)
 	fmt.Printf("公式 %s v%s：%s\n", f.Name, f.Version, st)
 	for _, c := range cases {
 		mark := "✗"
@@ -497,7 +461,7 @@ func cmdDerive(args []string) error {
 		fmt.Println("  ⚠ 该公式无算例，派生结果标注为未验证")
 	}
 
-	res, err := derive.Run(p.store, f, p.units, derive.Options{
+	res, err := derive.Run(p.Store, f, p.Units, derive.Options{
 		Entity:    "shikigami",
 		Predicate: "crit_factor",
 		Source:    assertion.Source{Name: "derived", Tier: "internal"},
@@ -514,7 +478,7 @@ func cmdDerive(args []string) error {
 		fmt.Printf("  跳过 %s\n", r)
 	}
 
-	ar, err := p.store.Apply(res.ChangeSet)
+	ar, err := p.Store.Apply(res.ChangeSet)
 	if err != nil {
 		return err
 	}
@@ -557,7 +521,7 @@ func cmdReview(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer p.close()
+	defer p.Close()
 
 	switch sub {
 	case "list":
@@ -582,7 +546,7 @@ func cmdReview(args []string) error {
 }
 
 func reviewList(p *project, entity, status string, limit int) error {
-	as, err := p.store.PendingByEntity(entity, status, limit)
+	as, err := p.Store.PendingByEntity(entity, status, limit)
 	if err != nil {
 		return err
 	}
@@ -603,8 +567,8 @@ func reviewList(p *project, entity, status string, limit int) error {
 		}
 		fmt.Printf("%-18s %-11s %-10s %-14s %-22s %-4s\n", a.ID, a.Entity, a.Subject, a.Predicate, v, a.Confidence)
 	}
-	fmt.Printf("\n批准：ssot review %s approve <ID> --by <你的名字> --reason \"...\"\n", p.dir)
-	fmt.Printf("驳回：ssot review %s reject  <ID> --by <你的名字> --reason \"...\"\n", p.dir)
+	fmt.Printf("\n批准：ssot review %s approve <ID> --by <你的名字> --reason \"...\"\n", p.Dir)
+	fmt.Printf("驳回：ssot review %s reject  <ID> --by <你的名字> --reason \"...\"\n", p.Dir)
 	return nil
 }
 
@@ -612,7 +576,7 @@ func reviewList(p *project, entity, status string, limit int) error {
 //
 // **前缀匹配到多条时报歧义，不猜**——与准入层处理主体歧义的原则一致。
 func resolveOne(p *project, prefix string) (assertion.Assertion, error) {
-	ms, err := p.store.FindByIDPrefix(prefix)
+	ms, err := p.Store.FindByIDPrefix(prefix)
 	if err != nil {
 		return assertion.Assertion{}, err
 	}
@@ -651,7 +615,7 @@ func reviewDecide(p *project, prefix string, dec verification.Decision, by, meth
 		Evidence:    evidence,
 		At:          time.Now().UTC(),
 	}
-	if err := p.store.Verify(rec); err != nil {
+	if err := p.Store.Verify(rec); err != nil {
 		return err
 	}
 	fmt.Printf("%s.%s = %s\n", a.Subject, a.Predicate, a.Value)
@@ -666,7 +630,7 @@ func reviewLog(p *project, prefix string) error {
 		return err
 	}
 	fmt.Printf("%s.%s = %s（当前状态 %s，分级 %s）\n\n", a.Subject, a.Predicate, a.Value, a.Status, a.Confidence)
-	recs, err := p.store.Verifications(a.ID)
+	recs, err := p.Store.Verifications(a.ID)
 	if err != nil {
 		return err
 	}
@@ -693,15 +657,15 @@ func cmdStatus(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer p.close()
+	defer p.Close()
 
-	total, err := p.store.Count()
+	total, err := p.Store.Count()
 	if err != nil {
 		return err
 	}
 	fmt.Printf("断言总数：%d\n", total)
 
-	all, err := p.store.All()
+	all, err := p.Store.All()
 	if err != nil {
 		return err
 	}
@@ -780,20 +744,20 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
-	defer p.close()
+	defer p.Close()
 
 	spec, err := scenario.LoadDir(filepath.Join(dir, "scenarios", scenName))
 	if err != nil {
 		return err
 	}
-	formulas, err := formula.LoadDir(filepath.Join(dir, "formulas"), p.units)
+	formulas, err := formula.LoadDir(filepath.Join(dir, "formulas"), p.Units)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("场景 %s：%s\n\n", spec.Name, spec.Description)
 
-	rep, err := scenario.Check(spec, p.store, formulas, p.units)
+	rep, err := scenario.Check(spec, p.Store, formulas, p.Units)
 	if err != nil {
 		return err
 	}
@@ -844,7 +808,7 @@ func cmdRun(args []string) error {
 	if !ok {
 		return fmt.Errorf("场景依赖的公式 %q 不存在", fname)
 	}
-	_, fst := f.Verify(p.units)
+	_, fst := f.Verify(p.Units)
 	if fst == formula.StatusFailed {
 		return fmt.Errorf("公式 %s 的算例未通过，拒绝运行", fname)
 	}
@@ -876,7 +840,7 @@ func cmdRun(args []string) error {
 		in.Extra[path] = scenario.Ref{Entity: v[:j], Subject: v[j+1:]}
 	}
 
-	out, err := scenario.Execute(spec, f, p.store, p.units, in, fst)
+	out, err := scenario.Execute(spec, f, p.Store, p.Units, in, fst)
 	if err != nil {
 		return err
 	}

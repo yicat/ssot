@@ -59,3 +59,18 @@ go run ./cmd/ssot run projects/onmyoji damage-calc 262 `
 ```
 
 开发规范见 `AGENTS.md`，规格见 `docs/specs/`。
+
+## 核验工作台（GUI）
+
+数据由程序接入与准入，**人只在核验环节介入**。
+
+```powershell
+wails3 task dev            # 开发模式（热重载）
+go build -o bin/ssot-gui.exe . && ./bin/ssot-gui.exe --project projects/onmyoji
+```
+
+界面遵循三条规格要求：
+
+- **一切默认未核验**——队列里每一条都带着状态与分级，未核验不会被藏起来
+- **核验必须能回答「谁、何时、凭什么」**——批准者与理由为必填，且批准者必须是人
+- **溯源可见**——每条断言都能看到来自哪个原件、哪个位置、哪个修订

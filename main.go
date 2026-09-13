@@ -2,8 +2,10 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"log"
 
+	"github.com/ngnl5/ssot/internal/api"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -14,9 +16,17 @@ import (
 var assets embed.FS
 
 func main() {
+	projectDir := flag.String("project", "projects/onmyoji", "项目目录")
+	flag.Parse()
+
 	app := application.New(application.Options{
 		Name:        "ssot",
 		Description: "单一事实源工具",
+		// 核验工作台的后端。所有判断都在 domain 与 application 里，
+		// 这里只做暴露——CLI 与 GUI 因此看到同一份规则。
+		Services: []application.Service{
+			application.NewService(api.NewReviewService(*projectDir)),
+		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
@@ -26,9 +36,9 @@ func main() {
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "SSOT",
-		Width:  1000,
-		Height: 618,
+		Title:  "SSOT 核验工作台",
+		Width:  1180,
+		Height: 760,
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,

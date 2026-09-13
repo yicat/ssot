@@ -14,6 +14,7 @@
 ├─ main.go                  # 入口（Wails 桌面应用）
 ├─ cmd/ssot/                # CLI 入口（MVP 用它验证机制）
 ├─ internal/
+│  ├─ compose/              # 组合根：唯一允许同时依赖各层的包
 │  ├─ domain/               # 领域层：纯规则，只允许标准库
 │  │  ├─ value/             # 值的三态（有值/未知/空/缺失）
 │  │  ├─ unit/              # 量纲与换算
@@ -21,7 +22,8 @@
 │  │  ├─ schema/            # 实体集合与双向漂移检测
 │  │  ├─ validate/          # 六类校验
 │  │  ├─ expr/              # 表达式求值器（含量纲检查）
-│  │  └─ assertion/         # 断言模型与变更集
+│  │  ├─ assertion/         # 断言模型与变更集
+│  │  └─ verification/      # 核验记录：四级方法、参与者、责任归属
 │  ├─ application/          # 应用层：用例编排
 │  │  ├─ ingest/            # 接入：原件 → 候选
 │  │  ├─ admit/             # 准入：候选 → 变更集
@@ -29,10 +31,10 @@
 │  │  ├─ derive/            # 派生：由断言产出 L3 断言
 │  │  └─ scenario/          # 场景：requires 检查与运行
 │  ├─ infrastructure/       # 基础设施：外部适配
-│  │  ├─ store/             # SQLite 断言库（变更集原子应用）
+│  │  ├─ store/             # SQLite 断言库与核验记录（原子应用）
 │  │  ├─ schemafile/        # YAML schema 与单位表加载
 │  │  └─ artifact/          # 原件存档读取
-│  └─ api/                  # 接口层：wails3 bindings 暴露给前端
+│  └─ api/                  # 接口层：核验工作台后端（wails3 bindings）
 ├─ projects/onmyoji/        # 一个项目 = 一个领域（阴阳师）
 │  ├─ project.yml
 │  ├─ units.yml
