@@ -20,6 +20,11 @@ requires:
 inputs:
   - name: def_reduction
     description: 防御减免。**无权威来源**（见 docs/notes/case-requirements.md），必须由调用方提供并在产出中标注未核验
+    # 单位是必填的：`def_reduction=0.5` 到底是一半还是 0.5%，光看数字无从判断。
+    # 声明了它，界面才能拒绝「0.5 percent」这种量纲不符的输入。
+    unit: fraction
+    min: 0
+    max: 1
 
 formulas:
   - damage

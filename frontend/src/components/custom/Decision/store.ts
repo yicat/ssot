@@ -14,8 +14,14 @@ type DecisionState = {
   stats: DecisionStats | null;
   /** 当前展开的事项 ID；空串表示未选中 */
   selectedId: string;
-  /** 当前勾选的候选序号；decision.None(-1) 表示「都不对」 */
+  /** 当前勾选的候选序号；-1 表示「都不对」 */
   choice: number;
+
+  by: string;
+  method: string;
+  reason: string;
+  evidence: string;
+
   loading: boolean;
   error: string | null;
 
@@ -23,26 +29,41 @@ type DecisionState = {
   setStats: (stats: DecisionStats | null) => void;
   select: (id: string) => void;
   setChoice: (choice: number) => void;
+  setBy: (v: string) => void;
+  setMethod: (v: string) => void;
+  setReason: (v: string) => void;
+  setEvidence: (v: string) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
 };
 
-export const useDecisionStore = create<DecisionState>((set) => ({
+const initial = {
   items: [],
   stats: null,
   selectedId: "",
   choice: 0,
+  by: "",
+  method: "editorial",
+  reason: "",
+  evidence: "",
   loading: false,
   error: null,
+};
 
+export const useDecisionStore = create<DecisionState>((set) => ({
+  ...initial,
   setItems: (items) => set({ items }),
   setStats: (stats) => set({ stats }),
   select: (id) => set({ selectedId: id, choice: 0 }),
   setChoice: (choice) => set({ choice }),
+  setBy: (by) => set({ by }),
+  setMethod: (method) => set({ method }),
+  setReason: (reason) => set({ reason }),
+  setEvidence: (evidence) => set({ evidence }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
-  reset: () => set({ items: [], stats: null, selectedId: "", choice: 0, error: null }),
+  reset: () => set(initial),
 }));
 
 /** 当前选中的事项。 */

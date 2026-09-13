@@ -3,6 +3,10 @@
 
 /**
  * ReviewService 是核验工作台的后端。
+ * 
+ * 它不自己持有项目：当前项目是**会话状态**，由 compose.Session 统一管理。
+ * 每个服务各缓存一份的话，「切换项目」就得逐个通知，
+ * 迟早漏掉一个，界面于是显示出两个项目的混合数据。
  * @module
  */
 
@@ -91,7 +95,7 @@ export function Pending(entity: string, status: string, limit: number): $Cancell
 }
 
 /**
- * ProjectDir 返回项目目录，供界面显示。
+ * ProjectDir 返回当前项目目录，供界面显示。
  */
 export function ProjectDir(): $CancellablePromise<string> {
     return $Call.ByID(50586622);

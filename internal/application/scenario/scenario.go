@@ -37,6 +37,16 @@ import (
 type Input struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
+	// Unit 是该外部输入的量纲，**必填**。
+	//
+	// 没有量纲的输入无法参与计算：`def_reduction=0.5` 到底是一半还是 0.5%，
+	// 光看数字无从判断。实测踩过 crit=50 与 cri=0.5 的歧义，
+	// 外部输入更不该重蹈——它是人手敲进去的，没人替它把关。
+	Unit string `yaml:"unit"`
+	// Min/Max 是取值范围的**可选**约束。声明了就必须校验：
+	// 声明了不校验比不声明更糟，那会让人以为自己被保护着。
+	Min *float64 `yaml:"min"`
+	Max *float64 `yaml:"max"`
 }
 
 // Spec 是场景声明。
@@ -90,6 +100,13 @@ func parseSpec(src string) (Spec, error) {
 		if in.Name == "" {
 			return Spec{}, fmt.Errorf("外部输入缺少 name")
 		}
+		if in.Unit == "" {
+			return Spec{}, fmt.Errorf(
+				"外部输入 %q 缺少 unit——没有量纲的输入无法参与计算，`0.5` 与 `50%%` 的歧义正是这么来的", in.Name)
+		}
+		if in.Min != nil && in.Max != nil && *in.Min > *in.Max {
+			return Spec{}, fmt.Errorf("外部输入 %q 的 min(%v) 大于 max(%v)", in.Name, *in.Min, *in.Max)
+		}
 	}
 	return s, nil
 }
@@ -105,6 +122,81 @@ func LoadDir(dir string) (Spec, error) {
 	}
 	sort.Strings(paths)
 	return Load(paths[0])
+}
+
+// Skipped 是一个被跳过的场景目录及其原因。
+//
+// 跳过必须**带原因**：一场静默的跳过会让人以为「项目只有两个场景」，
+// 而事实是第三个场景的声明文件写坏了。
+type Skipped struct {
+	Dir    string
+	Reason string
+}
+
+// ProjectScenarios 列出项目下的全部场景，按名称排序。
+//
+// 约定 `scenarios/<目录>/<目录>.scenario.yml`；也接受目录下任意单个
+// `*.scenario.yml`（实测中文件名与目录名并不总是相同）。
+//
+// 返回的 skipped 不能丢：调用方有义务把它显示出来。
+func ProjectScenarios(projectDir string) (specs []Spec, skipped []Skipped, err error) {
+	root := filepath.Join(projectDir, "scenarios")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil // 没有 scenarios 目录 = 该项目还没有场景
+		}
+		return nil, nil, err
+	}
+
+	seen := map[string]string{} // 场景名 -> 首次出现的目录
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := filepath.Join(root, e.Name())
+		paths, err := filepath.Glob(filepath.Join(dir, "*.scenario.yml"))
+		if err != nil {
+			return nil, nil, err
+		}
+		switch len(paths) {
+		case 0:
+			skipped = append(skipped, Skipped{Dir: dir, Reason: "目录下没有 *.scenario.yml"})
+			continue
+		case 1:
+		default:
+			sort.Strings(paths)
+			skipped = append(skipped, Skipped{
+				Dir:    dir,
+				Reason: fmt.Sprintf("目录下有 %d 个场景声明，无法确定用哪个", len(paths)),
+			})
+			continue
+		}
+
+		s, err := Load(paths[0])
+		if err != nil {
+			skipped = append(skipped, Skipped{Dir: dir, Reason: err.Error()})
+			continue
+		}
+		if first, dup := seen[s.Name]; dup {
+			// 同名场景是定义冲突：它会让「选中某场景」变成一件含糊的事。
+			return nil, skipped, fmt.Errorf("场景名 %q 重复：%s 与 %s", s.Name, first, dir)
+		}
+		seen[s.Name] = dir
+		specs = append(specs, s)
+	}
+	sort.Slice(specs, func(i, j int) bool { return specs[i].Name < specs[j].Name })
+	return specs, skipped, nil
+}
+
+// Find 按名称取场景声明。
+func Find(specs []Spec, name string) (Spec, bool) {
+	for _, s := range specs {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return Spec{}, false
 }
 
 // Store 是完整性检查所需的读取端口。

@@ -21,6 +21,15 @@ export interface BatchResult {
 }
 
 /**
+ * CaseResultView 是一条算例的结果。
+ */
+export interface CaseResultView {
+    "name": string;
+    "passed": boolean;
+    "detail": string;
+}
+
+/**
  * ConflictGroup 是一组互相冲突的断言。
  */
 export interface ConflictGroup {
@@ -120,6 +129,15 @@ export interface DecisionStats {
 }
 
 /**
+ * EntitySummary 是一个实体的规模。
+ */
+export interface EntitySummary {
+    "entity": string;
+    "subjects": number;
+    "assertions": number;
+}
+
+/**
  * FilterInput 是批量筛选条件（面向界面）。
  */
 export interface FilterInput {
@@ -134,6 +152,19 @@ export interface FilterInput {
 }
 
 /**
+ * FormulaStatusView 是一个依赖公式的状态（面向界面）。
+ */
+export interface FormulaStatusView {
+    "name": string;
+    "status": string;
+
+    /**
+     * Cases 是算例的通过情况。
+     */
+    "cases": CaseResultView[] | null;
+}
+
+/**
  * HistoryItem 是一条核验记录（面向界面）。
  */
 export interface HistoryItem {
@@ -144,6 +175,20 @@ export interface HistoryItem {
     "reason": string;
     "evidence": string;
     "at": string;
+}
+
+/**
+ * InputSpecView 是一个外部输入的声明（面向界面）。
+ * 
+ * Unit 与 Min/Max 必须暴露给界面：没有量纲的输入框就是一个歧义制造机，
+ * 而声明了范围却不校验比不声明更糟——那会让人以为自己被保护着。
+ */
+export interface InputSpecView {
+    "name": string;
+    "description": string;
+    "unit": string;
+    "min": number | null;
+    "max": number | null;
 }
 
 /**
@@ -165,6 +210,50 @@ export interface Item {
 }
 
 /**
+ * ProjectOverview 是项目概览（面向界面）。
+ */
+export interface ProjectOverview {
+    "dir": string;
+    "name": string;
+    "path": string;
+    "description": string;
+    "entities": EntitySummary[] | null;
+    "assertions": number;
+    "byStatus": { [_ in string]?: number } | null;
+    "byConfidence": { [_ in string]?: number } | null;
+    "verifications": number;
+    "conflicts": number;
+    "decisions": number;
+    "scenarioCount": number;
+    "formulaCount": number;
+
+    /**
+     * EntityTypes 是 schema 中声明的实体类型数（含尚无数据的）。
+     */
+    "entityTypes": number;
+}
+
+/**
+ * ProjectRef 是一个可选的项目（面向界面）。
+ */
+export interface ProjectRef {
+    "dir": string;
+    "name": string;
+
+    /**
+     * Path 是完整路径。两个项目目录同名是允许的，
+     * 因此界面上必须显示完整路径才能区分。
+     */
+    "path": string;
+    "description": string;
+
+    /**
+     * Current 标记它是不是当前打开的那个。
+     */
+    "current": boolean;
+}
+
+/**
  * QueueItem 是带优先级的队列项。
  * 
  * 除了断言本身，它还带上「为什么排在前面」——排在前面的理由必须可见，
@@ -176,6 +265,111 @@ export interface QueueItem {
     "reason": string;
     "score": number;
     "sampled": boolean;
+}
+
+/**
+ * RequirementView 是一项 requires 的检查结果（面向界面）。
+ */
+export interface RequirementView {
+    "want": string;
+    "status": string;
+    "have": number;
+    "total": number;
+    "coverage": number;
+    "detail": string;
+}
+
+/**
+ * ScenarioOverview 是场景概览（面向界面）。
+ */
+export interface ScenarioOverview {
+    "name": string;
+    "description": string;
+
+    /**
+     * Runnable 报告 requires 是否全部满足。
+     */
+    "runnable": boolean;
+
+    /**
+     * Requires 逐项列出「需要什么 / 现有多少 / 覆盖率」——
+     * 只报一个总数等于没报。
+     */
+    "requires": RequirementView[] | null;
+    "inputs": InputSpecView[] | null;
+    "formulas": FormulaStatusView[] | null;
+    "outputs": string[] | null;
+
+    /**
+     * Missing 是缺失项的人话清单，供界面直接显示。
+     */
+    "missing": string[] | null;
+}
+
+/**
+ * ScenarioRef 是一个可选的场景（面向界面）。
+ */
+export interface ScenarioRef {
+    "name": string;
+    "description": string;
+
+    /**
+     * Inputs 是需要外部输入的项数。
+     */
+    "inputs": number;
+
+    /**
+     * RequiresMet 报告 requires 是否全部满足。
+     */
+    "requiresMet": boolean;
+
+    /**
+     * RequiresTotal 是 requires 的项数，用于显示「3 项中 2 项满足」。
+     */
+    "requiresTotal": number;
+
+    /**
+     * Skipped 说明该场景为什么不可用；空串表示可用。
+     */
+    "skipped": string;
+}
+
+/**
+ * SessionState 是当前会话（面向界面）。
+ */
+export interface SessionState {
+    "dir": string;
+    "name": string;
+    "projectDir": string;
+
+    /**
+     * Description 是 project.yml 里的描述。
+     */
+    "description": string;
+
+    /**
+     * Scenarios 是该项目的场景，按名称排序。
+     */
+    "scenarios": ScenarioRef[] | null;
+
+    /**
+     * Scenario 是当前场景名；null 表示未选中或该项目没有场景。
+     */
+    "scenario": string | null;
+
+    /**
+     * ScenarioSkipped 是被跳过的场景目录及原因。**必须显示**：
+     * 一场静默的跳过会让人以为「项目只有两个场景」。
+     */
+    "scenarioSkipped": SkippedRef[] | null;
+}
+
+/**
+ * SkippedRef 是一个被跳过的场景目录。
+ */
+export interface SkippedRef {
+    "dir": string;
+    "reason": string;
 }
 
 /**

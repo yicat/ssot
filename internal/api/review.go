@@ -7,7 +7,6 @@ package api
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/application/review"
@@ -108,48 +107,25 @@ type Stats struct {
 }
 
 // ReviewService 是核验工作台的后端。
+//
+// 它不自己持有项目：当前项目是**会话状态**，由 compose.Session 统一管理。
+// 每个服务各缓存一份的话，「切换项目」就得逐个通知，
+// 迟早漏掉一个，界面于是显示出两个项目的混合数据。
 type ReviewService struct {
-	projectDir string
-
-	mu sync.Mutex
-	p  *compose.Project
+	session *compose.Session
 }
 
-// NewReviewService 构造服务。项目在首次使用时惰性加载。
-func NewReviewService(projectDir string) *ReviewService {
-	return &ReviewService{projectDir: projectDir}
+// NewReviewService 构造服务。
+func NewReviewService(s *compose.Session) *ReviewService {
+	return &ReviewService{session: s}
 }
 
 func (s *ReviewService) project() (*compose.Project, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.p != nil {
-		return s.p, nil
-	}
-	p, err := compose.Load(s.projectDir, true)
-	if err != nil {
-		return nil, err
-	}
-	s.p = p
-	return p, nil
+	return s.session.Project()
 }
 
-// ProjectDir 返回项目目录，供界面显示。
-func (s *ReviewService) ProjectDir() string { return s.projectDir }
-
-// close 释放底层资源。
-//
-// 刻意不导出：它是宿主生命周期方法，不该出现在给前端的绑定量里。
-func (s *ReviewService) close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.p == nil {
-		return nil
-	}
-	err := s.p.Close()
-	s.p = nil
-	return err
-}
+// ProjectDir 返回当前项目目录，供界面显示。
+func (s *ReviewService) ProjectDir() string { return s.session.Dir() }
 
 func toItem(a assertion.Assertion) Item {
 	return Item{

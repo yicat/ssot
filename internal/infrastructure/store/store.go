@@ -320,19 +320,32 @@ func (s *Store) CountByEntity() (map[string]int, error) {
 
 // StatusCounts 按状态统计。
 func (s *Store) StatusCounts() (map[string]int, error) {
-	rows, err := s.db.Query(`SELECT status, count(*) FROM assertion GROUP BY status`)
+	return s.countBy(`SELECT status, count(*) FROM assertion GROUP BY status`)
+}
+
+// ConfidenceCounts 按分级统计。
+//
+// 分级分布是「这批数据有多可信」的一个粗但可追溯的快照——
+// 没有它，界面上只能给出一个总数，而总数看不出 L1 与 L4 的比例。
+func (s *Store) ConfidenceCounts() (map[string]int, error) {
+	return s.countBy(`SELECT confidence, count(*) FROM assertion GROUP BY confidence`)
+}
+
+// countBy 执行一个「键 + 计数」查询。
+func (s *Store) countBy(q string) (map[string]int, error) {
+	rows, err := s.db.Query(q)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]int{}
 	for rows.Next() {
-		var st string
+		var k string
 		var n int
-		if err := rows.Scan(&st, &n); err != nil {
+		if err := rows.Scan(&k, &n); err != nil {
 			return nil, err
 		}
-		out[st] = n
+		out[k] = n
 	}
 	return out, rows.Err()
 }

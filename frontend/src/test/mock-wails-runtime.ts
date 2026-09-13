@@ -31,8 +31,13 @@ function createEventsMock() {
   return { listeners, on, off, emit, reset };
 }
 
-/** 后端方法的调用 ID，与 bindings 中生成的一致。 */
+/**
+ * 后端方法的调用 ID，与 bindings 中生成的一致。
+ *
+ * 三个服务共用一张表：ID 是全局唯一的，按服务分会更难查。
+ */
 export const CallID = {
+  // 核验与待判定
   Approve: 3028409479,
   BatchApprove: 2878733075,
   BatchPreview: 4077936422,
@@ -47,7 +52,16 @@ export const CallID = {
   Queue: 3654268873,
   Reject: 888414013,
   ResolveDecision: 4168258356,
-  Stats: 268982341,
+  ReviewStats: 268982341,
+  // 项目与会话
+  Projects: 4043538951,
+  Current: 1610103818,
+  Open: 522968697,
+  ProjectOverview: 2882841514,
+  // 场景
+  ScenarioList: 1332543624,
+  ScenarioOverview: 1390931939,
+  ScenarioSelect: 3087910632,
 } as const;
 
 type Handler = (args: unknown[]) => unknown;

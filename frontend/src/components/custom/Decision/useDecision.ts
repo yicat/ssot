@@ -1,12 +1,13 @@
 /**
  * 「待判定」的交互逻辑。
  *
- * 三条规格要求落在这里：
+ * 三条规格要求落在这里（docs/specs/decision.spec.md）：
  *  1. 暂缓不是结论——暂缓后事项**仍在队列里**（后端保证，界面照实呈现）
  *  2. 裁决必须能回答「谁、凭什么」——裁决人与理由为必填，界面先挡一道
  *  3. 「都不对」是一个**合法结论**，不是逃避；它必须和选一个候选一样好点
  */
 import { useCallback, useEffect } from "react";
+import { toast } from "sonner";
 
 import {
   DecisionStats,
@@ -23,31 +24,7 @@ export const DECISION_METHODS = [
   { value: "measurement", label: "实测", hint: "游戏内量过，必须记录版本/配置/样本数" },
 ];
 
-export type DecisionForm = {
-  by: string;
-  method: string;
-  reason: string;
-  evidence: string;
-};
-
-export type DecisionActions = {
-  reload: () => Promise<void>;
-  resolve: (choice: number, form: DecisionForm) => Promise<string>;
-  defer: (form: DecisionForm) => Promise<string>;
-};
-
-/** 待判定视图的全部行为。 */
-export function useDecision(status: string, limit: number): DecisionActions & {
-  items: DecisionItem[];
-  stats: ReturnType<typeof useDecisionStore.getState>["stats"];
-  selected: DecisionItem | null;
-  selectedId: string;
-  choice: number;
-  loading: boolean;
-  error: string | null;
-  select: (id: string) => void;
-  setChoice: (choice: number) => void;
-} {
+export function useDecision(status = "", limit = 500) {
   const s = useDecisionStore();
 
   const reload = useCallback(async () => {
@@ -68,7 +45,6 @@ export function useDecision(status: string, limit: number): DecisionActions & {
     } finally {
       s.setLoading(false);
     }
-    // 只在筛选条件变化时重建
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, limit]);
 
@@ -76,74 +52,76 @@ export function useDecision(status: string, limit: number): DecisionActions & {
     void reload();
   }, [reload]);
 
+  /** 裁决：choice >= 0 选中候选，-1 表示「都不对」。 */
   const resolve = useCallback(
-    async (choice: number, form: DecisionForm): Promise<string> => {
-      const it = selectedItem(useDecisionStore.getState());
-      if (!it) throw new Error("没有选中待判定事项");
-      if (!form.by.trim()) throw new Error("必须填写裁决人——无追责的裁决等于没有裁决");
-      if (!form.reason.trim()) throw new Error("必须说明理由——只有结论没有理由的不是裁决");
-      if (form.method === "measurement" && !form.evidence.trim()) {
-        throw new Error("以「实测」裁决时必须记录依据（版本、配置、样本数）");
+    async (choice: number) => {
+      const st = useDecisionStore.getState();
+      const it = selectedItem(st);
+      if (!it) return;
+      if (!st.by.trim()) {
+        toast.error("必须填写裁决人——无追责的裁决等于没有裁决");
+        return;
       }
-      s.setLoading(true);
-      s.setError(null);
+      if (!st.reason.trim()) {
+        toast.error("必须说明理由——只有结论没有理由的不是裁决");
+        return;
+      }
+      if (st.method === "measurement" && !st.evidence.trim()) {
+        toast.error("以「实测」裁决时必须记录依据（版本、配置、样本数）");
+        return;
+      }
+      st.setLoading(true);
+      st.setError(null);
       try {
         const r = await ResolveDecision(
           it.id,
           choice,
-          form.by.trim(),
-          form.method,
-          form.reason.trim(),
-          form.evidence.trim(),
+          st.by.trim(),
+          st.method,
+          st.reason.trim(),
+          st.evidence.trim(),
         );
         await reload();
-        return r.message || "已裁决";
+        toast.success(r.message || "已裁决");
+        st.setReason("");
+        st.setEvidence("");
       } catch (e) {
-        s.setError(String(e));
-        throw e;
+        st.setError(String(e));
+        toast.error(String(e));
       } finally {
-        s.setLoading(false);
+        st.setLoading(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [reload],
   );
 
-  const defer = useCallback(
-    async (form: DecisionForm): Promise<string> => {
-      const it = selectedItem(useDecisionStore.getState());
-      if (!it) throw new Error("没有选中待判定事项");
-      if (!form.by.trim()) throw new Error("必须填写裁决人");
-      if (!form.reason.trim()) throw new Error("必须说明理由——只说「先放着」不构成记录");
-      s.setLoading(true);
-      s.setError(null);
-      try {
-        await DeferDecision(it.id, form.by.trim(), form.reason.trim());
-        await reload();
-        return "已暂缓——它仍在待判定队列里，只是标为「人已看过、先放着」";
-      } catch (e) {
-        s.setError(String(e));
-        throw e;
-      } finally {
-        s.setLoading(false);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [reload],
-  );
+  const defer = useCallback(async () => {
+    const st = useDecisionStore.getState();
+    const it = selectedItem(st);
+    if (!it) return;
+    if (!st.by.trim()) {
+      toast.error("必须填写裁决人");
+      return;
+    }
+    if (!st.reason.trim()) {
+      toast.error("必须说明理由——只说「先放着」不构成记录");
+      return;
+    }
+    st.setLoading(true);
+    st.setError(null);
+    try {
+      await DeferDecision(it.id, st.by.trim(), st.reason.trim());
+      await reload();
+      toast.success("已暂缓——它仍在待判定队列里，只是标为「人已看过、先放着」");
+      st.setReason("");
+    } catch (e) {
+      st.setError(String(e));
+      toast.error(String(e));
+    } finally {
+      st.setLoading(false);
+    }
+  }, [reload]);
 
-  return {
-    reload,
-    resolve,
-    defer,
-    items: s.items,
-    stats: s.stats,
-    selected: selectedItem(s),
-    selectedId: s.selectedId,
-    choice: s.choice,
-    loading: s.loading,
-    error: s.error,
-    select: s.select,
-    setChoice: s.setChoice,
-  };
+  return { ...s, selected: selectedItem(s), reload, resolve, defer };
 }

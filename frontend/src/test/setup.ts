@@ -33,6 +33,17 @@ if (typeof window !== "undefined") {
   }
 }
 
+// jsdom 也没有 ResizeObserver：radix 的 ScrollArea 与 Select 都用它做尺寸观察。
+// 不补的话报的是「ResizeObserver is not defined」，看起来像组件坏了，
+// 实际只是测试环境缺一个浏览器 API。
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 afterEach(() => {
   cleanup();
 });

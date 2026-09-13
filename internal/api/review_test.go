@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/value"
 	"github.com/ngnl5/ssot/internal/domain/verification"
@@ -27,6 +28,7 @@ func tempProject(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
+	write("project.yml", "project: test\nmetamodelVersion: 1\n")
 	write("units.yml", "units: []\n")
 	write("schema/x.schema.yml", `
 entity: shikigami
@@ -73,11 +75,16 @@ fields:
 // 服务惰性持有打开的库，不释放会导致 t.TempDir 清理失败
 // （Windows 上文件被占用）——这个失败本身就是个提醒：
 // 资源必须有明确的释放点。
+func newSession(t *testing.T, dir string) *compose.Session {
+	t.Helper()
+	sess := compose.NewSession(filepath.Dir(dir), dir)
+	t.Cleanup(func() { _ = sess.Close() })
+	return sess
+}
+
 func newService(t *testing.T) *ReviewService {
 	t.Helper()
-	svc := NewReviewService(tempProject(t))
-	t.Cleanup(func() { _ = svc.close() })
-	return svc
+	return NewReviewService(newSession(t, tempProject(t)))
 }
 
 func TestServicePendingAndStats(t *testing.T) {
@@ -176,7 +183,7 @@ func TestServiceReject(t *testing.T) {
 
 // 项目加载失败必须如实报错，而不是返回空队列让人误以为「没有待核验」。
 func TestServiceReportsBrokenProject(t *testing.T) {
-	svc := NewReviewService(filepath.Join(t.TempDir(), "not-a-project"))
+	svc := NewReviewService(newSession(t, filepath.Join(t.TempDir(), "not-a-project")))
 	if _, err := svc.Pending("", "", 0); err == nil {
 		t.Error("项目不可加载时必须报错，不得静默返回空队列")
 	}
@@ -184,7 +191,7 @@ func TestServiceReportsBrokenProject(t *testing.T) {
 
 func TestServiceProjectDir(t *testing.T) {
 	dir := tempProject(t)
-	if got := NewReviewService(dir).ProjectDir(); got != dir {
+	if got := NewReviewService(newSession(t, dir)).ProjectDir(); got != dir {
 		t.Errorf("ProjectDir 应返回构造时的目录，实际 %q", got)
 	}
 }

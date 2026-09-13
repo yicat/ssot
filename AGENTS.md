@@ -46,10 +46,10 @@
 │  ├─ scenarios/            # 场景：一个用途一个目录
 │  └─ .data/                # 实例：断言库（gitignore，可重建）
 ├─ frontend/
-│  ├─ components/ui/        # shadcn 生成，勿手改
-│  ├─ components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts
-│  ├─ pages/                # 页面 = 纯编排，无交互逻辑
-│  └─ bindings/             # wails3 generate bindings 生成，勿手改
+│  ├─ src/components/ui/        # shadcn 生成，勿手改
+│  ├─ src/components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts
+│  ├─ src/pages/                # 页面 = 纯编排，无交互逻辑
+│  └─ bindings/                 # wails3 generate bindings 生成，勿手改
 ├─ tools/wiki/              # 灰机 wiki 数据同步与体检（Node，需可见 Chrome）
 ├─ docs/
 │  ├─ specs/                # 规格文档（SDD 唯一事实源）

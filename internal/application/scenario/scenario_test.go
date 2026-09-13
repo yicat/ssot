@@ -234,3 +234,35 @@ func TestLoadRejectsUnjudgeableRequirement(t *testing.T) {
 		t.Error("无法判定的 requires 项必须被拒绝")
 	}
 }
+
+// 外部输入必须声明单位：`def_reduction=0.5` 到底是一半还是 0.5%，
+// 光看数字无从判断。没有量纲的输入框就是一个歧义制造机。
+func TestInputRequiresUnit(t *testing.T) {
+	bad := "scenario: x\ninputs:\n  - name: def_reduction\n    description: 防御减免\n"
+	if _, err := parseSpec(bad); err == nil {
+		t.Fatal("外部输入缺 unit 必须被拒绝")
+	} else if !strings.Contains(err.Error(), "unit") {
+		t.Errorf("报错应指明缺的是 unit，实际：%v", err)
+	}
+
+	// 声明了单位即可加载
+	ok := "scenario: x\ninputs:\n  - name: def_reduction\n    unit: fraction\n    min: 0\n    max: 1\n"
+	s, err := parseSpec(ok)
+	if err != nil {
+		t.Fatalf("声明了单位应当可加载：%v", err)
+	}
+	if len(s.Inputs) != 1 || s.Inputs[0].Unit != "fraction" {
+		t.Errorf("单位应被读出，实际 %+v", s.Inputs)
+	}
+	if s.Inputs[0].Min == nil || *s.Inputs[0].Min != 0 {
+		t.Errorf("min 应被读出，实际 %+v", s.Inputs[0].Min)
+	}
+}
+
+// 声明了范围却不合法：min > max 必须在加载期就被拒绝。
+func TestInputRangeMustBeSane(t *testing.T) {
+	bad := "scenario: x\ninputs:\n  - name: a\n    unit: fraction\n    min: 2\n    max: 1\n"
+	if _, err := parseSpec(bad); err == nil {
+		t.Error("min 大于 max 必须被拒绝——声明了不校验比不声明更糟")
+	}
+}
