@@ -181,3 +181,23 @@
 
 可空性约定：Go 的 `nil` 切片序列化为 `null`，前端一律补成空数组再渲染；
 `SessionState.scenario` 为 `null` 时界面必须显示「未选择场景」，不得显示空字符串。
+
+### 数据页与公式页
+
+它们的契约不在本规格里，见 `data.spec.md`（定义 / 断言库 / 数据质量三个视图的关系、
+`DataService`、`FormulaService`、以及跨页面共用的**词表**）。
+
+### 页面与服务的对应
+
+本规格定的是**壳**（会话、项目、场景、导航）；每个页面自己的规则在它自己的规格里：
+
+| 页面 | 规格 |
+|---|---|
+| 项目概览 | 本规格（`ProjectService.Overview`） |
+| 数据：定义 / 断言库 / 数据质量 | `data.spec.md` |
+| 公式 | `data.spec.md`（行为约束见 `computation.spec.md`） |
+| 场景概览 / 运行 | 本规格 + `scenario.spec.md` |
+| 核验：队列 / 冲突 | `verification.spec.md` |
+| 待判定 | `decision.spec.md` |
+| 经验 | `experience.spec.md` |
+| 备选方案 | `alternatives.spec.md` |
