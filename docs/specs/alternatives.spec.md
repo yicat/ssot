@@ -125,12 +125,72 @@
 
 ## 前后端契约
 
-**待定**，取决于对外接口形态。已确定的约束：
+### 可信度由依赖推导，不给人工入口
 
-- 必须能**并排对比**多个方案的同一组维度
-- 玩家必须**显式选择**，不得有默认选中项
-- 每个方案的依据、代价、未核验比例都必须可被外部读取，而不只显示在界面上
-- 已选方案与其他备选必须同时保留可访问
+方案的核验状态**不得高于**其所依赖断言中的最低分级（见「持久化与可信度」）。
+这条如果留一个人工上调的输入框，核验分级就被绕过去了——因此界面上没有它。
+
+### 「全部被剪枝」的真正来源是约束
+
+支配是严格偏序，Pareto 集里至少留一个，所以**光靠剪枝剪不出空集**。
+真正会得到空集的是：使用者提出的约束没有方案能全部满足。
+因此呈现方法的入参包含「必须满足的约束」，此时输出的是**冲突的约束清单**。
+
+### 比较前提不同的方案不可比
+
+目标、假设、偏好任一不同，就不是「同一组维度上的两个选择」；
+维度名对不上同样不可比。**不可比就是不可比**，不作支配结论。
+
+### 方法
+
+方法挂在 `AlternativesService` 上。
+
+| 方法 | 参数 | 返回 | 说明 |
+|---|---|---|---|
+| `List` | `scenario string` | `PlanView[]` | 已选中的排最前，**其余仍在** |
+| `Propose` | `PlanProposalInput` | `PlanView` | 同一份方案重复提出是幂等的 |
+| `Choose` | `id, by, reason string` | `PlanView` | `by` 必须是人，理由必填 |
+| `Evaluate` | `scenario, preference string, constraints string[], threshold float64` | `EvaluationView` | 对比、剪枝、合并 |
+| `Refresh` | `scenario string` | `PlanRefreshView` | 依赖检查 |
+
+`PlanView`：
+
+| 字段 | 类型 | 可空 | 说明 |
+|---|---|---|---|
+| `id` / `scenario` / `title` | string | 否 | |
+| `objective` | string | 否 | 它优化的东西；**必填** |
+| `constraints` / `assumptions` / `actions` | string[] | 否 | |
+| `preference` | string | 否 | 它假设的偏好；未声明偏好时必须非空 |
+| `metrics` | `MetricView[]` | 否 | `{name, value, unit, lowerIsBetter}` |
+| `opportunity` | string | 否 | 机会成本；**必填** |
+| `depends` | string[] | 否 | `assert:<ID>` / `formula:<名>@<版本>` |
+| `unverifiedRatio` | float64 | 否 | 依赖断言中未核验的比例 |
+| `maxConfidence` | string | 否 | **推导得出**，无人工入口 |
+| `sources` | string[] | 否 | |
+| `fromConflict` | bool | 否 | 是否因来源冲突而单独成案 |
+| `status` / `statusText` | string | 否 | `candidate`/`chosen`/`stale`/`invalid`/`superseded` |
+| `executable` | bool | 否 | 「依据已变」为 true，「不可执行」为 false |
+| `chosen` | bool | 否 | |
+| `chosenBy` / `chooseReason` | string | 否 | 未选定时为空串 |
+| `at` | string | 否 | RFC3339 |
+
+`EvaluationView`：
+
+| 字段 | 类型 | 可空 | 说明 |
+|---|---|---|---|
+| `plans` | `PlanView[]` | 否 | 剪枝与合并之后留下的 |
+| `pruned` | `PrunedView[]` | 否 | `{plan, by, dominance}`；`by` 是支配它的方案 ID |
+| `merged` | string[][] | 否 | 被合并的组，每组第一个是保留者 |
+| `constraints` | string[] | 否 | 无可行方案时的冲突约束清单 |
+| `note` | string | 否 | 人话说明（「未发现实质不同的备选」等） |
+| `preferenceInferred` | string | 否 | 从历史选择推测的偏好，**只是建议** |
+
+### 界面上的硬约束
+
+- **没有推荐标记、没有默认选中项、没有「一键选最优」**
+- 选定必须由人点，且理由必填
+- 选定之后其他备选**仍在列表里**：偏好只影响顺序，不删除任何东西
+
 
 ## 待确认
 
