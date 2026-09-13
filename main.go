@@ -36,6 +36,7 @@ func main() {
 			application.NewService(api.NewDataService(session)),
 			application.NewService(api.NewFormulaService(session)),
 			application.NewService(api.NewExperienceService(session)),
+			application.NewService(api.NewAlternativesService(session)),
 			application.NewService(api.NewReviewService(session)),
 		},
 		Assets: application.AssetOptions{

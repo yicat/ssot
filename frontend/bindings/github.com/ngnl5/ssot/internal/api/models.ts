@@ -262,6 +262,37 @@ export interface EntryView {
 }
 
 /**
+ * EvaluationView 是一次对比呈现。
+ */
+export interface EvaluationView {
+    /**
+     * Plans 是剪枝与合并之后留下的方案。**已选中的排在最前，其余仍在。**
+     */
+    "plans": PlanView[] | null;
+    "pruned": PrunedView[] | null;
+
+    /**
+     * Merged 是被合并的组（每组第一个是保留者）。
+     */
+    "merged": (string[] | null)[] | null;
+
+    /**
+     * Constraints 在没有任何方案可呈现时给出冲突的约束清单。
+     */
+    "constraints": string[] | null;
+
+    /**
+     * Note 是人话说明：只有一个方案时要说清「未发现实质不同的备选」。
+     */
+    "note": string;
+
+    /**
+     * PreferenceInferred 是一个**建议**，必须经人确认才生效。
+     */
+    "preferenceInferred": string;
+}
+
+/**
  * ExternalInput 是本次使用的一个外部输入。**始终标注未核验**。
  */
 export interface ExternalInput {
@@ -445,12 +476,101 @@ export interface Item {
 }
 
 /**
+ * MetricView 是一个可比的维度。
+ */
+export interface MetricView {
+    "name": string;
+    "value": number;
+    "unit": string;
+    "lowerIsBetter": boolean;
+}
+
+/**
  * OutputValue 是一项参与计算的输入。
  */
 export interface OutputValue {
     "name": string;
     "value": string;
     "unit": string;
+}
+
+/**
+ * PlanProposalInput 是一次提出。
+ */
+export interface PlanProposalInput {
+    "scenario": string;
+    "title": string;
+    "objective": string;
+    "constraints": string[] | null;
+    "assumptions": string[] | null;
+    "preference": string;
+    "actions": string[] | null;
+    "metrics": MetricView[] | null;
+    "opportunity": string;
+    "depends": string[] | null;
+    "sources": string[] | null;
+    "fromConflict": boolean;
+}
+
+/**
+ * PlanRefreshView 是一次依据检查的结果。
+ */
+export interface PlanRefreshView {
+    "checked": number;
+    "invalid": string[] | null;
+    "stale": string[] | null;
+}
+
+/**
+ * PlanView 是一个方案（面向界面）。
+ */
+export interface PlanView {
+    "id": string;
+    "scenario": string;
+    "title": string;
+
+    /**
+     * Objective 是它优化的东西。**必填**——不声明目标的方案无法被比较。
+     */
+    "objective": string;
+    "constraints": string[] | null;
+    "assumptions": string[] | null;
+
+    /**
+     * Preference 是它假设的偏好。未声明偏好时每个备选都必须标注。
+     */
+    "preference": string;
+    "actions": string[] | null;
+    "metrics": MetricView[] | null;
+
+    /**
+     * Opportunity 是机会成本。**必填**——最容易在事后才发现的一项。
+     */
+    "opportunity": string;
+    "depends": string[] | null;
+    "unverifiedRatio": number;
+
+    /**
+     * MaxConfidence 不得高于依赖断言中的最低。
+     */
+    "maxConfidence": string;
+    "sources": string[] | null;
+    "fromConflict": boolean;
+    "status": string;
+    "statusText": string;
+
+    /**
+     * Executable 报告该方案能否被执行。
+     */
+    "executable": boolean;
+
+    /**
+     * Chosen 报告它是不是被选中的那个。**其他备选仍然可访问。**
+     */
+    "chosen": boolean;
+    "chosenBy": string;
+    "chooseReason": string;
+    "at": string;
 }
 
 /**
@@ -520,6 +640,19 @@ export interface ProposalInput {
      * Collaborators 里出现人即判为「协作」。
      */
     "collaborators": ActorView[] | null;
+}
+
+/**
+ * PrunedView 记录一个被剪掉的方案及原因。
+ */
+export interface PrunedView {
+    "plan": PlanView;
+
+    /**
+     * By 是支配它的那个方案的 ID。
+     */
+    "by": string;
+    "dominance": string;
 }
 
 /**

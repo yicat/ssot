@@ -132,6 +132,31 @@ CREATE TABLE IF NOT EXISTS experience_entry (
 );
 CREATE INDEX IF NOT EXISTS ix_experience_scenario ON experience_entry(scenario);
 CREATE INDEX IF NOT EXISTS ix_experience_topic ON experience_entry(scenario, topic);
+
+-- 备选方案：多解并存，系统不裁决。方案必须持久化并能复现**原始内容与原始依据**——
+-- 它记录的是「当时基于什么做了什么取舍」，后续数据变化不该让它悄悄变样。
+CREATE TABLE IF NOT EXISTS plan (
+  id               TEXT PRIMARY KEY,
+  scenario         TEXT NOT NULL,
+  title            TEXT NOT NULL,
+  objective        TEXT NOT NULL,
+  constraints      TEXT NOT NULL,
+  assumptions      TEXT NOT NULL,
+  preference       TEXT NOT NULL DEFAULT '',
+  actions          TEXT NOT NULL,
+  metrics          TEXT NOT NULL,
+  opportunity      TEXT NOT NULL,
+  depends          TEXT NOT NULL,
+  unverified_ratio REAL NOT NULL DEFAULT 0,
+  max_confidence   TEXT NOT NULL,
+  sources          TEXT NOT NULL,
+  from_conflict    INTEGER NOT NULL DEFAULT 0,
+  status           TEXT NOT NULL,
+  at               TEXT NOT NULL,
+  chosen_by        TEXT NOT NULL DEFAULT '',
+  choose_reason    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_plan_scenario ON plan(scenario);
 `
 
 // assertionCols 是断言表的列清单，供各处 SELECT 复用。

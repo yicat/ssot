@@ -12,6 +12,7 @@ import Formulas from "./project/Formulas";
 import ScenarioOverview from "./scenario/Overview";
 import Run from "./scenario/Run";
 import Experience from "./scenario/Experience";
+import Alternatives from "./scenario/Alternatives";
 import Queue from "./review/Queue";
 import Conflicts from "./review/Conflicts";
 import Decision from "./review/Decision";
@@ -54,6 +55,8 @@ function renderRoute(route: string, scenario: string | null) {
       return <Run scenario={scenario} />;
     case "scenario.experience":
       return <Experience scenario={scenario} />;
+    case "scenario.alternatives":
+      return <Alternatives scenario={scenario} />;
     case "review.queue":
       return <Queue />;
     case "review.conflicts":

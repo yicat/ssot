@@ -84,7 +84,12 @@ export const CallID = {
   ExpReject: 647860061,
   ExpSessions: 2931335891,
   ExpSupersede: 1592503570,
-  // 备选方案（P3，尚未实现）
+  // 备选方案
+  AltChoose: 1196255007,
+  AltEvaluate: 1123926837,
+  AltList: 1338219346,
+  AltPropose: 1750348284,
+  AltRefresh: 3475692589,
 } as const;
 
 type Handler = (args: unknown[]) => unknown;
