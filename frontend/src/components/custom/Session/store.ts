@@ -23,6 +23,7 @@ export type Route =
   | "project.overview"
   | "project.data"
   | "project.formulas"
+  | "project.sources"
   | "scenario.overview"
   | "scenario.run"
   | "scenario.experience"

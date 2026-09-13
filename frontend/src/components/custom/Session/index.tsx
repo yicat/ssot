@@ -34,6 +34,7 @@ const PROJECT_NAV: NavItem[] = [
   { route: "project.overview", label: "概览", hint: "定义、规模、质量缺口" },
   { route: "project.data", label: "数据", hint: "断言库、schema 与覆盖率" },
   { route: "project.formulas", label: "公式", hint: "公式与算例验证状态" },
+  { route: "project.sources", label: "来源", hint: "不可拆的事实源：原文、机制说明、依据声明" },
 ];
 
 const SCENARIO_NAV: NavItem[] = [

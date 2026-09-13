@@ -90,6 +90,14 @@ export const CallID = {
   AltList: 1338219346,
   AltPropose: 1750348284,
   AltRefresh: 3475692589,
+  // 文档（来源）
+  DocList: 3186988399,
+  DocUnregistered: 833417336,
+  DocHistory: 4164277593,
+  DocUsage: 221820902,
+  DocVerify: 2071912138,
+  DocReject: 1920136244,
+  DocRegister: 1959574122,
 } as const;
 
 type Handler = (args: unknown[]) => unknown;

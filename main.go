@@ -34,6 +34,7 @@ func main() {
 			application.NewService(api.NewProjectService(session)),
 			application.NewService(api.NewScenarioService(session)),
 			application.NewService(api.NewDataService(session)),
+			application.NewService(api.NewDocumentService(session)),
 			application.NewService(api.NewFormulaService(session)),
 			application.NewService(api.NewExperienceService(session)),
 			application.NewService(api.NewAlternativesService(session)),

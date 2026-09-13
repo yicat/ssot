@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -18,7 +18,9 @@ import * as $models from "./models.js";
  * Choose 选定一个方案。选定者必须是人，且要留下理由。
  */
 export function Choose(id: string, by: string, reason: string): $CancellablePromise<$models.PlanView> {
-    return $Call.ByID(1196255007, id, by, reason);
+    return $Call.ByID(1196255007, id, by, reason).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
@@ -27,27 +29,41 @@ export function Choose(id: string, by: string, reason: string): $CancellableProm
  * 偏好留空表示**未声明偏好**：此时若备选覆盖不到两种偏好，它会拒绝呈现，
  * 而不是替你选一个。
  */
-export function Evaluate(scenario: string, preference: string, constraints: string[] | null, threshold: number): $CancellablePromise<$models.EvaluationView> {
-    return $Call.ByID(1123926837, scenario, preference, constraints, threshold);
+export function Evaluate(scenario: string, preference: string, constraints: string[], threshold: number): $CancellablePromise<$models.EvaluationView> {
+    return $Call.ByID(1123926837, scenario, preference, constraints, threshold).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
 
 /**
  * List 返回某场景的方案，已选中的在最前。
  */
-export function List(scenario: string): $CancellablePromise<$models.PlanView[] | null> {
-    return $Call.ByID(1338219346, scenario);
+export function List(scenario: string): $CancellablePromise<$models.PlanView[]> {
+    return $Call.ByID(1338219346, scenario).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 /**
  * Propose 提出一个方案。重复提出同一份方案返回已有条目。
  */
 export function Propose($in: $models.PlanProposalInput): $CancellablePromise<$models.PlanView> {
-    return $Call.ByID(1750348284, $in);
+    return $Call.ByID(1750348284, $in).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
  * Refresh 检查全部方案的依据：依赖被驳回 -> 不可执行；公式变更 -> 依据已变。
  */
 export function Refresh(scenario: string): $CancellablePromise<$models.PlanRefreshView> {
-    return $Call.ByID(3475692589, scenario);
+    return $Call.ByID(3475692589, scenario).then(($result: any) => {
+        return $$createType3($result);
+    });
 }
+
+// Private type creation functions
+const $$createType0 = $models.PlanView.createFrom;
+const $$createType1 = $models.EvaluationView.createFrom;
+const $$createType2 = $Create.Array($$createType0);
+const $$createType3 = $models.PlanRefreshView.createFrom;

@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -18,33 +18,50 @@ import * as $models from "./models.js";
  * Current 返回当前会话。
  */
 export function Current(): $CancellablePromise<$models.SessionState> {
-    return $Call.ByID(1610103818);
+    return $Call.ByID(1610103818).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
  * Glossary 返回本项目的词表。
  */
 export function Glossary(): $CancellablePromise<$models.Glossary> {
-    return $Call.ByID(2971284389);
+    return $Call.ByID(2971284389).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
 
 /**
  * Open 切换项目。**失败时会话不变**，因此界面不会塌成空白。
  */
 export function Open(dir: string): $CancellablePromise<$models.SessionState> {
-    return $Call.ByID(522968697, dir);
+    return $Call.ByID(522968697, dir).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
  * Overview 返回项目概览：规模、状态与分级分布、缺口。
  */
 export function Overview(): $CancellablePromise<$models.ProjectOverview> {
-    return $Call.ByID(2882841514);
+    return $Call.ByID(2882841514).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 /**
  * Projects 列出项目根目录下的全部项目，按目录名排序。
  */
-export function Projects(): $CancellablePromise<$models.ProjectRef[] | null> {
-    return $Call.ByID(4043538951);
+export function Projects(): $CancellablePromise<$models.ProjectRef[]> {
+    return $Call.ByID(4043538951).then(($result: any) => {
+        return $$createType4($result);
+    });
 }
+
+// Private type creation functions
+const $$createType0 = $models.SessionState.createFrom;
+const $$createType1 = $models.Glossary.createFrom;
+const $$createType2 = $models.ProjectOverview.createFrom;
+const $$createType3 = $models.ProjectRef.createFrom;
+const $$createType4 = $Create.Array($$createType3);

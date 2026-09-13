@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -17,22 +17,28 @@ import * as $models from "./models.js";
 /**
  * List 返回当前项目的场景，按名称排序。
  */
-export function List(): $CancellablePromise<$models.ScenarioRef[] | null> {
-    return $Call.ByID(1332543624);
+export function List(): $CancellablePromise<$models.ScenarioRef[]> {
+    return $Call.ByID(1332543624).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
 
 /**
  * Overview 返回场景概览：requires 逐项、外部输入声明、依赖公式与输出。
  */
 export function Overview(name: string): $CancellablePromise<$models.ScenarioOverview> {
-    return $Call.ByID(1390931939, name);
+    return $Call.ByID(1390931939, name).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
 
 /**
  * Run 执行一次场景运行。
  */
-export function Run(name: string, subject: string, inputs: $models.RunInput[] | null, refs: $models.RefInput[] | null): $CancellablePromise<$models.RunResult> {
-    return $Call.ByID(683971253, name, subject, inputs, refs);
+export function Run(name: string, subject: string, inputs: $models.RunInput[], refs: $models.RefInput[]): $CancellablePromise<$models.RunResult> {
+    return $Call.ByID(683971253, name, subject, inputs, refs).then(($result: any) => {
+        return $$createType3($result);
+    });
 }
 
 /**
@@ -41,12 +47,24 @@ export function Run(name: string, subject: string, inputs: $models.RunInput[] | 
  * subject 为空时只给出可选主体，不列引用候选——候选取决于选了哪个主体。
  */
 export function RunSetup(name: string, subject: string): $CancellablePromise<$models.RunSetup> {
-    return $Call.ByID(2249021094, name, subject);
+    return $Call.ByID(2249021094, name, subject).then(($result: any) => {
+        return $$createType4($result);
+    });
 }
 
 /**
  * Select 选中一个场景。名称必须在该项目的场景列表中。
  */
 export function Select(name: string): $CancellablePromise<$models.SessionState> {
-    return $Call.ByID(3087910632, name);
+    return $Call.ByID(3087910632, name).then(($result: any) => {
+        return $$createType5($result);
+    });
 }
+
+// Private type creation functions
+const $$createType0 = $models.ScenarioRef.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $models.ScenarioOverview.createFrom;
+const $$createType3 = $models.RunResult.createFrom;
+const $$createType4 = $models.RunSetup.createFrom;
+const $$createType5 = $models.SessionState.createFrom;

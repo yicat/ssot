@@ -24,6 +24,7 @@ import (
 	"github.com/ngnl5/ssot/internal/application/admit"
 	"github.com/ngnl5/ssot/internal/application/derive"
 	"github.com/ngnl5/ssot/internal/application/disambig"
+	docapp "github.com/ngnl5/ssot/internal/application/document"
 	"github.com/ngnl5/ssot/internal/application/formula"
 	"github.com/ngnl5/ssot/internal/application/ingest"
 	"github.com/ngnl5/ssot/internal/application/review"
@@ -31,6 +32,7 @@ import (
 	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/decision"
+	"github.com/ngnl5/ssot/internal/domain/document"
 	"github.com/ngnl5/ssot/internal/domain/verification"
 	"github.com/ngnl5/ssot/internal/infrastructure/artifact"
 	"github.com/ngnl5/ssot/internal/infrastructure/store"
@@ -326,8 +328,11 @@ func syncShikigami(p *project, arts *artifact.Store, pages []revInfo, parser str
 	if err != nil {
 		return err
 	}
-	body, _, err := arts.Read(name)
+	body, path, err := arts.Read(name)
 	if err != nil {
+		return err
+	}
+	if err := registerMirror(p, title, ri, body, path); err != nil {
 		return err
 	}
 
@@ -363,8 +368,12 @@ func syncSkills(p *project, arts *artifact.Store, pages []revInfo) error {
 			missing++
 			continue
 		}
-		body, _, err := arts.Read(file)
+		body, path, err := arts.Read(file)
 		if err != nil {
+			return err
+		}
+		// 先把原件登记成文档，再抽断言——**溯源的终点从此不是字符串**
+		if err := registerMirror(p, pg.Title, pg, body, path); err != nil {
 			return err
 		}
 		ex, err := ingest.SkillsJSON(pg.Title, body, pg.Revision, pg.CapturedAt)
@@ -491,6 +500,18 @@ func cmdDerive(args []string) error {
 	f, ok := formulas[formulaName]
 	if !ok {
 		return fmt.Errorf("找不到公式 %q（可用：%s）", formulaName, formulaNames(formulas))
+	}
+
+	// 公式文件本身就是**不可拆的事实源**：为什么是 1 + cri × crid 写在它的注释里。
+	// 派生断言的依据是它，因此它也该是一份文档——否则「依据」又是一串指不到东西的字符串。
+	if err := registerFormula(p, dir, formulaName, f.Version); err != nil {
+		return err
+	}
+
+	// 公式文件本身就是**不可拆的事实源**：为什么是 1 + cri × crid 写在它的注释里。
+	// 派生断言的依据是它，因此它也该是一份文档——否则「依据」又是一串指不到东西的字符串。
+	if err := registerFormula(p, dir, formulaName, f.Version); err != nil {
+		return err
 	}
 
 	cases, st := f.Verify(p.Units)
@@ -1322,6 +1343,67 @@ func cmdRun(args []string) error {
 	fmt.Printf("  结果：%s\n", out.Result)
 	for _, n := range out.Notes {
 		fmt.Printf("  注：%s\n", n)
+	}
+	return nil
+}
+
+// registerMirror 把一个归档原件登记成**镜像文档**。
+//
+// 镜像文档的正文不存进库（归档里有），但身份、修订与**内容摘要**要存：
+// 摘要决定了「修订标识没变而内容变了」能不能被发现——
+// 而来源忘记更新修订号这件事是会发生的。
+//
+// 首次登记不动任何断言；只有**修订变化**才会让引用它的断言回到待核验。
+func registerMirror(p *project, title string, ri revInfo, body []byte, path string) error {
+	res, err := docapp.Register(p.Store, document.Input{
+		Source:       "huijiwiki",
+		Title:        title,
+		Kind:         document.KindEvidence,
+		Revision:     ri.Revision,
+		ArtifactPath: path,
+		ContentHash:  document.HashOf(string(body)),
+		CapturedAt:   ri.CapturedAt,
+	}, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("登记文档 %s：%w", title, err)
+	}
+	if res.Changed && res.Requeued > 0 {
+		// 批量回退必须说出来：一次同步让几百条已核验的断言回到待核验，
+		// 而人不被告知，就是最坏的那种静默。
+		fmt.Printf("  ⚠ %s 的修订变为 %s，%d 条断言回到待核验\n",
+			title, ri.Revision, res.Requeued)
+	}
+	return nil
+}
+
+// registerFormula 把公式文件登记成一份文档。
+//
+// 派生断言（L3）的溯源里写的 `formula:<名>` 就是它——
+// 此前那串字符指不到任何东西，于是「为什么这么算」无处可查。
+//
+// 修订用公式自己的版本号：公式改了版本，引用它的断言就该重算。
+func registerFormula(p *project, dir, name, version string) error {
+	path := filepath.Join(dir, "formulas", name+".formula.yml")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("读取公式 %s：%w", name, err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	title := "formula:" + name
+	res, err := docapp.Register(p.Store, document.Input{
+		Source: "formula", Title: title, Kind: document.KindExplanation,
+		Revision: "v" + version, Body: string(body), ArtifactPath: path,
+		ContentHash: document.HashOf(string(body)), CapturedAt: info.ModTime(),
+	}, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("登记公式文档 %s：%w", title, err)
+	}
+	if res.Changed && res.Requeued > 0 {
+		fmt.Printf("  ⚠ 公式 %s 的版本变为 v%s，%d 条派生断言回到待核验\n",
+			name, version, res.Requeued)
 	}
 	return nil
 }

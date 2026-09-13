@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -20,6 +20,12 @@ import * as $models from "./models.js";
  * **逐个文件加载**而不是一次 LoadDir：一条写坏的公式不该让整页打不开，
  * 它应该被单独指出是哪一条、错在哪。
  */
-export function List(): $CancellablePromise<$models.FormulaView[] | null> {
-    return $Call.ByID(1903130150);
+export function List(): $CancellablePromise<$models.FormulaView[]> {
+    return $Call.ByID(1903130150).then(($result: any) => {
+        return $$createType1($result);
+    });
 }
+
+// Private type creation functions
+const $$createType0 = $models.FormulaView.createFrom;
+const $$createType1 = $Create.Array($$createType0);

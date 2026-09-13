@@ -9,6 +9,7 @@ import { useSession } from "../components/custom/Session/useSession";
 import ProjectOverview from "./project/Overview";
 import Data from "./project/Data";
 import Formulas from "./project/Formulas";
+import Sources from "./project/Sources";
 import ScenarioOverview from "./scenario/Overview";
 import Run from "./scenario/Run";
 import Experience from "./scenario/Experience";
@@ -49,6 +50,8 @@ function renderRoute(route: string, scenario: string | null) {
       return <Data />;
     case "project.formulas":
       return <Formulas />;
+    case "project.sources":
+      return <Sources />;
     case "scenario.overview":
       return <ScenarioOverview scenario={scenario} />;
     case "scenario.run":

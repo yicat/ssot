@@ -3,6 +3,7 @@
 
 import * as AlternativesService from "./alternativesservice.js";
 import * as DataService from "./dataservice.js";
+import * as DocumentService from "./documentservice.js";
 import * as ExperienceService from "./experienceservice.js";
 import * as FormulaService from "./formulaservice.js";
 import * as ProjectService from "./projectservice.js";
@@ -11,6 +12,7 @@ import * as ScenarioService from "./scenarioservice.js";
 export {
     AlternativesService,
     DataService,
+    DocumentService,
     ExperienceService,
     FormulaService,
     ProjectService,
@@ -18,7 +20,7 @@ export {
     ScenarioService
 };
 
-export type {
+export {
     ActorView,
     AssertionPage,
     BatchPreview,
@@ -33,6 +35,9 @@ export type {
     DecisionResolution,
     DecisionResult,
     DecisionStats,
+    DocInput,
+    DocRegisterResult,
+    DocView,
     EntityQuality,
     EntitySchema,
     EntitySummary,
@@ -74,5 +79,6 @@ export type {
     SkippedRef,
     Stats,
     Term,
-    TurnView
+    TurnView,
+    UnregisteredView
 } from "./models.js";

@@ -157,6 +157,32 @@ CREATE TABLE IF NOT EXISTS plan (
   choose_reason    TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS ix_plan_scenario ON plan(scenario);
+
+-- 文档：不能变成数据的那部分事实源。正文不可改，换修订写新记录。
+-- 摘要进主键：修订标识没变而内容变了的情况真实存在，那时它是另一条记录。
+CREATE TABLE IF NOT EXISTS document (
+  rev_id            TEXT PRIMARY KEY,
+  doc_id            TEXT NOT NULL,
+  source            TEXT NOT NULL,
+  title             TEXT NOT NULL,
+  kind              TEXT NOT NULL,
+  revision          TEXT NOT NULL,
+  hash              TEXT NOT NULL,
+  captured_at       TEXT NOT NULL,
+  body              TEXT NOT NULL DEFAULT '',
+  artifact_path     TEXT NOT NULL DEFAULT '',
+  applies_versions  TEXT NOT NULL DEFAULT '[]',
+  applies_scenarios TEXT NOT NULL DEFAULT '[]',
+  status            TEXT NOT NULL,
+  verified_kind     TEXT NOT NULL DEFAULT '',
+  verified_id       TEXT NOT NULL DEFAULT '',
+  method            TEXT NOT NULL DEFAULT '',
+  reason            TEXT NOT NULL DEFAULT '',
+  registered_at     TEXT NOT NULL,
+  superseded_by     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS ix_document_doc ON document(doc_id);
+CREATE INDEX IF NOT EXISTS ix_document_title ON document(source, title);
 `
 
 // assertionCols 是断言表的列清单，供各处 SELECT 复用。
