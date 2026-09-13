@@ -7,6 +7,7 @@
 import { useSession } from "../../components/custom/Session/useSession";
 import { Badge } from "../../components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Confidence, Entity } from "../../components/custom/Term";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
 import {
@@ -80,7 +81,9 @@ export default function ProjectOverview() {
                 <TableBody>
                   {ov.entities?.map((e) => (
                     <TableRow key={e.entity}>
-                      <TableCell>{e.entity}</TableCell>
+                      <TableCell>
+                        <Entity name={e.entity} />
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{e.subjects}</TableCell>
                       <TableCell className="text-right tabular-nums">
                         {e.assertions === 0 ? (
@@ -117,7 +120,7 @@ export default function ProjectOverview() {
                 .map(([k, v]) => (
                   <div key={k} className="flex items-center gap-2 text-sm">
                     <Badge variant="outline" className="border-slate-300 text-slate-700">
-                      {k}
+                      <Confidence value={k} />
                     </Badge>
                     <span className="tabular-nums">{v ?? 0}</span>
                     <span className="ml-auto text-xs text-muted-foreground">

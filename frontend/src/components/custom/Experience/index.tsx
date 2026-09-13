@@ -19,12 +19,15 @@ import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
 import type { ProposalInput } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { useSessionStore } from "../Session/store";
 import { useExperience } from "./useExperience";
+import { useGlossary } from "../Session/glossary";
+import { Actor, Dep } from "../Term";
 import { KINDS, LEVEL_CLASS, STATUS_CLASS } from "./store";
 
 export default function Experience({ scenario }: { scenario: string | null }) {
   const e = useExperience(scenario);
   // 使用者身份是**会话级**的：在核验里填一次，这里不该再填一次。
   const by = useSessionStore((s) => s.by);
+  const g = useGlossary();
   const setBy = useSessionStore((s) => s.setBy);
   const [tab, setTab] = useState("entries");
   const [title, setTitle] = useState("");
@@ -86,7 +89,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                       <td>
                         <div>{x.statement}</div>
                         <div className="text-[11px] text-muted-foreground">
-                          {x.topic} · {x.kindText} · {x.proposedBy.kind}:{x.proposedBy.id}
+                          {x.topic} · {x.kindText} · <Actor id={`${x.proposedBy.kind}:${x.proposedBy.id}`} />
                         </div>
                       </td>
                       <td className="w-24 text-right">
@@ -136,8 +139,8 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                               <span className="text-sm">{x.statement}</span>
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                              {x.proposedBy.kind}:{x.proposedBy.id} ·{" "}
-                              {x.sessionId}#{x.anchor}
+                              <Actor id={`${x.proposedBy.kind}:${x.proposedBy.id}`} /> ·{" "}
+                              依据 {x.sessionId} 第 {x.anchor} 句
                             </div>
                           </div>
                           <Button size="sm" variant="outline" onClick={() => e.select(x.id)}>
@@ -281,13 +284,16 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                     <p className="text-muted-foreground">{selected.rationale}</p>
                   )}
                   <dl className="grid gap-1 border-t pt-3">
-                    <Row k="可信度上限" v={selected.maxConfidence} />
-                    <Row k="提出者" v={`${selected.proposedBy.kind}:${selected.proposedBy.id}`} />
+                    <Row
+                      k="可信度上限"
+                      v={`${selected.maxConfidence}　${g.confidence(selected.maxConfidence).label}`}
+                    />
+                    <Row k="提出者" v={g.actor(`${selected.proposedBy.kind}:${selected.proposedBy.id}`)} />
                     {(selected.collaborators ?? []).length > 0 && (
                       <Row
                         k="参与者"
                         v={(selected.collaborators ?? [])
-                          .map((c) => `${c.kind}:${c.id}`)
+                          .map((c) => g.actor(`${c.kind}:${c.id}`))
                           .join("、")}
                       />
                     )}
@@ -299,7 +305,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                           : "尚未批准"
                       }
                     />
-                    <Row k="依据" v={`${selected.sessionId}#${selected.anchor}`} />
+                    <Row k="依据" v={`会话 ${selected.sessionId} 第 ${selected.anchor} 句`} />
                     <Row k="时间" v={selected.at} />
                     {selected.supersedes && <Row k="取代" v={selected.supersedes} />}
                   </dl>
@@ -311,7 +317,7 @@ export default function Experience({ scenario }: { scenario: string | null }) {
                       <div className="mb-1 text-muted-foreground">推导链</div>
                       <ul className="grid gap-0.5 font-mono text-[11px]">
                         {(selected.chain ?? []).map((c) => (
-                          <li key={c}>{c}</li>
+                          <li key={c}><Dep value={c} /></li>
                         ))}
                       </ul>
                     </div>

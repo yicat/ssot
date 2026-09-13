@@ -431,6 +431,47 @@ export interface FormulaView {
 }
 
 /**
+ * Glossary 是本项目的词表。
+ */
+export interface Glossary {
+    /**
+     * Entities 是实体类型：shikigami -> 式神。
+     */
+    "entities": { [_ in string]?: Term } | null;
+
+    /**
+     * Fields 是字段：`shikigami.atk` -> 攻击。
+     */
+    "fields": { [_ in string]?: Term } | null;
+
+    /**
+     * Units 是单位：percent -> 百分比。
+     */
+    "units": { [_ in string]?: Term } | null;
+
+    /**
+     * Types 是字段类型：number -> 数值。
+     */
+    "types": { [_ in string]?: Term } | null;
+
+    /**
+     * Subjects 是主体的显示名：`shikigami/262` -> 姑获鸟。
+     * 
+     * 它是**从数据里读出来的**，不是编的：主体标识是稳定身份，
+     * 而名字就在同一条记录上。
+     */
+    "subjects": { [_ in string]?: string } | null;
+    "confidences": { [_ in string]?: Term } | null;
+    "statuses": { [_ in string]?: Term } | null;
+    "actorKinds": { [_ in string]?: Term } | null;
+    "expKinds": { [_ in string]?: Term } | null;
+    "expStatuses": { [_ in string]?: Term } | null;
+    "decStatuses": { [_ in string]?: Term } | null;
+    "planStatuses": { [_ in string]?: Term } | null;
+    "methods": { [_ in string]?: Term } | null;
+}
+
+/**
  * HistoryItem 是一条核验记录（面向界面）。
  */
 export interface HistoryItem {
@@ -907,6 +948,31 @@ export interface Stats {
     "byConfidence": { [_ in string]?: number } | null;
     "verifications": number;
     "conflicts": number;
+}
+
+/**
+ * Term 是一个词条：给人看的名字 + 完整说明。
+ */
+export interface Term {
+    /**
+     * Key 是原始标识符。**必须一起显示**——中文名给人看，标识符给对账用。
+     */
+    "key": string;
+
+    /**
+     * Label 是短名。空串表示定义里没有中文，界面应退回显示 Key。
+     */
+    "label": string;
+
+    /**
+     * Note 是完整说明。
+     */
+    "note": string;
+
+    /**
+     * Extra 是附加信息（单位、类型、目标实体等），可为空。
+     */
+    "extra": string;
 }
 
 /**

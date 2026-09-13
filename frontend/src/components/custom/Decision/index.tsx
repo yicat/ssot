@@ -30,6 +30,8 @@ import {
   TableRow,
 } from "../../ui/table";
 import { useSessionStore } from "../Session/store";
+import { useGlossary } from "../Session/glossary";
+import { Field, Subject, Unit } from "../Term";
 import { DECISION_METHODS, useDecision } from "./useDecision";
 
 const STATUS_CLASS: Record<string, string> = {
@@ -52,6 +54,7 @@ export default function Decision() {
   // 使用者身份是**会话级**的（同核验页）。
   const sessionBy = useSessionStore((s) => s.by);
   const sessionSetBy = useSessionStore((s) => s.setBy);
+  const g = useGlossary();
   const s = d.stats;
   const it = d.selected;
 
@@ -96,9 +99,8 @@ export default function Decision() {
                     className={"cursor-pointer " + (d.selectedId === x.id ? "bg-secondary" : "")}
                   >
                     <TableCell className="whitespace-nowrap">
-                      {x.entity}/{x.subject}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{x.predicate}</TableCell>
+                      <Subject entity={x.entity} subject={x.subject} />`r`n                    </TableCell>
+                    <TableCell className="whitespace-nowrap">`r`n                      <Field entity={x.entity} predicate={x.predicate} />`r`n                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {x.candidates?.length ?? 0}
                     </TableCell>
@@ -145,7 +147,10 @@ export default function Decision() {
                     <span className="text-xs text-muted-foreground">被引用 {it.impact} 次</span>
                   </div>
                   <CardTitle className="text-base">
-                    {it.subject}.{it.predicate}
+                    <Subject entity={it.entity} subject={it.subject} />
+                    <span className="ml-2 text-sm font-normal">
+                      <Field entity={it.entity} predicate={it.predicate} />
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -157,7 +162,7 @@ export default function Decision() {
                     </div>
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">修订</dt>
-                      <dd>{it.revision}</dd>
+                      <dd>{g.revision(it.revision)}</dd>
                     </div>
                     <div className="flex gap-2">
                       <dt className="w-16 shrink-0 text-muted-foreground">来源</dt>
@@ -203,7 +208,7 @@ export default function Decision() {
                         <div className="flex items-baseline gap-2">
                           <span className="text-xs text-muted-foreground">[{c.index}]</span>
                           <span className="text-base font-medium tabular-nums">
-                            {c.value} {c.unit}
+                            {c.value} <Unit name={c.unit} />
                           </span>
                           <span className="ml-auto text-[11px] text-muted-foreground">
                             {c.anchor}

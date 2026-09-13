@@ -32,8 +32,20 @@ import {
   TableRow,
 } from "../../ui/table";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
-import { CONFIDENCE_HINT, STATUS_CLASS, STATUS_LABEL } from "../Review/useReview";
+import {
+  AssertionStatus,
+  Confidence,
+  Entity,
+  Field,
+  Revision,
+  Subject,
+  Type,
+  Unit,
+} from "../Term";
 import { useDataExplorer } from "./useDataExplorer";
+
+// 状态枚举由领域定义，界面只列出来——自己维护一份迟早会与后端不一致。
+const STATUS_KEYS = ['pending', 'auto-checked', 'verified', 'disputed', 'rejected', 'expired', 'unmodeled'];
 
 export default function DataExplorer() {
   const d = useDataExplorer();
@@ -89,9 +101,9 @@ export default function DataExplorer() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all">全部状态</SelectItem>
-                {Object.keys(STATUS_LABEL).map((k) => (
+                {STATUS_KEYS.map((k) => (
                   <SelectItem key={k} value={k}>
-                    {STATUS_LABEL[k]}
+                    <AssertionStatus value={k} />
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -110,7 +122,7 @@ export default function DataExplorer() {
                 <SelectItem value="__all">全部分级</SelectItem>
                 {["L1", "L2", "L3", "L4"].map((c) => (
                   <SelectItem key={c} value={c}>
-                    {c}　{CONFIDENCE_HINT[c]}
+                    <Confidence value={c} />
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -151,18 +163,18 @@ export default function DataExplorer() {
                         }
                       >
                         <TableCell className="whitespace-nowrap">
-                          {a.entity}/{a.subject}
+                          <Subject entity={a.entity} subject={a.subject} />
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">{a.predicate}</TableCell>
+                        <TableCell className="whitespace-nowrap"><Field entity={a.entity} predicate={a.predicate} /></TableCell>
                         <TableCell className="max-w-[16rem] truncate">{a.value}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="border-slate-300 text-slate-700">
-                            {a.confidence}
+                            <Confidence value={a.confidence} />
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={STATUS_CLASS[a.status] ?? ""}>
-                            {STATUS_LABEL[a.status] ?? a.status}
+                          <Badge variant="outline">
+                            <AssertionStatus value={a.status} />
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{a.source}</TableCell>
@@ -220,7 +232,7 @@ export default function DataExplorer() {
                   <Card key={q.entity}>
                     <CardHeader className="py-3">
                       <CardTitle className="text-sm">
-                        {q.entity}
+                        <Entity name={q.entity} />
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
                           {q.subjects} 个主体 · {q.assertions} 条断言
                         </span>
@@ -228,14 +240,18 @@ export default function DataExplorer() {
                       {(q.undeclared?.length ?? 0) > 0 && (
                         <CardDescription className="text-amber-700">
                           数据里有而 schema 未声明：
-                          {(q.undeclared ?? []).join("、")}
+                          {(q.undeclared ?? []).map((k) => (
+                            <Field key={k} entity={q.entity} predicate={k} />
+                          ))}
                           ——这些字段会被准入层过滤掉，也就是「接进来了但没入库」
                         </CardDescription>
                       )}
                       {(q.requiredMissing?.length ?? 0) > 0 && (
                         <CardDescription className="text-rose-700">
                           必填却一条数据都没有：
-                          {(q.requiredMissing ?? []).join("、")}
+                          {(q.requiredMissing ?? []).map((k) => (
+                            <Field key={k} entity={q.entity} predicate={k} />
+                          ))}
                         </CardDescription>
                       )}
                     </CardHeader>
@@ -252,8 +268,8 @@ export default function DataExplorer() {
                         <TableBody>
                           {(q.fields ?? []).map((f) => (
                             <TableRow key={f.key}>
-                              <TableCell className="font-mono text-xs">
-                                {f.key}
+                              <TableCell className="text-xs">
+                                <Field entity={q.entity} predicate={f.key} short />
                                 {f.required && (
                                   <span className="ml-1 text-rose-700" title="必填">
                                     *
@@ -295,7 +311,7 @@ export default function DataExplorer() {
                 {d.schemas.map((es) => (
                   <Card key={es.entity}>
                     <CardHeader className="py-3">
-                      <CardTitle className="text-sm">{es.entity}</CardTitle>
+                      <CardTitle className="text-sm"><Entity name={es.entity} /></CardTitle>
                       <CardDescription>
                         {es.description || "（未写描述）"} · schemaRev {es.schemaRev || "—"}
                       </CardDescription>
@@ -314,10 +330,10 @@ export default function DataExplorer() {
                         <TableBody>
                           {(es.fields ?? []).map((f) => (
                             <TableRow key={f.key}>
-                              <TableCell className="font-mono text-xs">{f.key}</TableCell>
-                              <TableCell className="text-xs">{f.type}</TableCell>
+                              <TableCell className="text-xs"><Field entity={es.entity} predicate={f.key} short /></TableCell>
+                              <TableCell className="text-xs"><Type name={f.type} /></TableCell>
                               <TableCell className="text-xs">
-                                {f.unit || f.target || "—"}
+                                {f.unit ? <Unit name={f.unit} /> : f.target ? <Entity name={f.target} /> : "—"}
                               </TableCell>
                               <TableCell className="text-xs">
                                 {[
@@ -370,14 +386,14 @@ export default function DataExplorer() {
                 {d.detail.map((a) => (
                   <div key={a.id} className="border-l-2 pl-3 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{a.predicate}</span>
+                      <span className="font-medium"><Field entity={a.entity} predicate={a.predicate} /></span>
                       <span className="tabular-nums">{a.value}</span>
                       <Badge variant="outline" className="ml-auto border-slate-300 text-slate-700">
-                        {a.confidence}
+                        <Confidence value={a.confidence} />
                       </Badge>
                     </div>
                     <div className="text-muted-foreground">
-                      {STATUS_LABEL[a.status] ?? a.status} · {a.artifact} {a.anchor} @ {a.revision}
+                      <AssertionStatus value={a.status} /> · {a.artifact} {a.anchor} @ <Revision value={a.revision} />
                     </div>
                   </div>
                 ))}

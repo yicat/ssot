@@ -39,6 +39,39 @@ func (c Confidence) Valid() bool {
 	return false
 }
 
+// Label 返回短名。
+//
+// 短名是给人看的：界面上只写 `L2` 等于没写——看的人得先知道 L2 是什么意思。
+// 它放在领域层而不是界面里，是为了让 CLI 与 GUI 说的是同一套词。
+func (c Confidence) Label() string {
+	switch c {
+	case L1:
+		return "直引"
+	case L2:
+		return "结构化"
+	case L3:
+		return "推导"
+	case L4:
+		return "推断"
+	}
+	return string(c)
+}
+
+// Hint 返回完整说明。
+func (c Confidence) Hint() string {
+	switch c {
+	case L1:
+		return "可与原文逐字比对"
+	case L2:
+		return "从文本解析得出"
+	case L3:
+		return "由其他断言算出"
+	case L4:
+		return "含补全的假设"
+	}
+	return ""
+}
+
 // Status 是核验状态。
 type Status string
 
@@ -51,6 +84,27 @@ const (
 	StatusExpired     Status = "expired"      // 已过期
 	StatusUnmodeled   Status = "unmodeled"    // 未建模但已记录
 )
+
+// Label 返回中文名。
+func (s Status) Label() string {
+	switch s {
+	case StatusPending:
+		return "待核验"
+	case StatusAutoChecked:
+		return "已自动预检"
+	case StatusVerified:
+		return "已核验"
+	case StatusDisputed:
+		return "有争议"
+	case StatusRejected:
+		return "已驳回"
+	case StatusExpired:
+		return "已过期"
+	case StatusUnmodeled:
+		return "未建模"
+	}
+	return string(s)
+}
 
 // Qualifiers 是使该断言成立的条件。
 // 这些条件参与断言的**身份判定**：限定条件不同即为不同断言。

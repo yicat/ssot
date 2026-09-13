@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Overview } from "../../../bindings/github.com/ngnl5/ssot/internal/api/scenarioservice";
 import type { ScenarioOverview as ScenarioOverviewData } from "../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { Badge } from "../../components/ui/badge";
+import { Requirement, Unit } from "../../components/custom/Term";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Separator } from "../../components/ui/separator";
@@ -116,7 +117,7 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
               <TableBody>
                 {(data.requires ?? []).map((q) => (
                   <TableRow key={q.want}>
-                    <TableCell className="font-mono text-xs">{q.want}</TableCell>
+                    <TableCell className="text-xs"><Requirement want={q.want} /></TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
@@ -163,9 +164,9 @@ export default function ScenarioOverview({ scenario }: { scenario: string | null
               {(data.inputs ?? []).map((inp) => (
                 <div key={inp.name} className="text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs">{inp.name}</span>
+                    <span className="text-xs font-medium">{inp.name}</span>
                     <Badge variant="outline" className="border-slate-300 text-slate-700">
-                      {inp.unit}
+                      <Unit name={inp.unit} />
                     </Badge>
                     {(inp.min !== null && inp.min !== undefined) ||
                     (inp.max !== null && inp.max !== undefined) ? (

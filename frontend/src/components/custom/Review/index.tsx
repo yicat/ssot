@@ -34,8 +34,16 @@ import {
 } from "../../ui/table";
 import type { Item, QueueItem } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { useSessionStore } from "../Session/store";
+import { useGlossary } from "../Session/glossary";
+import {
+  Actor,
+  Confidence,
+  Field,
+  Quantity,
+  Subject,
+} from "../Term";
 import { METHODS } from "./store";
-import { CONFIDENCE_HINT, STATUS_CLASS, STATUS_LABEL, useReview } from "./useReview";
+import { STATUS_CLASS, STATUS_LABEL, useReview } from "./useReview";
 
 export function StatusBadge({ status }: { status: string }) {
   return (
@@ -47,8 +55,8 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function ConfidenceBadge({ c }: { c: string }) {
   return (
-    <Badge variant="outline" className="border-slate-300 text-slate-700" title={CONFIDENCE_HINT[c] ?? ""}>
-      {c}
+    <Badge variant="outline" className="border-slate-300 text-slate-700">
+      <Confidence value={c} />
     </Badge>
   );
 }
@@ -80,6 +88,7 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
   // 使用者身份是**会话级**的：在核验里填一次，经验与待判定里不该再填一次。
   const sessionBy = useSessionStore((s) => s.by);
   const sessionSetBy = useSessionStore((s) => s.setBy);
+  const g = useGlossary();
   const byStatus = r.stats?.byStatus ?? {};
 
   return (
@@ -171,10 +180,14 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                       }
                     >
                       <TableCell className="whitespace-nowrap">
-                        {q.item.entity}/{q.item.subject}
+                        <Subject entity={q.item.entity} subject={q.item.subject} />
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{q.item.predicate}</TableCell>
-                      <TableCell className="max-w-[16rem] truncate">{q.item.value}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Field entity={q.item.entity} predicate={q.item.predicate} />
+                      </TableCell>
+                      <TableCell className="max-w-[16rem] truncate">
+                        <Quantity value={q.item.value} unit={q.item.unit} />
+                      </TableCell>
                       <TableCell>
                         <ConfidenceBadge c={q.item.confidence} />
                       </TableCell>
@@ -207,7 +220,17 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                   <Card key={i} className="mb-3 border-orange-300">
                     <CardHeader className="py-2">
                       <CardTitle className="text-sm font-medium">
-                        {g.subject}.{g.predicate}
+                        {/* 冲突的 identity 是「主体 + 谓词」，两者都要有中文 */}
+                        {g.claims?.[0] ? (
+                          <>
+                            <Subject entity={g.claims[0].entity} subject={g.subject} />
+                            <span className="ml-2">
+                              <Field entity={g.claims[0].entity} predicate={g.predicate} />
+                            </span>
+                          </>
+                        ) : (
+                          `${g.subject}.${g.predicate}`
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="grid gap-2">
@@ -261,16 +284,21 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                     <ConfidenceBadge c={r.selected.confidence} />
                   </div>
                   <CardTitle className="text-base">
-                    {r.selected.subject}.{r.selected.predicate}
+                    <Subject entity={r.selected.entity} subject={r.selected.subject} />
+                    <span className="ml-2 text-sm font-normal">
+                      <Field entity={r.selected.entity} predicate={r.selected.predicate} />
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-lg tabular-nums">{r.selected.value}</div>
+                  <div className="text-lg tabular-nums">
+                    <Quantity value={r.selected.value} unit={r.selected.unit} />
+                  </div>
                   <dl className="mt-3 grid gap-1 border-t pt-3 text-xs">
                     <Row k="来源" v={r.selected.source} />
                     <Row k="原件" v={r.selected.artifact} />
                     <Row k="锚点" v={r.selected.anchor} />
-                    <Row k="修订" v={r.selected.revision} />
+                    <Row k="修订" v={g.revision(r.selected.revision)} />
                     <Row k="断言 ID" v={r.selected.id} mono />
                   </dl>
                 </CardContent>
@@ -375,14 +403,14 @@ export default function Review({ mode }: { mode: "queue" | "conflicts" }) {
                       {r.history.map((h, i) => (
                         <li key={i} className="border-l-2 pl-3 text-xs">
                           <div>
-                            <b>{h.method}</b> · {h.approvedBy} 批准
+                            <b>{h.method}</b> · <Actor id={h.approvedBy} /> 批准
                           </div>
                           <div className="text-muted-foreground">{h.reason}</div>
                           {h.evidence && (
                             <div className="text-muted-foreground">依据：{h.evidence}</div>
                           )}
                           <div className="text-[11px] text-muted-foreground/70">
-                            {h.at} · 提出者 {h.proposedBy}
+                            {h.at} · 提出者 <Actor id={h.proposedBy} />
                           </div>
                         </li>
                       ))}

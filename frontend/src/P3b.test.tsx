@@ -13,6 +13,7 @@ import App from "./App";
 import { useAlternativesStore } from "./components/custom/Alternatives/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 const session = {
   dir: "projects/onmyoji",
@@ -70,6 +71,7 @@ function backend() {
       { dir: "projects/onmyoji", name: "onmyoji", path: "projects/onmyoji", description: "阴阳师", current: true },
     ])
     .on(CallID.Current, () => session)
+    .on(GlossaryCallID, () => glossaryFixture())
     .on(CallID.ProjectOverview, () => ({
       dir: "projects/onmyoji",
       name: "onmyoji",
@@ -144,14 +146,17 @@ describe("备选方案", () => {
     expect(screen.getByText(/机会成本：/)).toBeInTheDocument();
     expect(screen.getByText("放弃另一条线的进度")).toBeInTheDocument();
     expect(screen.getByText(/未核验 50%/)).toBeInTheDocument();
-    expect(screen.getByText(/可信度上限 L2/)).toBeInTheDocument();
+    expect(screen.getByText(/可信度上限/)).toBeInTheDocument();
+    // 分级现在显示中文名 + 标识符，两边都要在
+    expect(screen.getAllByText(/结构化/).length).toBeGreaterThan(0);
   });
 
   // 验收：可比维度并排呈现。
   it("把可比维度摊开", async () => {
     await goAlternatives();
     expect(await screen.findByText("资源")).toBeInTheDocument();
-    expect(screen.getByText("100 point")).toBeInTheDocument();
+    expect(screen.getByText(/100/)).toBeInTheDocument();
+    expect(screen.getAllByText(/点数/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("越小越好").length).toBeGreaterThan(0);
   });
 
@@ -170,7 +175,9 @@ describe("备选方案", () => {
     await goAlternatives();
     await screen.findByText("先刷御魂那条线");
     expect(screen.queryByLabelText(/可信度/)).toBeNull();
-    expect(screen.getByText(/可信度上限 L2/)).toBeInTheDocument();
+    expect(screen.getByText(/可信度上限/)).toBeInTheDocument();
+    // 分级现在显示中文名 + 标识符，两边都要在
+    expect(screen.getAllByText(/结构化/).length).toBeGreaterThan(0);
   });
 
   // 验收：未声明偏好时不得给出单一方案。

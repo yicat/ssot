@@ -22,6 +22,13 @@ export function Current(): $CancellablePromise<$models.SessionState> {
 }
 
 /**
+ * Glossary 返回本项目的词表。
+ */
+export function Glossary(): $CancellablePromise<$models.Glossary> {
+    return $Call.ByID(2971284389);
+}
+
+/**
  * Open 切换项目。**失败时会话不变**，因此界面不会塌成空白。
  */
 export function Open(dir: string): $CancellablePromise<$models.SessionState> {

@@ -46,6 +46,7 @@ export type {
     FormulaParamView,
     FormulaStatusView,
     FormulaView,
+    Glossary,
     HistoryItem,
     InputSpecView,
     Item,
@@ -72,5 +73,6 @@ export type {
     SessionView,
     SkippedRef,
     Stats,
+    Term,
     TurnView
 } from "./models.js";

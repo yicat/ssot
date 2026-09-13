@@ -9,13 +9,20 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 
-import { Current, Open, Overview, Projects } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/projectservice";
+import {
+  Current,
+  Glossary,
+  Open,
+  Overview,
+  Projects,
+} from "../../../../bindings/github.com/ngnl5/ssot/internal/api/projectservice";
 import { Select } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/scenarioservice";
 import type {
   ProjectOverview,
   ProjectRef,
   SessionState as SessionSnapshot,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useGlossaryStore } from "./glossary";
 import { useSessionStore, type Route } from "./store";
 
 export type SessionApi = {
@@ -57,6 +64,8 @@ export function useSession(): SessionApi {
       const snap = await Current();
       s.setSession(snap);
       s.setOverview(await Overview());
+      // 词表跟着项目走：换项目就换一套中文名。
+      useGlossaryStore.getState().setG(await Glossary());
     } catch (e) {
       s.setError(String(e));
     } finally {
@@ -78,6 +87,8 @@ export function useSession(): SessionApi {
         const snap = await Open(dir);
         s.setSession(snap);
         s.setOverview(await Overview());
+        // 词表跟着项目走：换项目就换一套中文名。
+        useGlossaryStore.getState().setG(await Glossary());
         toast.success(`已打开项目 ${snap.name}`);
       } catch (e) {
         // 后端保证失败时项目不变，因此这里只需要如实报错，

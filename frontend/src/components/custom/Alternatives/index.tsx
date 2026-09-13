@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "../../ui/table";
 import { STATUS_CLASS, useAlternativesStore } from "./store";
+import { Actor, Confidence, Dep, Quantity } from "../Term";
 import { useAlternatives } from "./useAlternatives";
 
 export default function Alternatives({ scenario }: { scenario: string | null }) {
@@ -125,7 +126,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                         </Badge>
                       )}
                       <Badge variant="outline" className="ml-auto border-slate-300 text-slate-700">
-                        可信度上限 {p.maxConfidence}
+                        可信度上限 <Confidence value={p.maxConfidence} />
                       </Badge>
                     </div>
                     <CardDescription>
@@ -150,7 +151,7 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                               <TableRow key={m.name}>
                                 <TableCell className="text-xs">{m.name}</TableCell>
                                 <TableCell className="text-right tabular-nums">
-                                  {m.value} {m.unit}
+                                  <Quantity value={String(m.value)} unit={m.unit} />
                                 </TableCell>
                                 <TableCell className="text-xs text-muted-foreground">
                                   {m.lowerIsBetter ? "越小越好" : "越大越好"}
@@ -191,14 +192,25 @@ export default function Alternatives({ scenario }: { scenario: string | null }) 
                         <Separator />
                         <div className="text-muted-foreground">
                           未核验 {(p.unverifiedRatio * 100).toFixed(0)}%
-                          {(p.depends ?? []).length > 0 && <> · 依赖 {(p.depends ?? []).join("、")}</>}
                         </div>
+                        {(p.depends ?? []).length > 0 && (
+                          <div className="text-muted-foreground">
+                            依据：
+                            <ul className="ml-4 list-disc">
+                              {(p.depends ?? []).map((x) => (
+                                <li key={x}>
+                                  <Dep value={x} />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                         <div className="text-muted-foreground">
-                          来源 {(p.sources ?? []).join("、")} · {p.at}
+                          来源 {(p.sources ?? []).join("、")} · 生成于 {p.at}
                         </div>
                         {p.chosen && (
                           <div className="text-emerald-700">
-                            由 {p.chosenBy} 选定 · {p.chooseReason}
+                            由 <Actor id={p.chosenBy} /> 选定 · {p.chooseReason}
                           </div>
                         )}
                       </div>

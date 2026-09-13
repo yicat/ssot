@@ -12,6 +12,7 @@ import App from "./App";
 import { useExperienceStore } from "./components/custom/Experience/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 const session = {
   dir: "projects/onmyoji",
@@ -85,6 +86,7 @@ function backend() {
       { dir: "projects/onmyoji", name: "onmyoji", path: "projects/onmyoji", description: "阴阳师", current: true },
     ])
     .on(CallID.Current, () => session)
+    .on(GlossaryCallID, () => glossaryFixture())
     .on(CallID.ProjectOverview, () => ({
       dir: "projects/onmyoji",
       name: "onmyoji",
@@ -161,12 +163,12 @@ describe("经验", () => {
     expect(screen.queryByLabelText(/级别/)).toBeNull();
     // 但级别与可信度上限必须可读
     expect(screen.getByText("可信度上限")).toBeInTheDocument();
-    expect(screen.getByText("L2")).toBeInTheDocument();
+    expect(screen.getAllByText(/L2/).length).toBeGreaterThan(0);
   });
 
   it("展示依据：会话记录与其中的位置", async () => {
     await goExperience();
-    expect(await screen.findByText(/s1#1/)).toBeInTheDocument();
+    expect(await screen.findByText(/会话 s1 第 1 句/)).toBeInTheDocument();
   });
 
   it("每个 3/4 级经验都带着它的级别，不被当成确定事实", async () => {

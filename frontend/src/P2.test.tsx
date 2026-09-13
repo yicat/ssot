@@ -13,6 +13,7 @@ import { useDataStore } from "./components/custom/DataExplorer/store";
 import { useRunStore } from "./components/custom/ScenarioRun/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 // ── 夹具 ────────────────────────────────────────────────────────────────────
 
@@ -219,6 +220,7 @@ function backend() {
       { dir: "projects/onmyoji", name: "onmyoji", path: "projects/onmyoji", description: "阴阳师", current: true },
     ])
     .on(CallID.Current, () => session)
+    .on(GlossaryCallID, () => glossaryFixture())
     .on(CallID.ProjectOverview, () => overview)
     .on(CallID.DataAssertions, () => ({
       items: [item()],
@@ -264,7 +266,11 @@ function navGroup(title: string): HTMLElement {
 }
 
 async function go(label: string, group: string) {
-  await userEvent.click(within(navGroup(group)).getByRole("button", { name: label }));
+  const btn = within(navGroup(group)).getByRole("button", { name: label });
+  // 场景分区在会话加载完成前是禁用的。等它可用再点——点了等于没点的话，
+  // 失败会指向断言那一行，而真正的原因在导航还没就绪。
+  await waitFor(() => expect(btn).toBeEnabled());
+  await userEvent.click(btn);
 }
 
 beforeEach(() => {
@@ -290,14 +296,16 @@ describe("数据页", () => {
 
   it("断言库列出断言，并给出「共几条 / 当前显示第几到第几」", async () => {
     await goData();
-    expect(await screen.findByText("skill/262_03")).toBeInTheDocument();
+    // 主体现在显示「名字（标识）」——中文在前，标识在后
+    expect(await screen.findByText(/天翔鹤斩/)).toBeInTheDocument();
+    expect(screen.getAllByText(/262_03/).length).toBeGreaterThan(0);
     expect(screen.getByText(/共/)).toBeInTheDocument();
     expect(screen.getAllByText("7792").length).toBeGreaterThan(0);
   });
 
   it("点一条断言能看到它的主体上的全部断言", async () => {
     await goData();
-    await userEvent.click(await screen.findByText("skill/262_03"));
+    await userEvent.click(await screen.findByText(/天翔鹤斩/));
     await waitFor(() => {
       expect(screen.getByText(/该主体上的 1 条断言/)).toBeInTheDocument();
     });
@@ -315,7 +323,9 @@ describe("数据页", () => {
   it("数据质量给出每个字段的覆盖率，必填字段标出来", async () => {
     await goData();
     await userEvent.click(await screen.findByRole("tab", { name: "数据质量" }));
-    expect(await screen.findByText("id")).toBeInTheDocument();
+    // 字段显示中文名 + 标识
+    expect(await screen.findByText(/技能唯一 ID/)).toBeInTheDocument();
+    expect(screen.getAllByText("id").length).toBeGreaterThan(0);
     expect(screen.getByText("51%")).toBeInTheDocument();
     expect(screen.getByText("*")).toBeInTheDocument();
   });
@@ -323,8 +333,11 @@ describe("数据页", () => {
   it("定义页展示字段的类型、单位与约束", async () => {
     await goData();
     await userEvent.click(await screen.findByRole("tab", { name: "定义" }));
-    expect(await screen.findByText("character_id")).toBeInTheDocument();
-    expect(screen.getByText("shikigami")).toBeInTheDocument();
+    // 字段、类型、目标实体都要有中文
+    expect((await screen.findAllByText(/所属式神/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("character_id").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/式神/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/引用/).length).toBeGreaterThan(0);
     expect(screen.getByText("身份 必填")).toBeInTheDocument();
   });
 });
@@ -407,7 +420,9 @@ describe("场景运行", () => {
 
     expect(await screen.findByText("1972.48 point")).toBeInTheDocument();
     expect(screen.getByText(/未核验 50%/)).toBeInTheDocument();
-    expect(screen.getByText("shikigami/262.atk")).toBeInTheDocument();
+    // 依赖的断言显示「主体名 + 字段中文名」
+    expect(screen.getByText(/姑获鸟/)).toBeInTheDocument();
+    expect(screen.getAllByText(/攻击/).length).toBeGreaterThan(0);
     expect(screen.getByText(/外部输入——\*\*始终未核验\*\*/)).toBeInTheDocument();
   });
 
@@ -428,4 +443,30 @@ describe("场景运行", () => {
     // 输入还在
     expect(screen.getByLabelText(/def_reduction/)).toHaveValue("0.5");
   });
+});
+// ── 词表 ────────────────────────────────────────────────────────────────────
+
+describe("界面上的标识符都带中文名", () => {
+  // 用户的原话是「变量没有 label，看不懂什么意思」。这条测试直接盯着那件事：
+  // 标识符可以出现（要能对账），但不能**只有**标识符。
+  it("字段与单位都以中文名打头", async () => {
+    render(<App />);
+    await screen.findByRole("navigation");
+    await go("数据", "项目");
+
+    // 字段：一级伤害倍率 + skill.ratio
+    expect(await screen.findByText(/一级伤害倍率/)).toBeInTheDocument();
+    expect(screen.getAllByText("skill.ratio").length).toBeGreaterThan(0);
+    // 分级：结构化 + L2
+    expect(screen.getAllByText(/结构化/).length).toBeGreaterThan(0);
+  });
+
+  it("主体显示名字，标识符退居其后", async () => {
+    render(<App />);
+    await screen.findByRole("navigation");
+    await go("数据", "项目");
+    // 姑获鸟（标识 262_03 是技能；这里断言技能名）
+    expect(await screen.findByText(/天翔鹤斩/)).toBeInTheDocument();
+  });
+
 });

@@ -31,6 +31,15 @@ import {
   TableRow,
 } from "../../ui/table";
 import { useScenarioRun } from "./useScenarioRun";
+import {
+  AssertionStatus,
+  ClaimRef,
+  Confidence,
+  Field,
+  Quantity,
+  Requirement,
+  Unit,
+} from "../Term";
 
 export default function ScenarioRun({ scenario }: { scenario: string | null }) {
   const [subject, setSubject] = useState("");
@@ -79,7 +88,7 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                 <div key={inp.name} className="grid gap-1">
                   <Label htmlFor={`run-${inp.name}`} className="text-xs text-muted-foreground">
                     {inp.name}
-                    <span className="ml-1 rounded bg-muted px-1 text-[10px]">{inp.unit}</span>
+                    <span className="ml-1 rounded bg-muted px-1 text-[10px]"><Unit name={inp.unit} /></span>
                     {inp.min !== null && inp.min !== undefined && (
                       <span className="ml-1 text-[10px]">
                         {inp.min} ~ {inp.max ?? "+∞"}
@@ -102,7 +111,10 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
               {(setup?.refs ?? []).map((ref) => (
                 <div key={ref.name} className="grid gap-1">
                   <Label htmlFor={`ref-${ref.name}`} className="text-xs text-muted-foreground">
-                    {ref.name}（来自 {ref.entity}.{ref.via}）
+                    {ref.name}
+                    <span className="ml-1 text-[10px]">
+                      来自 <Field entity={ref.entity} predicate={ref.via} />
+                    </span>
                   </Label>
                   <Select
                     value={r.refs[ref.name] ?? ""}
@@ -171,13 +183,13 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                 <TableBody>
                   {(setup?.requires ?? []).map((q) => (
                     <TableRow key={q.want}>
-                      <TableCell className="font-mono text-xs">
+                      <TableCell className="text-xs">
                         {q.status === "satisfied" ? (
                           <span className="text-emerald-700">✓</span>
                         ) : (
                           <span className="text-rose-700">✗</span>
                         )}{" "}
-                        {q.want}
+                        <Requirement want={q.want} />
                       </TableCell>
                       <TableCell className="text-right text-xs tabular-nums">
                         {q.have}/{q.total}（{(q.coverage * 100).toFixed(0)}%）
@@ -265,8 +277,10 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                             {(r.result.bindings ?? []).map((b) => (
                               <TableRow key={b.name}>
                                 <TableCell className="font-mono text-xs">{b.name}</TableCell>
-                                <TableCell className="tabular-nums">{b.value}</TableCell>
-                                <TableCell className="text-xs">{b.unit || "—"}</TableCell>
+                                <TableCell className="tabular-nums">
+                                  <Quantity value={b.value} unit={b.unit} />
+                                </TableCell>
+                                <TableCell className="text-xs">{b.unit ? <Unit name={b.unit} /> : "—"}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -305,12 +319,12 @@ export default function ScenarioRun({ scenario }: { scenario: string | null }) {
                           <TableBody>
                             {(r.result.unverified ?? []).map((c) => (
                               <TableRow key={c.id}>
-                                <TableCell className="font-mono text-xs">
-                                  {c.subject}.{c.predicate}
+                                <TableCell className="text-xs">
+                                  <ClaimRef claim={c} />
                                 </TableCell>
                                 <TableCell className="tabular-nums">{c.value}</TableCell>
-                                <TableCell className="text-xs">{c.confidence}</TableCell>
-                                <TableCell className="text-xs">{c.status}</TableCell>
+                                <TableCell className="text-xs"><Confidence value={c.confidence} /></TableCell>
+                                <TableCell className="text-xs"><AssertionStatus value={c.status} /></TableCell>
                               </TableRow>
                             ))}
                           </TableBody>

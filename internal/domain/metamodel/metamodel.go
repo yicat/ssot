@@ -229,3 +229,27 @@ func joinTypes() string {
 	}
 	return strings.Join(out, ", ")
 }
+
+// Label 返回类型的中文名。
+//
+// 界面上只写 `number` / `ref` 等于没写——定义是给人看的，
+// 中文名与原始标识一起显示，才既看得懂又对得上数据。
+func (t TypeName) Label() string {
+	switch t {
+	case TypeText:
+		return "文本"
+	case TypeNumber:
+		return "数值"
+	case TypeBool:
+		return "布尔"
+	case TypeEnum:
+		return "枚举"
+	case TypeRef:
+		return "引用"
+	case TypeObject:
+		return "对象"
+	case TypeList:
+		return "列表"
+	}
+	return string(t)
+}

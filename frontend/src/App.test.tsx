@@ -14,6 +14,7 @@ import { useDecisionStore } from "./components/custom/Decision/store";
 import { useReviewStore } from "./components/custom/Review/store";
 import { useSessionStore } from "./components/custom/Session/store";
 import { CallID, callMock } from "./test/mock-wails-runtime";
+import { GlossaryCallID, glossaryFixture } from "./test/glossary-fixture";
 
 // ── 夹具 ────────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,7 @@ function backend(over: {
   callMock
     .on(CallID.Projects, () => over.projects ?? [projectRef()])
     .on(CallID.Current, () => over.session ?? sessionFixture())
+    .on(GlossaryCallID, () => glossaryFixture())
     .on(CallID.ProjectOverview, () => over.overview ?? overviewFixture())
     .on(CallID.ScenarioOverview, () => over.scenarioOverview ?? scenarioOverviewFixture())
     .on(CallID.ReviewStats, () => ({
@@ -241,7 +243,11 @@ function navGroup(title: string): HTMLElement {
 
 /** 点击左栏某分区下的一个页面。 */
 async function go(label: string, group: string) {
-  await userEvent.click(within(navGroup(group)).getByRole("button", { name: label }));
+  const btn = within(navGroup(group)).getByRole("button", { name: label });
+  // 场景分区在会话加载完成前是禁用的。等它可用再点——点了等于没点的话，
+  // 失败会指向断言那一行，而真正的原因在导航还没就绪。
+  await waitFor(() => expect(btn).toBeEnabled());
+  await userEvent.click(btn);
 }
 beforeEach(() => {
   callMock.reset();
@@ -376,10 +382,20 @@ describe("场景概览", () => {
     expect(screen.getAllByText(/存在缺口/).length).toBeGreaterThan(0);
   });
 
+  // 用户的原话是「变量没有 label，看不懂什么意思」。这条直接盯着那件事：
+  // 标识符可以出现（要能对账），但不能**只有**标识符。
+  it("requires 显示「一级伤害倍率」而不是只有 skill.ratio", async () => {
+    await goScenario();
+    expect((await screen.findAllByText(/一级伤害倍率/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("skill.ratio").length).toBeGreaterThan(0);
+  });
+
   it("外部输入带单位与范围——没有量纲的输入框就是歧义制造机", async () => {
     await goScenario();
     expect(await screen.findByText("def_reduction")).toBeInTheDocument();
-    expect(screen.getByText("fraction")).toBeInTheDocument();
+    // 单位现在显示「小数 fraction」——中文名在前、标识符在后
+    expect(screen.getAllByText(/小数/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("fraction").length).toBeGreaterThan(0);
     expect(screen.getByText(/范围 0 ~ 1/)).toBeInTheDocument();
   });
 
@@ -420,12 +436,13 @@ describe("核验", () => {
 
   it("选中后展示溯源——原件、位置、修订都要能看到", async () => {
     await goQueue();
-    await userEvent.click(await screen.findByText("shikigami/262"));
+    await userEvent.click((await screen.findAllByText(/262/))[0]);
     await waitFor(() => {
       expect(screen.getByText("Data:Attribute.json")).toBeInTheDocument();
     });
     expect(screen.getByText("attributes[0].atk")).toBeInTheDocument();
-    expect(screen.getByText("revid:9263")).toBeInTheDocument();
+    // 修订标识现在写成「修订 9263」
+    expect(screen.getByText(/修订 9263/)).toBeInTheDocument();
   });
 
   it("批准需要批准者与理由——缺任一项不发请求", async () => {
@@ -436,7 +453,7 @@ describe("核验", () => {
     });
 
     await goQueue();
-    await userEvent.click(await screen.findByText("shikigami/262"));
+    await userEvent.click((await screen.findAllByText(/262/))[0]);
     await userEvent.click(screen.getByRole("button", { name: "批准" }));
 
     expect((await screen.findAllByText(/必须填写批准者/)).length).toBeGreaterThan(0);
@@ -451,7 +468,7 @@ describe("核验", () => {
     });
 
     await goQueue();
-    await userEvent.click(await screen.findByText("shikigami/262"));
+    await userEvent.click((await screen.findAllByText(/262/))[0]);
     await userEvent.type(screen.getByLabelText("批准者（必须是人）"), "yicat");
     await userEvent.type(screen.getByLabelText("理由（必填）"), "与原文逐字比对一致");
     await userEvent.click(screen.getByRole("button", { name: "批准" }));
@@ -468,7 +485,7 @@ describe("核验", () => {
       throw new Error("批准者必须是**人**");
     });
     await goQueue();
-    await userEvent.click(await screen.findByText("shikigami/262"));
+    await userEvent.click((await screen.findAllByText(/262/))[0]);
     await userEvent.type(screen.getByLabelText("批准者（必须是人）"), "x");
     await userEvent.type(screen.getByLabelText("理由（必填）"), "r");
     await userEvent.click(screen.getByRole("button", { name: "批准" }));
@@ -478,7 +495,7 @@ describe("核验", () => {
 
   it("选实测方法时才要求填依据", async () => {
     await goQueue();
-    await userEvent.click(await screen.findByText("shikigami/262"));
+    await userEvent.click((await screen.findAllByText(/262/))[0]);
     expect(screen.queryByLabelText(/依据（实测必填/)).toBeNull();
     await userEvent.click(screen.getByLabelText("方法"));
     await userEvent.click(await screen.findByRole("option", { name: "实测" }));
@@ -492,7 +509,8 @@ describe("核验", () => {
     await screen.findByRole("navigation");
     await go("冲突", "核验");
 
-    expect(await screen.findByText("605_01.character_id")).toBeInTheDocument();
+    // 冲突标题现在显示「主体名 + 字段中文名」，因此按主体断言
+    expect(await screen.findByText(/605_01/)).toBeInTheDocument();
     expect(screen.getByText("606 point")).toBeInTheDocument();
     expect(screen.getByText("605 point")).toBeInTheDocument();
     expect(screen.getByText(/Data:Character\/606\.json/)).toBeInTheDocument();
@@ -537,7 +555,7 @@ describe("待判定", () => {
 
   it("列出事项，并写出「为什么排在前面」", async () => {
     await goDecision();
-    expect(await screen.findByText("skill/262_03")).toBeInTheDocument();
+    expect((await screen.findAllByText(/262_03/)).length).toBeGreaterThan(0);
     expect(screen.getByText("候选仅 2 个，判断成本最低")).toBeInTheDocument();
   });
 
