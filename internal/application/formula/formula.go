@@ -8,6 +8,11 @@
 //
 // 「不能错」的最后一环是算对。数据再准，公式算错，结果就是错的；
 // 而公式若不透明、不可测，错误就无法被发现。
+//
+// 已知偏差（MVP 简化）：本包直接读 YAML 文件，而文件 I/O 本属基础设施。
+// 项目的分层铁律只约束**依赖方向**（application → domain，禁止反向），
+// 方向未被违反；但更干净的做法是把 YAML 解析挪到 infrastructure/specfile，
+// 由接口层把 DTO 转成这里的 Spec。留待 MVP 之后重构。
 package formula
 
 import (
