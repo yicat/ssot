@@ -49,7 +49,8 @@
 
 - Given 原文照抄的内容 When 记录 Then 分级为 L1，且必须能通过与原文比对**自动验证**
 - Given 从文本解析成字段的内容 When 记录 Then 分级为 L2，核验前不得作为权威
-- Given 由其他断言计算得出的内容 When 记录 Then 分级为 L3，且必须记录**推导链**
+- Given 由其他断言计算得出的内容 When 记录 Then 分级为 L3，且必须记录**推导链**；
+  **仅在上下文中立时固化为断言**，否则只作为场景中间结果（见 `derivation.spec.md`）
 - Given 凭理解补全的假设 When 记录 Then 必须分级为 L4，且**不得与 L1 混同展示**
 - Given 一条 L4 断言 When 被方案引用 Then 方案输出必须标注其中存在推断成分
 
@@ -156,6 +157,7 @@
 | `scenario.spec.md` | **场景**：项目内的一个用途（用途边界；`requires` 的载体） |
 | `metamodel.spec.md` | 断言可用的**类型与约束原语**（通用引擎的封闭集合） |
 | `computation.spec.md` | **表达式、量纲与时间**——场景声明领域规则的唯一途径 |
+| `derivation.spec.md` | **派生与缓存**——断言与方案之间的中间产物层次 |
 | `ingestion.spec.md` | **接入层**：取回、存档、解析 → 候选 |
 | `admission.spec.md` | **准入层**：候选 → 断言的守门人，产出变更集 |
 | `migration.spec.md` | schema 变更时**既有数据怎么办** |
