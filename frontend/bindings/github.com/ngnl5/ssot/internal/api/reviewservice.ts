@@ -25,20 +25,56 @@ export function Approve(id: string, by: string, method: string, reason: string, 
 }
 
 /**
- * History 返回某断言的核验历史。
+ * BatchApprove 批量批准。每条断言各自留下核验记录，审计轨迹不合并。
  */
-export function History(id: string): $CancellablePromise<$models.HistoryItem[]> {
-    return $Call.ByID(3004648246, id).then(($result: any) => {
+export function BatchApprove(f: $models.FilterInput, by: string, method: string, reason: string, evidence: string): $CancellablePromise<$models.BatchResult> {
+    return $Call.ByID(2878733075, f, by, method, reason, evidence).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
+ * BatchPreview 展示批量操作会选中什么——**执行前必须能看见影响面**。
+ */
+export function BatchPreview(f: $models.FilterInput): $CancellablePromise<$models.BatchPreview> {
+    return $Call.ByID(4077936422, f).then(($result: any) => {
         return $$createType1($result);
     });
 }
 
 /**
- * Pending 返回待核验队列。
+ * BatchReject 批量驳回。
+ */
+export function BatchReject(f: $models.FilterInput, by: string, reason: string): $CancellablePromise<$models.BatchResult> {
+    return $Call.ByID(473055153, f, by, reason).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
+/**
+ * Conflicts 返回冲突分组。**系统不裁决**，只把同一件事的说法摆在一起。
+ */
+export function Conflicts(): $CancellablePromise<$models.ConflictGroup[]> {
+    return $Call.ByID(641064245).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
+/**
+ * History 返回某断言的核验历史。
+ */
+export function History(id: string): $CancellablePromise<$models.HistoryItem[]> {
+    return $Call.ByID(3004648246, id).then(($result: any) => {
+        return $$createType5($result);
+    });
+}
+
+/**
+ * Pending 返回待核验队列（不排序，按主体谓词）。
  */
 export function Pending(entity: string, status: string, limit: number): $CancellablePromise<$models.Item[]> {
     return $Call.ByID(1871646081, entity, status, limit).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType7($result);
     });
 }
 
@@ -47,6 +83,15 @@ export function Pending(entity: string, status: string, limit: number): $Cancell
  */
 export function ProjectDir(): $CancellablePromise<string> {
     return $Call.ByID(50586622);
+}
+
+/**
+ * Queue 返回**按优先级排序**的核验队列，并强制包含抽检项。
+ */
+export function Queue(entity: string, status: string, limit: number, sampleRatio: number): $CancellablePromise<$models.QueueItem[]> {
+    return $Call.ByID(3654268873, entity, status, limit, sampleRatio).then(($result: any) => {
+        return $$createType9($result);
+    });
 }
 
 /**
@@ -61,13 +106,19 @@ export function Reject(id: string, by: string, reason: string): $CancellableProm
  */
 export function Stats(): $CancellablePromise<$models.Stats> {
     return $Call.ByID(268982341).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType10($result);
     });
 }
 
 // Private type creation functions
-const $$createType0 = $models.HistoryItem.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.Item.createFrom;
+const $$createType0 = $models.BatchResult.createFrom;
+const $$createType1 = $models.BatchPreview.createFrom;
+const $$createType2 = $models.ConflictGroup.createFrom;
 const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.Stats.createFrom;
+const $$createType4 = $models.HistoryItem.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.Item.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = $models.QueueItem.createFrom;
+const $$createType9 = $Create.Array($$createType8);
+const $$createType10 = $models.Stats.createFrom;

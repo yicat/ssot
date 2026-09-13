@@ -34,9 +34,14 @@ function createEventsMock() {
 /** 后端方法的调用 ID，与 bindings 中生成的一致。 */
 export const CallID = {
   Approve: 3028409479,
+  BatchApprove: 2878733075,
+  BatchPreview: 4077936422,
+  BatchReject: 473055153,
+  Conflicts: 641064245,
   History: 3004648246,
   Pending: 1871646081,
   ProjectDir: 50586622,
+  Queue: 3654268873,
   Reject: 888414013,
   Stats: 268982341,
 } as const;

@@ -7,7 +7,12 @@ export {
 };
 
 export {
+    BatchPreview,
+    BatchResult,
+    ConflictGroup,
+    FilterInput,
     HistoryItem,
     Item,
+    QueueItem,
     Stats
 } from "./models.js";

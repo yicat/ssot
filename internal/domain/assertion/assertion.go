@@ -11,6 +11,7 @@ package assertion
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/domain/value"
@@ -138,6 +139,42 @@ func ValueJSON(v value.Value) string {
 		return "<unserializable>"
 	}
 	return string(b)
+}
+
+// Filter 是断言查询条件。空字段表示不限定。
+type Filter struct {
+	Entity     string
+	Status     string
+	Predicate  string
+	Artifact   string
+	Revision   string
+	Confidence string
+	Subject    string
+	Limit      int
+}
+
+// Describe 返回人类可读的筛选描述。
+//
+// 无条件时必须**显式提示**——它一次会选中全部断言，批量操作前
+// 不能让人误以为筛得很精确。
+func (f Filter) Describe() string {
+	var parts []string
+	add := func(k, v string) {
+		if v != "" {
+			parts = append(parts, k+"="+v)
+		}
+	}
+	add("实体", f.Entity)
+	add("状态", f.Status)
+	add("谓词", f.Predicate)
+	add("原件", f.Artifact)
+	add("修订", f.Revision)
+	add("分级", f.Confidence)
+	add("主体", f.Subject)
+	if len(parts) == 0 {
+		return "（无条件——这会选中全部断言）"
+	}
+	return strings.Join(parts, " 且 ")
 }
 
 // ChangeSet 是一批待应用的变更。

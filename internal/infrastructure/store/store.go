@@ -450,6 +450,109 @@ func (s *Store) VerificationCount() (int, error) {
 	return n, err
 }
 
+// ── 优先级、冲突与批量筛选 ──────────────────────────────────────────────────
+
+// ReferenceCounts 统计每条断言被多少条派生断言引用。
+//
+// 这是「影响面」的数据来源：一条数据被 20 个派生引用，它错了波及 20 处。
+// 只统计推导链——场景运行时的临时引用没有持久化，因此不在其中。
+func (s *Store) ReferenceCounts() (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT derived_json FROM assertion WHERE derived_json IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var d assertion.Derivation
+		if err := json.Unmarshal([]byte(raw), &d); err != nil {
+			continue
+		}
+		for _, in := range d.Inputs {
+			out[in]++
+		}
+	}
+	return out, rows.Err()
+}
+
+// Conflicts 返回互相冲突的断言分组：同一身份（主体+谓词+限定条件）而有不同取值。
+//
+// 分组而非成对，是因为同一件事可能有三种说法。系统只负责摆出来，
+// **不替人裁决**。
+func (s *Store) Conflicts() ([][]assertion.Assertion, error) {
+	rows, err := s.db.Query(`SELECT key FROM assertion GROUP BY key HAVING count(*) > 1 ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	var keys []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		keys = append(keys, k)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([][]assertion.Assertion, 0, len(keys))
+	for _, k := range keys {
+		rs, err := s.db.Query(`SELECT `+assertionCols+` FROM assertion WHERE key = ? ORDER BY source_name, id`, k)
+		if err != nil {
+			return nil, err
+		}
+		group, err := scanAll(rs)
+		rs.Close()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, group)
+	}
+	return out, nil
+}
+
+// Filter 是断言查询条件。
+//
+// 它是别名而非新类型：筛选条件是**关于断言的概念**，归领域层；
+// 存储层只负责把它翻译成 SQL。
+type Filter = assertion.Filter
+
+// Select 按条件查询断言。
+func (s *Store) Select(f assertion.Filter) ([]assertion.Assertion, error) {
+	q := `SELECT ` + assertionCols + ` FROM assertion WHERE 1=1`
+	var args []any
+	for _, c := range []struct {
+		col, val string
+	}{
+		{"entity", f.Entity}, {"status", f.Status}, {"predicate", f.Predicate},
+		{"artifact", f.Artifact}, {"revision", f.Revision},
+		{"confidence", f.Confidence}, {"subject", f.Subject},
+	} {
+		if c.val != "" {
+			q += ` AND ` + c.col + ` = ?`
+			args = append(args, c.val)
+		}
+	}
+	q += ` ORDER BY entity, subject, predicate`
+	if f.Limit > 0 {
+		q += fmt.Sprintf(` LIMIT %d`, f.Limit)
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAll(rows)
+}
+
 func scanAll(rows *sql.Rows) ([]assertion.Assertion, error) {
 	var out []assertion.Assertion
 	for rows.Next() {

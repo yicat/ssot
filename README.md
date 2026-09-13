@@ -53,10 +53,28 @@ go run ./cmd/ssot derive projects/onmyoji crit_factor
 # 查看断言库状态
 go run ./cmd/ssot status projects/onmyoji
 
+# 核验队列（按优先级排序，强制含抽检项）
+go run ./cmd/ssot review projects/onmyoji queue --limit 20 --sample 0.05
+
+# 冲突成组呈现（系统不裁决）
+go run ./cmd/ssot review projects/onmyoji conflicts
+
+# 批量核验（默认只预览，加 --yes 才执行）
+go run ./cmd/ssot review projects/onmyoji batch approve `
+  --where "entity=skill" --where "predicate=cost" `
+  --by "你的名字" --reason "与原件逐字比对一致"
+
+# 单条核验
+go run ./cmd/ssot review projects/onmyoji approve <断言ID> --by "你的名字" --reason "..."
+
 # 运行场景
 go run ./cmd/ssot run projects/onmyoji damage-calc 262 `
-  --bind "ratio=80 percent" --bind "def_reduction=0.5 fraction"
+  --ref "ratio=skill:262_01" --bind "def_reduction=0.5 fraction"
 ```
+
+**核验优先级**说明：`争议 > 影响面（被派生引用次数）> 分级（L4 最需核验）`，
+并强制包含随机抽检项——否则人会只核验「显眼」的部分，系统性错误永远发现不了。
+抽检用固定种子，**「随机」不等于「不可复现」**，出问题能重放同一批。
 
 开发规范见 `AGENTS.md`，规格见 `docs/specs/`。
 

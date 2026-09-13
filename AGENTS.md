@@ -29,6 +29,7 @@
 │  │  ├─ admit/             # 准入：候选 → 变更集
 │  │  ├─ formula/           # 公式加载、算例验证与求值
 │  │  ├─ derive/            # 派生：由断言产出 L3 断言
+│  │  ├─ review/            # 核验编排：优先级、冲突、批量
 │  │  └─ scenario/          # 场景：requires 检查与运行
 │  ├─ infrastructure/       # 基础设施：外部适配
 │  │  ├─ store/             # SQLite 断言库与核验记录（原子应用）

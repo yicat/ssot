@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ngnl5/ssot/internal/application/review"
 	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/verification"
@@ -31,6 +32,25 @@ type Item struct {
 	Revision   string `json:"revision"`
 }
 
+// QueueItem 是带优先级的队列项。
+//
+// 除了断言本身，它还带上「为什么排在前面」——排在前面的理由必须可见，
+// 否则人只能盲信排序。
+type QueueItem struct {
+	Item    Item   `json:"item"`
+	Tier    string `json:"tier"`
+	Reason  string `json:"reason"`
+	Score   int    `json:"score"`
+	Sampled bool   `json:"sampled"`
+}
+
+// ConflictGroup 是一组互相冲突的断言。
+type ConflictGroup struct {
+	Subject   string `json:"subject"`
+	Predicate string `json:"predicate"`
+	Claims    []Item `json:"claims"`
+}
+
 // HistoryItem 是一条核验记录（面向界面）。
 type HistoryItem struct {
 	Decision   string `json:"decision"`
@@ -42,13 +62,49 @@ type HistoryItem struct {
 	At         string `json:"at"`
 }
 
+// FilterInput 是批量筛选条件（面向界面）。
+type FilterInput struct {
+	Entity     string `json:"entity"`
+	Status     string `json:"status"`
+	Predicate  string `json:"predicate"`
+	Artifact   string `json:"artifact"`
+	Revision   string `json:"revision"`
+	Confidence string `json:"confidence"`
+	Subject    string `json:"subject"`
+	Limit      int    `json:"limit"`
+}
+
+func (f FilterInput) toDomain() assertion.Filter {
+	return assertion.Filter{
+		Entity: f.Entity, Status: f.Status, Predicate: f.Predicate,
+		Artifact: f.Artifact, Revision: f.Revision,
+		Confidence: f.Confidence, Subject: f.Subject, Limit: f.Limit,
+	}
+}
+
+// BatchPreview 是批量操作的预览结果。
+type BatchPreview struct {
+	Matched int    `json:"matched"`
+	Where   string `json:"where"`
+	Sample  []Item `json:"sample"`
+}
+
+// BatchResult 是批量操作的结果。
+type BatchResult struct {
+	Matched int    `json:"matched"`
+	Applied int    `json:"applied"`
+	Failed  int    `json:"failed"`
+	FirstErr string `json:"firstErr"`
+}
+
 // Stats 是库的整体状态。
 type Stats struct {
-	Total        int            `json:"total"`
-	ByStatus     map[string]int `json:"byStatus"`
-	ByEntity     map[string]int `json:"byEntity"`
-	ByConfidence map[string]int `json:"byConfidence"`
-	Verifications int           `json:"verifications"`
+	Total         int            `json:"total"`
+	ByStatus      map[string]int `json:"byStatus"`
+	ByEntity      map[string]int `json:"byEntity"`
+	ByConfidence  map[string]int `json:"byConfidence"`
+	Verifications int            `json:"verifications"`
+	Conflicts     int            `json:"conflicts"`
 }
 
 // ReviewService 是核验工作台的后端。
@@ -105,7 +161,7 @@ func toItem(a assertion.Assertion) Item {
 	}
 }
 
-// Pending 返回待核验队列。
+// Pending 返回待核验队列（不排序，按主体谓词）。
 func (s *ReviewService) Pending(entity, status string, limit int) ([]Item, error) {
 	p, err := s.project()
 	if err != nil {
@@ -114,13 +170,61 @@ func (s *ReviewService) Pending(entity, status string, limit int) ([]Item, error
 	if status == "" {
 		status = string(assertion.StatusPending)
 	}
-	as, err := p.Store.PendingByEntity(entity, status, limit)
+	as, err := p.Store.Select(assertion.Filter{Entity: entity, Status: status, Limit: limit})
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Item, 0, len(as))
 	for _, a := range as {
 		out = append(out, toItem(a))
+	}
+	return out, nil
+}
+
+// Queue 返回**按优先级排序**的核验队列，并强制包含抽检项。
+func (s *ReviewService) Queue(entity, status string, limit int, sampleRatio float64) ([]QueueItem, error) {
+	p, err := s.project()
+	if err != nil {
+		return nil, err
+	}
+	if status == "" {
+		status = string(assertion.StatusPending)
+	}
+	items, err := review.Queue(p.Store,
+		assertion.Filter{Entity: entity, Status: status}, limit, sampleRatio, 1)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]QueueItem, 0, len(items))
+	for _, it := range items {
+		out = append(out, QueueItem{
+			Item:    toItem(it.Assertion),
+			Tier:    string(it.Priority.Tier),
+			Reason:  it.Priority.Reason,
+			Score:   it.Priority.Score,
+			Sampled: it.Priority.Sampled,
+		})
+	}
+	return out, nil
+}
+
+// Conflicts 返回冲突分组。**系统不裁决**，只把同一件事的说法摆在一起。
+func (s *ReviewService) Conflicts() ([]ConflictGroup, error) {
+	p, err := s.project()
+	if err != nil {
+		return nil, err
+	}
+	groups, err := review.Conflicts(p.Store)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ConflictGroup, 0, len(groups))
+	for _, g := range groups {
+		claims := make([]Item, 0, len(g.Claims))
+		for _, a := range g.Claims {
+			claims = append(claims, toItem(a))
+		}
+		out = append(out, ConflictGroup{Subject: g.Subject, Predicate: g.Predicate, Claims: claims})
 	}
 	return out, nil
 }
@@ -151,7 +255,70 @@ func (s *ReviewService) Stats() (Stats, error) {
 		return st, err
 	}
 	st.Verifications = n
+	cg, err := p.Store.Conflicts()
+	if err != nil {
+		return st, err
+	}
+	st.Conflicts = len(cg)
 	return st, nil
+}
+
+// BatchPreview 展示批量操作会选中什么——**执行前必须能看见影响面**。
+func (s *ReviewService) BatchPreview(f FilterInput) (BatchPreview, error) {
+	p, err := s.project()
+	if err != nil {
+		return BatchPreview{}, err
+	}
+	df := f.toDomain()
+	as, err := review.Preview(p.Store, df)
+	if err != nil {
+		return BatchPreview{}, err
+	}
+	if df.Status == "" {
+		df.Status = string(assertion.StatusPending)
+	}
+	sample := make([]Item, 0, 5)
+	for i, a := range as {
+		if i >= 5 {
+			break
+		}
+		sample = append(sample, toItem(a))
+	}
+	return BatchPreview{Matched: len(as), Where: df.Describe(), Sample: sample}, nil
+}
+
+// BatchApprove 批量批准。每条断言各自留下核验记录，审计轨迹不合并。
+func (s *ReviewService) BatchApprove(f FilterInput, by, method, reason, evidence string) (BatchResult, error) {
+	return s.batch(f, verification.Approved, by, method, reason, evidence)
+}
+
+// BatchReject 批量驳回。
+func (s *ReviewService) BatchReject(f FilterInput, by, reason string) (BatchResult, error) {
+	return s.batch(f, verification.Rejected, by, "editorial", reason, "")
+}
+
+func (s *ReviewService) batch(f FilterInput, dec verification.Decision, by, method, reason, evidence string) (BatchResult, error) {
+	p, err := s.project()
+	if err != nil {
+		return BatchResult{}, err
+	}
+	if method == "" {
+		method = "editorial"
+	}
+	res, err := review.Batch(p.Store, p.Store, review.BatchInput{
+		Filter:   f.toDomain(),
+		Decision: dec,
+		Method:   verification.Method(method),
+		By:       by,
+		Reason:   reason,
+		Evidence: evidence,
+		Proposed: "ingest-pipeline",
+	}, time.Now().UTC())
+	out := BatchResult{Matched: res.Matched, Applied: res.Applied, Failed: res.Failed}
+	if res.FirstErr != nil {
+		out.FirstErr = res.FirstErr.Error()
+	}
+	return out, err
 }
 
 // Approve 批准一条断言。

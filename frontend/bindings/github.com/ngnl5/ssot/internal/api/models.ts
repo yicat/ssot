@@ -6,6 +6,166 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * BatchPreview 是批量操作的预览结果。
+ */
+export class BatchPreview {
+    "matched": number;
+    "where": string;
+    "sample": Item[];
+
+    /** Creates a new BatchPreview instance. */
+    constructor($$source: Partial<BatchPreview> = {}) {
+        if (!("matched" in $$source)) {
+            this["matched"] = 0;
+        }
+        if (!("where" in $$source)) {
+            this["where"] = "";
+        }
+        if (!("sample" in $$source)) {
+            this["sample"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BatchPreview instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BatchPreview {
+        const $$createField2_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("sample" in $$parsedSource) {
+            $$parsedSource["sample"] = $$createField2_0($$parsedSource["sample"]);
+        }
+        return new BatchPreview($$parsedSource as Partial<BatchPreview>);
+    }
+}
+
+/**
+ * BatchResult 是批量操作的结果。
+ */
+export class BatchResult {
+    "matched": number;
+    "applied": number;
+    "failed": number;
+    "firstErr": string;
+
+    /** Creates a new BatchResult instance. */
+    constructor($$source: Partial<BatchResult> = {}) {
+        if (!("matched" in $$source)) {
+            this["matched"] = 0;
+        }
+        if (!("applied" in $$source)) {
+            this["applied"] = 0;
+        }
+        if (!("failed" in $$source)) {
+            this["failed"] = 0;
+        }
+        if (!("firstErr" in $$source)) {
+            this["firstErr"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new BatchResult instance from a string or object.
+     */
+    static createFrom($$source: any = {}): BatchResult {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new BatchResult($$parsedSource as Partial<BatchResult>);
+    }
+}
+
+/**
+ * ConflictGroup 是一组互相冲突的断言。
+ */
+export class ConflictGroup {
+    "subject": string;
+    "predicate": string;
+    "claims": Item[];
+
+    /** Creates a new ConflictGroup instance. */
+    constructor($$source: Partial<ConflictGroup> = {}) {
+        if (!("subject" in $$source)) {
+            this["subject"] = "";
+        }
+        if (!("predicate" in $$source)) {
+            this["predicate"] = "";
+        }
+        if (!("claims" in $$source)) {
+            this["claims"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ConflictGroup instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ConflictGroup {
+        const $$createField2_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("claims" in $$parsedSource) {
+            $$parsedSource["claims"] = $$createField2_0($$parsedSource["claims"]);
+        }
+        return new ConflictGroup($$parsedSource as Partial<ConflictGroup>);
+    }
+}
+
+/**
+ * FilterInput 是批量筛选条件（面向界面）。
+ */
+export class FilterInput {
+    "entity": string;
+    "status": string;
+    "predicate": string;
+    "artifact": string;
+    "revision": string;
+    "confidence": string;
+    "subject": string;
+    "limit": number;
+
+    /** Creates a new FilterInput instance. */
+    constructor($$source: Partial<FilterInput> = {}) {
+        if (!("entity" in $$source)) {
+            this["entity"] = "";
+        }
+        if (!("status" in $$source)) {
+            this["status"] = "";
+        }
+        if (!("predicate" in $$source)) {
+            this["predicate"] = "";
+        }
+        if (!("artifact" in $$source)) {
+            this["artifact"] = "";
+        }
+        if (!("revision" in $$source)) {
+            this["revision"] = "";
+        }
+        if (!("confidence" in $$source)) {
+            this["confidence"] = "";
+        }
+        if (!("subject" in $$source)) {
+            this["subject"] = "";
+        }
+        if (!("limit" in $$source)) {
+            this["limit"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new FilterInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): FilterInput {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new FilterInput($$parsedSource as Partial<FilterInput>);
+    }
+}
+
+/**
  * HistoryItem 是一条核验记录（面向界面）。
  */
 export class HistoryItem {
@@ -122,6 +282,53 @@ export class Item {
 }
 
 /**
+ * QueueItem 是带优先级的队列项。
+ * 
+ * 除了断言本身，它还带上「为什么排在前面」——排在前面的理由必须可见，
+ * 否则人只能盲信排序。
+ */
+export class QueueItem {
+    "item": Item;
+    "tier": string;
+    "reason": string;
+    "score": number;
+    "sampled": boolean;
+
+    /** Creates a new QueueItem instance. */
+    constructor($$source: Partial<QueueItem> = {}) {
+        if (!("item" in $$source)) {
+            this["item"] = (new Item());
+        }
+        if (!("tier" in $$source)) {
+            this["tier"] = "";
+        }
+        if (!("reason" in $$source)) {
+            this["reason"] = "";
+        }
+        if (!("score" in $$source)) {
+            this["score"] = 0;
+        }
+        if (!("sampled" in $$source)) {
+            this["sampled"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new QueueItem instance from a string or object.
+     */
+    static createFrom($$source: any = {}): QueueItem {
+        const $$createField0_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("item" in $$parsedSource) {
+            $$parsedSource["item"] = $$createField0_0($$parsedSource["item"]);
+        }
+        return new QueueItem($$parsedSource as Partial<QueueItem>);
+    }
+}
+
+/**
  * Stats 是库的整体状态。
  */
 export class Stats {
@@ -130,6 +337,7 @@ export class Stats {
     "byEntity": { [_ in string]?: number };
     "byConfidence": { [_ in string]?: number };
     "verifications": number;
+    "conflicts": number;
 
     /** Creates a new Stats instance. */
     constructor($$source: Partial<Stats> = {}) {
@@ -148,6 +356,9 @@ export class Stats {
         if (!("verifications" in $$source)) {
             this["verifications"] = 0;
         }
+        if (!("conflicts" in $$source)) {
+            this["conflicts"] = 0;
+        }
 
         Object.assign(this, $$source);
     }
@@ -156,9 +367,9 @@ export class Stats {
      * Creates a new Stats instance from a string or object.
      */
     static createFrom($$source: any = {}): Stats {
-        const $$createField1_0 = $$createType0;
-        const $$createField2_0 = $$createType0;
-        const $$createField3_0 = $$createType0;
+        const $$createField1_0 = $$createType2;
+        const $$createField2_0 = $$createType2;
+        const $$createField3_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("byStatus" in $$parsedSource) {
             $$parsedSource["byStatus"] = $$createField1_0($$parsedSource["byStatus"]);
@@ -174,4 +385,6 @@ export class Stats {
 }
 
 // Private type creation functions
-const $$createType0 = $Create.Map($Create.Any, $Create.Any);
+const $$createType0 = Item.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = $Create.Map($Create.Any, $Create.Any);

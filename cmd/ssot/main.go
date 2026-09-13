@@ -23,11 +23,13 @@ import (
 	"github.com/ngnl5/ssot/internal/application/derive"
 	"github.com/ngnl5/ssot/internal/application/formula"
 	"github.com/ngnl5/ssot/internal/application/ingest"
+	"github.com/ngnl5/ssot/internal/application/review"
 	"github.com/ngnl5/ssot/internal/application/scenario"
 	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/ngnl5/ssot/internal/domain/assertion"
 	"github.com/ngnl5/ssot/internal/domain/verification"
 	"github.com/ngnl5/ssot/internal/infrastructure/artifact"
+	"github.com/ngnl5/ssot/internal/infrastructure/store"
 )
 
 func main() {
@@ -203,7 +205,7 @@ func cmdSync(args []string) error {
 	if err != nil {
 		return err
 	}
-	revs, err := loadRevisions(*manifestPath)
+	pages, err := loadRevisions(*manifestPath)
 	if err != nil {
 		return err
 	}
@@ -217,11 +219,11 @@ func cmdSync(args []string) error {
 	for _, ent := range entities {
 		switch ent {
 		case "shikigami":
-			if err := syncShikigami(p, arts, revs, *parser); err != nil {
+			if err := syncShikigami(p, arts, pages, *parser); err != nil {
 				return err
 			}
 		case "skill":
-			if err := syncSkills(p, arts, revs); err != nil {
+			if err := syncSkills(p, arts, pages); err != nil {
 				return err
 			}
 		default:
@@ -235,11 +237,18 @@ func cmdSync(args []string) error {
 
 // revInfo 是一个原件的修订标识与采集时间——溯源的本体。
 type revInfo struct {
+	Title      string
 	Revision   string
 	CapturedAt time.Time
 }
 
-func loadRevisions(path string) (map[string]revInfo, error) {
+// loadRevisions 读同步清单。
+//
+// **以清单为遍历基准**，而不是以原件目录为基准：清单记录了「这次同步到底抓了什么、
+// 每份的修订号是多少」。改从目录反推的话，标题形式（带不带扩展名）就会对不上，
+// 溯源会退化成 unknown——实测踩过：清单标题是 `Data:Character/605.json`，
+// 而目录反推得到 `Data:Character/605`，查不到修订号。
+func loadRevisions(path string) ([]revInfo, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("读取清单失败：%w", err)
@@ -249,20 +258,33 @@ func loadRevisions(path string) (map[string]revInfo, error) {
 		return nil, fmt.Errorf("解析清单失败：%w", err)
 	}
 	fallback, _ := time.Parse(time.RFC3339, m.FetchedAt)
-	out := map[string]revInfo{}
+	out := make([]revInfo, 0, len(m.Pages))
 	for _, pg := range m.Pages {
 		t, _ := time.Parse(time.RFC3339, pg.Anchor)
 		if t.IsZero() {
 			t = fallback
 		}
-		out[pg.Title] = revInfo{Revision: fmt.Sprintf("revid:%d", pg.Revid), CapturedAt: t}
+		out = append(out, revInfo{
+			Title:      pg.Title,
+			Revision:   fmt.Sprintf("revid:%d", pg.Revid),
+			CapturedAt: t,
+		})
 	}
 	return out, nil
 }
 
-func syncShikigami(p *project, arts *artifact.Store, revs map[string]revInfo, parser string) error {
+func findPage(pages []revInfo, title string) (revInfo, bool) {
+	for _, p := range pages {
+		if p.Title == title {
+			return p, true
+		}
+	}
+	return revInfo{}, false
+}
+
+func syncShikigami(p *project, arts *artifact.Store, pages []revInfo, parser string) error {
 	const title = "Data:Attribute.json"
-	ri, ok := revs[title]
+	ri, ok := findPage(pages, title)
 	if !ok {
 		return fmt.Errorf("清单中没有 %s", title)
 	}
@@ -289,46 +311,45 @@ func syncShikigami(p *project, arts *artifact.Store, revs map[string]revInfo, pa
 	return applyCandidates(p, "shikigami", cands, ri.CapturedAt)
 }
 
-func syncSkills(p *project, arts *artifact.Store, revs map[string]revInfo) error {
-	files, err := arts.List()
-	if err != nil {
-		return err
-	}
+func syncSkills(p *project, arts *artifact.Store, pages []revInfo) error {
 	var cands []ingest.Candidate
 	var unresolved []ingest.Unresolved
 	var stats ingest.SkillStats
-	filesRead := 0
+	filesRead, missing := 0, 0
 	var latest time.Time
 
-	for _, f := range files {
-		title := artifact.Title(f)
-		if !strings.HasPrefix(title, "Data:Character/") {
+	for _, pg := range pages {
+		if !strings.HasPrefix(pg.Title, "Data:Character/") {
 			continue
 		}
-		ri, ok := revs[title]
-		if !ok {
-			ri = revInfo{Revision: "unknown"}
+		file, err := arts.Find(pg.Title)
+		if err != nil {
+			// 清单里有、原件目录里没有——不静默跳过，要报出来
+			fmt.Printf("  ⚠ 清单中的 %s 在原件目录中缺失\n", pg.Title)
+			missing++
+			continue
 		}
-		body, _, err := arts.Read(f)
+		body, _, err := arts.Read(file)
 		if err != nil {
 			return err
 		}
-		ex, err := ingest.SkillsJSON(title, body, ri.Revision, ri.CapturedAt)
+		ex, err := ingest.SkillsJSON(pg.Title, body, pg.Revision, pg.CapturedAt)
 		if err != nil {
 			// 单个文件解析失败不应中断整批，但必须报告
-			fmt.Printf("  ⚠ 跳过 %s：%v\n", title, err)
+			fmt.Printf("  ⚠ 跳过 %s：%v\n", pg.Title, err)
 			continue
 		}
 		cands = append(cands, ex.Candidates...)
 		unresolved = append(unresolved, ex.Unresolved...)
 		stats.Add(ex.Stats)
 		filesRead++
-		if ri.CapturedAt.After(latest) {
-			latest = ri.CapturedAt
+		if pg.CapturedAt.After(latest) {
+			latest = pg.CapturedAt
 		}
 	}
 
-	fmt.Printf("\n── 技能 ──\n读取 %d 个角色文件，解析 %d 个候选\n", filesRead, len(cands))
+	fmt.Printf("\n── 技能 ──\n读取 %d 个角色文件（清单缺失 %d），解析 %d 个候选\n",
+		filesRead, missing, len(cands))
 	if err := applyCandidates(p, "skill", cands, latest); err != nil {
 		return err
 	}
@@ -497,6 +518,14 @@ func formulaNames(m map[string]*formula.Formula) string {
 
 // ── review ─────────────────────────────────────────────────────────────────
 
+type whereFlags []string
+
+func (w *whereFlags) String() string { return strings.Join(*w, ",") }
+func (w *whereFlags) Set(v string) error {
+	*w = append(*w, v)
+	return nil
+}
+
 func cmdReview(args []string) error {
 	fs := flag.NewFlagSet("review", flag.ContinueOnError)
 	entity := fs.String("entity", "", "限定实体（空表示全部）")
@@ -507,13 +536,18 @@ func cmdReview(args []string) error {
 	reason := fs.String("reason", "", "理由（必填）")
 	evidence := fs.String("evidence", "", "依据。以 measurement 核验时必填：版本、配置、样本数")
 	proposedBy := fs.String("proposed-by", "ingest-pipeline", "提出者（agent 标识）")
+	sample := fs.Float64("sample", 0, "强制随机抽检比例（0~1），抽检项不会被高分项挤出队列")
+	seed := fs.Int64("seed", 1, "抽检随机种子——「随机」不等于「不可复现」")
+	var wheres whereFlags
+	fs.Var(&wheres, "where", "批量筛选条件，格式 字段=值，可重复")
+	yes := fs.Bool("yes", false, "批量操作默认只预览；加此项才真正执行")
 
 	fargs, pos := splitFlags(args)
 	if err := fs.Parse(fargs); err != nil {
 		return err
 	}
 	if len(pos) < 2 {
-		return fmt.Errorf("需要项目目录与子命令（list / approve / reject / log）")
+		return fmt.Errorf("需要项目目录与子命令（queue / list / conflicts / batch / approve / reject / log）")
 	}
 	dir, sub := pos[0], pos[1]
 
@@ -524,8 +558,17 @@ func cmdReview(args []string) error {
 	defer p.Close()
 
 	switch sub {
+	case "queue":
+		return reviewQueue(p, *entity, *status, *limit, *sample, *seed)
 	case "list":
 		return reviewList(p, *entity, *status, *limit)
+	case "conflicts":
+		return reviewConflicts(p)
+	case "batch":
+		if len(pos) < 3 {
+			return fmt.Errorf("batch 需要 approve 或 reject")
+		}
+		return reviewBatch(p, pos[2], wheres, *by, *method, *reason, *evidence, *proposedBy, *yes)
 	case "approve", "reject":
 		if len(pos) < 3 {
 			return fmt.Errorf("%s 需要断言 ID（或其前缀）", sub)
@@ -541,7 +584,7 @@ func cmdReview(args []string) error {
 		}
 		return reviewLog(p, pos[2])
 	default:
-		return fmt.Errorf("未知子命令 %q（可用：list / approve / reject / log）", sub)
+		return fmt.Errorf("未知子命令 %q（可用：queue / list / conflicts / batch / approve / reject / log）", sub)
 	}
 }
 
@@ -570,6 +613,183 @@ func reviewList(p *project, entity, status string, limit int) error {
 	fmt.Printf("\n批准：ssot review %s approve <ID> --by <你的名字> --reason \"...\"\n", p.Dir)
 	fmt.Printf("驳回：ssot review %s reject  <ID> --by <你的名字> --reason \"...\"\n", p.Dir)
 	return nil
+}
+
+// reviewQueue 按优先级列出待核验项，并说明「为什么它排在前面」。
+//
+// 排序规则见 docs/specs/verification.spec.md「人力的分配」：
+// 争议 > 影响面 > 分级，且**必须包含随机抽检**——
+// 否则人会只核验「显眼」的部分，系统性错误永远发现不了。
+func reviewQueue(p *project, entity, status string, limit int, sampleRatio float64, seed int64) error {
+	total, err := p.Store.Select(assertion.Filter{Entity: entity, Status: status})
+	if err != nil {
+		return err
+	}
+	if len(total) == 0 {
+		fmt.Printf("没有状态为 %s 的断言\n", status)
+		return nil
+	}
+
+	// 排序规则与抽检都在应用层，CLI 与 GUI 共用同一套
+	items, err := review.Queue(p.Store,
+		assertion.Filter{Entity: entity, Status: status}, limit, sampleRatio, seed)
+	if err != nil {
+		return err
+	}
+
+	sampled := 0
+	for _, it := range items {
+		if it.Priority.Sampled {
+			sampled++
+		}
+	}
+	fmt.Printf("核验队列（状态 %s，共 %d 条，显示 %d 条）\n", status, len(total), len(items))
+	if sampleRatio > 0 {
+		fmt.Printf("本次强制抽检 %d 条（比例 %.0f%%，种子 %d）\n", sampled, sampleRatio*100, seed)
+	}
+	fmt.Println()
+	fmt.Printf("%-3s %-18s %-10s %-8s %-13s %-18s %-8s %s\n",
+		"#", "断言 ID", "实体", "主体", "谓词", "取值", "类别", "主导理由")
+	for i, it := range items {
+		a := it.Assertion
+		v := a.Value.String()
+		if runes := []rune(v); len(runes) > 16 {
+			v = string(runes[:16]) + "…"
+		}
+		tier := string(it.Priority.Tier)
+		if it.Priority.Sampled && it.Priority.Tier != verification.TierSample {
+			tier += "·抽检"
+		}
+		fmt.Printf("%-3d %-18s %-10s %-8s %-13s %-18s %-8s %s\n",
+			i+1, a.ID, a.Entity, a.Subject, a.Predicate, v, tier, it.Priority.Reason)
+	}
+	fmt.Printf("\n批准：ssot review %s approve <ID> --by <你的名字> --reason \"...\"\n", p.Dir)
+	return nil
+}
+
+// reviewConflicts 成对呈现冲突，供人工裁决。
+func reviewConflicts(p *project) error {
+	groups, err := review.Conflicts(p.Store)
+	if err != nil {
+		return err
+	}
+	if len(groups) == 0 {
+		fmt.Println("未发现冲突——同一身份上没有任何两种取值。")
+		fmt.Println("（注意：这只说明「没有两个来源给出不同值」，不说明数据已经正确。）")
+		return nil
+	}
+	fmt.Printf("发现 %d 组冲突。**系统不替你裁决**——下面是每一组的全部说法：\n", len(groups))
+	for i, g := range groups {
+		fmt.Printf("\n── 冲突 %d/%d：%s.%s ──\n", i+1, len(groups), g.Subject, g.Predicate)
+		for _, a := range g.Claims {
+			fmt.Printf("  %-22s 来源 %-12s 分级 %-3s 状态 %s\n",
+				a.Value.String(), a.Source.Name, a.Confidence, a.Status)
+			fmt.Printf("      溯源 %s %s @ %s\n", a.Provenance.Artifact, a.Provenance.Anchor, a.Provenance.Revision)
+			fmt.Printf("      ID   %s\n", a.ID)
+		}
+		fmt.Printf("  裁决：ssot review %s approve <ID> --by <你的名字> --reason \"采信理由\"\n", p.Dir)
+	}
+	return nil
+}
+
+// reviewBatch 批量核验。**默认只预览**——批量操作最容易造成大面积错误。
+func reviewBatch(p *project, action string, wheres whereFlags, by, method, reason, evidence, proposed string, yes bool) error {
+	var dec verification.Decision
+	var label string
+	switch action {
+	case "approve":
+		dec, label = verification.Approved, "批准"
+	case "reject":
+		dec, label = verification.Rejected, "驳回"
+	default:
+		return fmt.Errorf("batch 的动作只能是 approve 或 reject，收到 %q", action)
+	}
+
+	f, err := parseWheres(wheres)
+	if err != nil {
+		return err
+	}
+
+	// 预览与执行都走应用层，CLI 与 GUI 共用同一套
+	as, err := review.Preview(p.Store, f)
+	if err != nil {
+		return err
+	}
+	if len(as) == 0 {
+		fmt.Println("没有匹配的待核验断言。")
+		return nil
+	}
+	if f.Status == "" {
+		f.Status = string(assertion.StatusPending)
+	}
+
+	fmt.Printf("批量%s：%d 条\n", label, len(as))
+	fmt.Printf("筛选条件：%s\n", f.Describe())
+	fmt.Printf("示例（前 5 条）：\n")
+	for i, a := range as {
+		if i >= 5 {
+			fmt.Printf("  … 另有 %d 条\n", len(as)-5)
+			break
+		}
+		fmt.Printf("  %s.%s = %s\n", a.Subject, a.Predicate, a.Value)
+	}
+
+	if !yes {
+		fmt.Printf("\n这是**预览**（dry-run）。确认无误后加 --yes 才真正执行。\n")
+		fmt.Printf("每条断言会各自留下核验记录，审计轨迹不会合并——这是刻意的：\n")
+		fmt.Printf("一条记录代表一个人的一次判断，批量不等于免责。\n")
+		return nil
+	}
+
+	res, err := review.Batch(p.Store, p.Store, review.BatchInput{
+		Filter:   f,
+		Decision: dec,
+		Method:   verification.Method(method),
+		By:       by,
+		Reason:   reason,
+		Evidence: evidence,
+		Proposed: proposed,
+	}, time.Now().UTC())
+	if err != nil && res.Applied == 0 {
+		return err
+	}
+	fmt.Printf("\n完成：成功 %d，失败 %d\n", res.Applied, res.Failed)
+	if res.FirstErr != nil {
+		fmt.Printf("首个失败：%v\n", res.FirstErr)
+	}
+	return nil
+}
+
+// parseWheres 把 字段=值 列表转成筛选条件。
+func parseWheres(ws []string) (store.Filter, error) {
+	var f store.Filter
+	for _, w := range ws {
+		i := strings.Index(w, "=")
+		if i < 0 {
+			return f, fmt.Errorf("--where 需要 字段=值 形式，收到 %q", w)
+		}
+		k := strings.TrimSpace(w[:i])
+		v := strings.TrimSpace(w[i+1:])
+		switch k {
+		case "entity", "实体":
+			f.Entity = v
+		case "status", "状态":
+			f.Status = v
+		case "predicate", "谓词":
+			f.Predicate = v
+		case "artifact", "原件":
+			f.Artifact = v
+		case "revision", "修订":
+			f.Revision = v
+		case "confidence", "分级":
+			f.Confidence = v
+		case "subject", "主体":
+			f.Subject = v
+		default:
+			return f, fmt.Errorf("未知的筛选字段 %q（可用：entity / status / predicate / artifact / revision / confidence / subject）", k)
+		}
+	}
+	return f, nil
 }
 
 // resolveOne 按前缀唯一定位一条断言。
