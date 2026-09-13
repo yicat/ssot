@@ -1286,7 +1286,7 @@ func cmdRun(args []string) error {
 	}
 
 	in := scenario.RunInput{
-		Entity:  "shikigami",
+		Entity:  spec.Entity,
 		Subject: subject,
 		Extra:   map[string]scenario.Ref{},
 		Values:  map[string]string{},

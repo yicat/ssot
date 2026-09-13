@@ -33,6 +33,8 @@ func main() {
 		Services: []application.Service{
 			application.NewService(api.NewProjectService(session)),
 			application.NewService(api.NewScenarioService(session)),
+			application.NewService(api.NewDataService(session)),
+			application.NewService(api.NewFormulaService(session)),
 			application.NewService(api.NewReviewService(session)),
 		},
 		Assets: application.AssetOptions{

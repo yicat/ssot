@@ -35,7 +35,7 @@ fields:
 }
 
 func scenarioYML(name string) string {
-	return "scenario: " + name + "\ndescription: " + name + " 用途\nrequires:\n  - shikigami.id\n"
+	return "scenario: " + name + "\ndescription: " + name + " 用途\nentity: shikigami\nrequires:\n  - shikigami.id\n"
 }
 
 func addScenario(t *testing.T, dir, name, body string) {

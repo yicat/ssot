@@ -12,6 +12,10 @@
 scenario: damage-calc
 description: 伤害计算——给定式神与技能，估算期望伤害
 
+# 主实体：运行时的主体（式神）来自它。
+# 显式写出来，换一个主实体的场景就不必改程序。
+entity: shikigami
+
 requires:
   - shikigami.atk           # 来自 Data:Attribute.json（L1 结构化直取）
   - shikigami.crit_factor   # 由 crit_factor 公式派生（L3）
@@ -25,6 +29,15 @@ inputs:
     unit: fraction
     min: 0
     max: 1
+
+# 技能倍率不在式神身上，在另一个实体上。
+# 声明 via 之后，界面才能列出「这个式神有哪些技能」，
+# 而不是让人凭记忆敲一个 262_01。
+refs:
+  - name: ratio
+    entity: skill
+    via: character_id
+    description: 技能的一级伤害倍率（L2 文本抽取）
 
 formulas:
   - damage

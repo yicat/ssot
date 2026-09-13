@@ -32,13 +32,13 @@ type NavItem = {
 
 const PROJECT_NAV: NavItem[] = [
   { route: "project.overview", label: "概览", hint: "定义、规模、质量缺口" },
-  { route: "project.data", label: "数据", hint: "断言库、schema 与覆盖率", todo: "P2" },
-  { route: "project.formulas", label: "公式", hint: "公式与算例验证状态", todo: "P2" },
+  { route: "project.data", label: "数据", hint: "断言库、schema 与覆盖率" },
+  { route: "project.formulas", label: "公式", hint: "公式与算例验证状态" },
 ];
 
 const SCENARIO_NAV: NavItem[] = [
   { route: "scenario.overview", label: "概览", hint: "需要什么、缺什么、能不能跑" },
-  { route: "scenario.run", label: "运行", hint: "填外部输入，出方案", todo: "P2" },
+  { route: "scenario.run", label: "运行", hint: "填外部输入，出方案" },
   { route: "scenario.experience", label: "经验", hint: "场景下的人机责任记录", todo: "P3" },
   { route: "scenario.alternatives", label: "备选方案", hint: "同一需求的多解比较", todo: "P3" },
 ];

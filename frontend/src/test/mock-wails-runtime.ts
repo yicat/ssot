@@ -61,7 +61,18 @@ export const CallID = {
   // 场景
   ScenarioList: 1332543624,
   ScenarioOverview: 1390931939,
+  ScenarioRun: 683971253,
+  ScenarioRunSetup: 2249021094,
   ScenarioSelect: 3087910632,
+  // 数据
+  DataAssertions: 4257491431,
+  DataEntityNames: 2155983627,
+  DataQuality: 111336079,
+  DataSchema: 2178830797,
+  DataSubjectDetail: 3566904439,
+  DataSubjects: 558894975,
+  // 公式
+  FormulaList: 1903130150,
 } as const;
 
 type Handler = (args: unknown[]) => unknown;

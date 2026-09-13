@@ -376,6 +376,110 @@ func (s *Store) RefExists(entity string, id any) (bool, error) {
 	return n > 0, err
 }
 
+// SubjectsByRef 返回目标实体上、通过某个谓词指向给定主体的全部主体。
+//
+// 场景的引用（例如 skill.character_id = 262）需要它来**列出候选**：
+// 让人从「这个式神有哪些技能」里选，而不是凭记忆敲一个 ID。
+func (s *Store) SubjectsByRef(entity, predicate string, target any) ([]string, error) {
+	b, err := json.Marshal(target)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(
+		`SELECT DISTINCT subject FROM assertion WHERE entity = ? AND predicate = ? AND value_json = ? ORDER BY subject`,
+		entity, predicate, string(b))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var x string
+		if err := rows.Scan(&x); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+// PredicateSubjectCounts 返回每个谓词覆盖了多少个主体。
+//
+// 覆盖率的分母是**主体数**而不是断言数：一个主体上同一谓词可能有
+// 多条限定条件不同的断言，按断言数算会把覆盖率算成大于 100%。
+func (s *Store) PredicateSubjectCounts(entity string) (map[string]int, error) {
+	rows, err := s.db.Query(
+		`SELECT predicate, count(DISTINCT subject) FROM assertion WHERE entity = ? GROUP BY predicate`, entity)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var k string
+		var n int
+		if err := rows.Scan(&k, &n); err != nil {
+			return nil, err
+		}
+		out[k] = n
+	}
+	return out, rows.Err()
+}
+
+// SelectRange 按条件分页查询。
+//
+// 与 Select 的区别是它**显式接受** limit/offset：分页是界面的事，
+// 把 offset 塞进 Filter 会让「筛选条件」这个概念变浑。
+func (s *Store) SelectRange(f assertion.Filter, limit, offset int) ([]assertion.Assertion, error) {
+	q := `SELECT ` + assertionCols + ` FROM assertion WHERE 1=1`
+	var args []any
+	for _, c := range []struct{ col, val string }{
+		{"entity", f.Entity}, {"status", f.Status}, {"predicate", f.Predicate},
+		{"artifact", f.Artifact}, {"revision", f.Revision},
+		{"confidence", f.Confidence}, {"subject", f.Subject},
+	} {
+		if c.val != "" {
+			q += ` AND ` + c.col + ` = ?`
+			args = append(args, c.val)
+		}
+	}
+	q += ` ORDER BY entity, subject, predicate`
+	if limit > 0 {
+		q += fmt.Sprintf(` LIMIT %d`, limit)
+		if offset > 0 {
+			q += fmt.Sprintf(` OFFSET %d`, offset)
+		}
+	}
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAll(rows)
+}
+
+// CountFiltered 统计满足筛选条件的断言数，供分页显示「第几 / 共几」。
+func (s *Store) CountFiltered(f assertion.Filter) (int, error) {
+	q := `SELECT count(*) FROM assertion WHERE 1=1`
+	var args []any
+	for _, c := range []struct{ col, val string }{
+		{"entity", f.Entity}, {"status", f.Status}, {"predicate", f.Predicate},
+		{"artifact", f.Artifact}, {"revision", f.Revision},
+		{"confidence", f.Confidence}, {"subject", f.Subject},
+	} {
+		if c.val != "" {
+			q += ` AND ` + c.col + ` = ?`
+			args = append(args, c.val)
+		}
+	}
+	var n int
+	err := s.db.QueryRow(q, args...).Scan(&n)
+	return n, err
+}
+
+// SubjectsOf 返回某实体下全部主体（排序）。
+func (s *Store) SubjectsOf(entity string) ([]string, error) { return s.Subjects(entity) }
+
 // ── 核验 ────────────────────────────────────────────────────────────────────
 
 // FindByIDPrefix 按 ID 前缀查找断言。

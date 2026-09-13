@@ -29,6 +29,22 @@ export function Overview(name: string): $CancellablePromise<$models.ScenarioOver
 }
 
 /**
+ * Run 执行一次场景运行。
+ */
+export function Run(name: string, subject: string, inputs: $models.RunInput[] | null, refs: $models.RefInput[] | null): $CancellablePromise<$models.RunResult> {
+    return $Call.ByID(683971253, name, subject, inputs, refs);
+}
+
+/**
+ * RunSetup 返回运行所需的输入结构。
+ * 
+ * subject 为空时只给出可选主体，不列引用候选——候选取决于选了哪个主体。
+ */
+export function RunSetup(name: string, subject: string): $CancellablePromise<$models.RunSetup> {
+    return $Call.ByID(2249021094, name, subject);
+}
+
+/**
  * Select 选中一个场景。名称必须在该项目的场景列表中。
  */
 export function Select(name: string): $CancellablePromise<$models.SessionState> {

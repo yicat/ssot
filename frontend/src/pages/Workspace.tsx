@@ -7,7 +7,10 @@
 import { AppNav, SessionBar } from "../components/custom/Session";
 import { useSession } from "../components/custom/Session/useSession";
 import ProjectOverview from "./project/Overview";
+import Data from "./project/Data";
+import Formulas from "./project/Formulas";
 import ScenarioOverview from "./scenario/Overview";
+import Run from "./scenario/Run";
 import Queue from "./review/Queue";
 import Conflicts from "./review/Conflicts";
 import Decision from "./review/Decision";
@@ -40,8 +43,14 @@ function renderRoute(route: string, scenario: string | null) {
   switch (route) {
     case "project.overview":
       return <ProjectOverview />;
+    case "project.data":
+      return <Data />;
+    case "project.formulas":
+      return <Formulas />;
     case "scenario.overview":
       return <ScenarioOverview scenario={scenario} />;
+    case "scenario.run":
+      return <Run scenario={scenario} />;
     case "review.queue":
       return <Queue />;
     case "review.conflicts":

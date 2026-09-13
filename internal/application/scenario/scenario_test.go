@@ -229,7 +229,7 @@ func TestUnverifiedFormulaIsAnnotated(t *testing.T) {
 }
 
 func TestLoadRejectsUnjudgeableRequirement(t *testing.T) {
-	bad := "scenario: x\nrequires: [游戏理解]\n"
+	bad := "scenario: x\nentity: shikigami\nrequires: [游戏理解]\n"
 	if _, err := parseSpec(bad); err == nil {
 		t.Error("无法判定的 requires 项必须被拒绝")
 	}
@@ -238,7 +238,7 @@ func TestLoadRejectsUnjudgeableRequirement(t *testing.T) {
 // 外部输入必须声明单位：`def_reduction=0.5` 到底是一半还是 0.5%，
 // 光看数字无从判断。没有量纲的输入框就是一个歧义制造机。
 func TestInputRequiresUnit(t *testing.T) {
-	bad := "scenario: x\ninputs:\n  - name: def_reduction\n    description: 防御减免\n"
+	bad := "scenario: x\nentity: shikigami\ninputs:\n  - name: def_reduction\n    description: 防御减免\n"
 	if _, err := parseSpec(bad); err == nil {
 		t.Fatal("外部输入缺 unit 必须被拒绝")
 	} else if !strings.Contains(err.Error(), "unit") {
@@ -246,7 +246,7 @@ func TestInputRequiresUnit(t *testing.T) {
 	}
 
 	// 声明了单位即可加载
-	ok := "scenario: x\ninputs:\n  - name: def_reduction\n    unit: fraction\n    min: 0\n    max: 1\n"
+	ok := "scenario: x\nentity: shikigami\ninputs:\n  - name: def_reduction\n    unit: fraction\n    min: 0\n    max: 1\n"
 	s, err := parseSpec(ok)
 	if err != nil {
 		t.Fatalf("声明了单位应当可加载：%v", err)
@@ -261,8 +261,82 @@ func TestInputRequiresUnit(t *testing.T) {
 
 // 声明了范围却不合法：min > max 必须在加载期就被拒绝。
 func TestInputRangeMustBeSane(t *testing.T) {
-	bad := "scenario: x\ninputs:\n  - name: a\n    unit: fraction\n    min: 2\n    max: 1\n"
+	bad := "scenario: x\nentity: shikigami\ninputs:\n  - name: a\n    unit: fraction\n    min: 2\n    max: 1\n"
 	if _, err := parseSpec(bad); err == nil {
 		t.Error("min 大于 max 必须被拒绝——声明了不校验比不声明更糟")
 	}
 }
+
+// 主实体必须写清楚：在代码里写死会让换主实体变成改程序。
+func TestSpecRequiresPrimaryEntity(t *testing.T) {
+	if _, err := parseSpec("scenario: x\nrequires: [shikigami.id]\n"); err == nil {
+		t.Fatal("缺 entity 必须被拒绝")
+	} else if !strings.Contains(err.Error(), "entity") {
+		t.Errorf("报错应指明缺的是 entity，实际：%v", err)
+	}
+}
+
+// 引用必须声明 via：没有它就无法列出候选，界面只能让人凭记忆敲 ID。
+func TestRefDeclRequiresVia(t *testing.T) {
+	bad := "scenario: x\nentity: shikigami\nrefs:\n  - name: ratio\n    entity: skill\n"
+	if _, err := parseSpec(bad); err == nil {
+		t.Fatal("引用缺 via 必须被拒绝")
+	} else if !strings.Contains(err.Error(), "via") {
+		t.Errorf("报错应指明缺的是 via，实际：%v", err)
+	}
+
+	ok := "scenario: x\nentity: shikigami\nrefs:\n  - name: ratio\n    entity: skill\n    via: character_id\n"
+	s, err := parseSpec(ok)
+	if err != nil {
+		t.Fatalf("声明完整时应当可加载：%v", err)
+	}
+	r, found := s.RefByName("ratio")
+	if !found || r.Entity != "skill" || r.Via != "character_id" {
+		t.Errorf("引用应被读出，实际 %+v", r)
+	}
+}
+
+// 同一个绑定路径只能有一个来源：既声明为外部输入又声明为引用会让人无从判断。
+func TestRefAndInputCannotShareName(t *testing.T) {
+	bad := "scenario: x\nentity: shikigami\n" +
+		"inputs:\n  - name: ratio\n    unit: percent\n" +
+		"refs:\n  - name: ratio\n    entity: skill\n    via: character_id\n"
+	if _, err := parseSpec(bad); err == nil {
+		t.Error("引用与外部输入同名必须被拒绝")
+	}
+}
+
+// 引用名重复会让「取哪一个」变成一件含糊的事。
+func TestRefNameMustBeUnique(t *testing.T) {
+	bad := "scenario: x\nentity: shikigami\n" +
+		"refs:\n  - name: ratio\n    entity: skill\n    via: character_id\n" +
+		"  - name: ratio\n    entity: skill\n    via: character_id\n"
+	if _, err := parseSpec(bad); err == nil {
+		t.Error("引用名重复必须被拒绝")
+	}
+}
+
+// requires 未满足时 Run 拒绝执行——不得用不完整数据产出方案。
+func TestRunRefusesWhenRequirementsMissing(t *testing.T) {
+	spec := Spec{Name: "x", Entity: "shikigami", Requires: []string{"shikigami.atk"}}
+	out, rep, err := Run(spec, nil, missingStore{}, nil, unit.Default(),
+		RunInput{Entity: "shikigami", Subject: "262"})
+	if err == nil {
+		t.Fatal("requires 未满足时必须拒绝运行")
+	}
+	if !strings.Contains(err.Error(), "拒绝运行") {
+		t.Errorf("报错应说清是拒绝运行，实际：%v", err)
+	}
+	if out.Scenario != "" {
+		t.Errorf("被拒绝时不得产出结果，实际场景 %q", out.Scenario)
+	}
+	if len(rep.Missing()) == 0 {
+		t.Error("拒绝时必须同时给出缺失清单，否则人不知道该补什么")
+	}
+}
+
+// missingStore 报告「该谓词完全没有数据」。
+type missingStore struct{}
+
+func (missingStore) PredicateCount(string, string) (int, error) { return 0, nil }
+func (missingStore) SubjectCount(string) (int, error)           { return 100, nil }

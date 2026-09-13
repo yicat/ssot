@@ -49,14 +49,49 @@ type Input struct {
 	Max *float64 `yaml:"max"`
 }
 
+// RefDecl 声明「这个绑定值来自另一个实体上的主体」。
+//
+// 场景的输入不必都来自同一个实体：伤害计算需要式神的攻击与暴击系数，
+// 以及技能的倍率——后者在另一个实体上。
+//
+// 声明它而不是让调用方随手 `--ref ratio=skill:262_01`，是因为
+// **随手写的引用无法校验也无法列举**：界面既不知道要找哪个实体，
+// 也不知道有哪些候选，只能让人凭记忆敲一个 ID。
+type RefDecl struct {
+	// Name 是公式的绑定路径，例如 ratio。
+	Name string `yaml:"name"`
+	// Entity 是目标实体，例如 skill。
+	Entity string `yaml:"entity"`
+	// Via 是目标实体上指向本项目主体的谓词，例如 character_id。
+	// 有了它，界面才能列出候选，而不是让人猜。
+	Via         string `yaml:"via"`
+	Description string `yaml:"description"`
+}
+
 // Spec 是场景声明。
 type Spec struct {
-	Name        string   `yaml:"scenario"`
-	Description string   `yaml:"description"`
-	Requires    []string `yaml:"requires"` // "entity.predicate"
-	Inputs      []Input  `yaml:"inputs"`   // 运行时外部输入
-	Formulas    []string `yaml:"formulas"`
-	Outputs     []string `yaml:"outputs"`
+	Name        string `yaml:"scenario"`
+	Description string `yaml:"description"`
+	// Entity 是这个场景的**主实体**：运行时的主体（例如式神）来自它。
+	//
+	// 显式声明而不是在代码里写死 "shikigami"：场景换一个主实体
+	// （例如按御魂算），不该需要改程序。
+	Entity   string    `yaml:"entity"`
+	Requires []string  `yaml:"requires"` // "entity.predicate"
+	Inputs   []Input   `yaml:"inputs"`   // 运行时外部输入
+	Refs     []RefDecl `yaml:"refs"`     // 取自其他实体的绑定
+	Formulas []string  `yaml:"formulas"`
+	Outputs  []string  `yaml:"outputs"`
+}
+
+// RefByName 按绑定路径取引用声明。
+func (s Spec) RefByName(name string) (RefDecl, bool) {
+	for _, r := range s.Refs {
+		if r.Name == name {
+			return r, true
+		}
+	}
+	return RefDecl{}, false
 }
 
 // IsInput 报告某个路径是否是本场景声明的外部输入。
@@ -91,6 +126,10 @@ func parseSpec(src string) (Spec, error) {
 	if s.Name == "" {
 		return Spec{}, fmt.Errorf("场景缺少 scenario 名")
 	}
+	if s.Entity == "" {
+		return Spec{}, fmt.Errorf("场景 %s 缺少 entity——运行时的主体来自哪个实体必须写清楚，"+
+			"在代码里写死会让换主实体变成改程序", s.Name)
+	}
 	for _, r := range s.Requires {
 		if !strings.Contains(r, ".") {
 			return Spec{}, fmt.Errorf("requires 项 %q 必须形如 entity.predicate——无法判定的需求不得声明", r)
@@ -106,6 +145,26 @@ func parseSpec(src string) (Spec, error) {
 		}
 		if in.Min != nil && in.Max != nil && *in.Min > *in.Max {
 			return Spec{}, fmt.Errorf("外部输入 %q 的 min(%v) 大于 max(%v)", in.Name, *in.Min, *in.Max)
+		}
+	}
+	seenRef := map[string]bool{}
+	for _, r := range s.Refs {
+		if r.Name == "" {
+			return Spec{}, fmt.Errorf("引用声明缺少 name")
+		}
+		if r.Entity == "" {
+			return Spec{}, fmt.Errorf("引用 %q 缺少 entity——不知道去哪找候选", r.Name)
+		}
+		if r.Via == "" {
+			return Spec{}, fmt.Errorf(
+				"引用 %q 缺少 via——没有它就无法列出候选，界面只能让人凭记忆敲 ID", r.Name)
+		}
+		if seenRef[r.Name] {
+			return Spec{}, fmt.Errorf("引用 %q 重复声明", r.Name)
+		}
+		seenRef[r.Name] = true
+		if s.IsInput(r.Name) {
+			return Spec{}, fmt.Errorf("引用 %q 与外部输入同名：同一个绑定路径只能有一个来源", r.Name)
 		}
 	}
 	return s, nil
@@ -269,6 +328,38 @@ func (r CheckReport) Missing() []string {
 		}
 	}
 	return out
+}
+
+// Run 执行一次完整运行：完整性检查 → 取数 → 求值。
+//
+// 顺序不能颠倒，也不能跳过检查：**requires 缺失时拒绝运行**，
+// 不得用不完整数据产出方案。检查报告一并返回，好让调用方
+// 在成功时也能显示「覆盖了 51%，存在缺口」这类信息。
+func Run(spec Spec, formulas map[string]*formula.Formula, st Store, r ValueReader,
+	units *unit.Table, in RunInput) (Output, CheckReport, error) {
+
+	rep, err := Check(spec, st, formulas, units)
+	if err != nil {
+		return Output{}, rep, err
+	}
+	if !rep.Runnable() {
+		return Output{}, rep, fmt.Errorf(
+			"场景 %s 的 requires 未满足，拒绝运行（不以不完整数据产出方案）：%v",
+			spec.Name, rep.Missing())
+	}
+
+	if len(spec.Formulas) == 0 {
+		return Output{}, rep, fmt.Errorf("场景 %s 没有声明公式", spec.Name)
+	}
+	fname := spec.Formulas[0]
+	f, ok := formulas[fname]
+	if !ok {
+		return Output{}, rep, fmt.Errorf("场景依赖的公式 %q 不存在", fname)
+	}
+	_, fst := f.Verify(units)
+
+	out, err := Execute(spec, f, r, units, in, fst)
+	return out, rep, err
 }
 
 // Check 执行完整性检查。

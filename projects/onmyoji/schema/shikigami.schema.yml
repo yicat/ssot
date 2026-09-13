@@ -10,7 +10,7 @@
 entity: shikigami
 description: 式神
 metamodelVersion: 1
-schemaRev: "1"
+schemaRev: "2"
 
 fields:
   - key: id
@@ -83,3 +83,15 @@ fields:
     type: number
     unit: fraction
     required: true
+
+  # 派生字段（L3）：由 crit_factor 公式从 cri 与 crid 算出，不是从原件直取的。
+  #
+  # 它**必须在这里声明**。派生走的不是准入层，因此不会被「未声明谓词」过滤掉——
+  # 不声明的话它就会以「数据里有而 schema 未声明」的漂移形式挂在数据页上，
+  # 让人分不清那是一个错误还是一个正常的派生字段。
+  #
+  # 非必填：素材类式神没有面板，也就没有暴击系数。
+  - key: crit_factor
+    description: 期望暴击系数（= 1 + cri × crid，派生 L3）
+    type: number
+    unit: fraction
