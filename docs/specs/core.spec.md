@@ -158,6 +158,7 @@
 | `metamodel.spec.md` | 断言可用的**类型与约束原语**（通用引擎的封闭集合） |
 | `computation.spec.md` | **表达式、量纲与时间**——场景声明领域规则的唯一途径 |
 | `derivation.spec.md` | **派生与缓存**——断言与方案之间的中间产物层次 |
+| `experience.spec.md` | **经验**——人机协作产出的可复用判断与责任归属 |
 | `ingestion.spec.md` | **接入层**：取回、存档、解析 → 候选 |
 | `admission.spec.md` | **准入层**：候选 → 断言的守门人，产出变更集 |
 | `migration.spec.md` | schema 变更时**既有数据怎么办** |
