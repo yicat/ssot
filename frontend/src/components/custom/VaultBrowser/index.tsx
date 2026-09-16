@@ -184,7 +184,7 @@ function TableList({
   if (tableInfos.length === 0 && tables.length === 0) return null;
   return (
     <div className="mt-3 px-3">
-      <div className="tree-group mb-1 text-xs">数据表</div>
+      <div className="group-title mb-1.5 text-xs">数据表</div>
       {tableInfos.length > 0
         ? tableInfos.map((t) => (
             <button
@@ -455,10 +455,12 @@ function DocPane({
   );
 }
 
+/* 第三栏的分组标题：跟左栏**同一套形式**（`.group-title` = 标签 + 右侧渐隐细线），
+   所以这里不写 color/font-weight——样式只有一个来源，改一处全 app 生效。 */
 function SidePanel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
     <div className="mb-5">
-      <div className="mb-1 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+      <div className="group-title mb-1.5 text-xs">
         {icon}
         {title}
       </div>

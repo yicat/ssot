@@ -47,8 +47,8 @@ export function DocTree({ items, selected, onSelect }: Props) {
       {tree.length === 0 && <div className="px-3 py-1 text-muted-foreground">（还没有文档）</div>}
       {tree.map((root) => (
         <div key={root.path} className="mb-3">
-          {/* 分组标题：与「数据表」那一组同款，不参与缩进 */}
-          <div className="tree-group mb-1 px-3">{root.name}</div>
+          {/* 分组标题：全 app 一套（`.group-title` = 标签 + 右侧渐隐细线），不参与缩进 */}
+          <div className="group-title mb-1.5 px-3">{root.name}</div>
           {root.children.map((c) => (
             <Node key={c.path} node={c} collapsed={collapsed} onToggle={toggle} selected={selected} onSelect={onSelect} />
           ))}

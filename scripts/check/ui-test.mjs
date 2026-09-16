@@ -102,8 +102,29 @@ async function main() {
       b.querySelector(".lucide-folder, .lucide-folder-open"),
     );
     const fileBtn = [...document.querySelectorAll("aside button")].find((b) => b.querySelector(".lucide-file-text"));
-    const group = document.querySelector("aside .tree-group");
+    const group = document.querySelector("aside .group-title");
     const h1 = document.querySelector("article h1");
+    // 分组标题的「标签 + 右侧渐隐细线」几何：线必须**正好**吃掉文字之后的剩余空间
+    let line = null;
+    if (group) {
+      const cs = getComputedStyle(group);
+      const as = getComputedStyle(group, "::after");
+      const range = document.createRange();
+      range.selectNodeContents(group);
+      const gr = group.getBoundingClientRect();
+      const tr = range.getBoundingClientRect();
+      const gap = parseFloat(cs.columnGap) || 0;
+      line = {
+        bg: as.backgroundImage,
+        height: as.height,
+        width: parseFloat(as.width),
+        // flex 撑开后，线宽应该 == 内容右边界到 padding 内边界的距离
+        expected: Math.round(gr.right - parseFloat(cs.paddingRight) - tr.right - gap),
+        // 文字右边界相对元素：证明线在文字**之后**，不在文字下面
+        textRightFromLeft: Math.round(tr.right - gr.left),
+        elWidth: Math.round(gr.width),
+      };
+    }
     return {
       // 显式查图标：按钮里第一个 svg 是**折叠箭头**，不是文件夹图标（踩过）
       folderIcon: color(folderBtn?.querySelector(".lucide-folder, .lucide-folder-open")),
@@ -112,6 +133,8 @@ async function main() {
       fileIcon: color(fileBtn?.querySelector(".lucide-file-text")),
       fileText: color(fileBtn?.querySelector(".tree-file")),
       group: color(group),
+      groupWeight: group ? getComputedStyle(group).fontWeight : null,
+      groupLine: line,
       body: color(h1),
     };
   });
@@ -144,11 +167,56 @@ async function main() {
   check("文档图标与文字同色", sameColor(treeColors.fileIcon, treeColors.fileText), `icon=${treeColors.fileIcon} text=${treeColors.fileText}`);
   check("文件名比正文淡", !!fl && !!bc && fl.l >= bc.l && fl.a < bc.a, `file=${treeColors.fileText} body=${treeColors.body}`);
   check("分组标题最淡", !!gc && !!fl && gc.l > fl.l, `group=${treeColors.group}`);
+  // 分组标题的形式：`标签 ─────╌╌╌`（线从文字之后起、右侧渐隐、不落硬截断）
+  const gl = treeColors.groupLine;
+  // 线比分组标题更淡：取渐变的第一个色停
+  const lineStart = oklch(gl?.bg ?? "");
+  check(
+    "线的起点色比分组标题还淡",
+    !!lineStart && !!gc && lineStart.a < gc.a,
+    `line alpha=${lineStart?.a} < group alpha=${gc?.a}`,
+  );
+  check(
+    "分组标题的线是渐隐的（linear-gradient）",
+    !!gl && /linear-gradient/.test(gl.bg) && /rgba?\([^)]*,\s*0\)|transparent/.test(gl.bg),
+    `bg=${gl?.bg}`,
+  );
+  check("分组标题的线是 1px 细线", gl?.height === "1px", `height=${gl?.height}`);
+  check(
+    "线正好吃掉文字之后的剩余宽度（不是下划线、不是通栏横线）",
+    !!gl && Math.abs(gl.width - gl.expected) <= 1.5 && gl.width > 20,
+    `line=${gl?.width} expected=${gl?.expected} 文字右边=${gl?.textRightFromLeft}/${gl?.elWidth}`,
+  );
   const groupWeight = await page.evaluate(() => {
-    const g = document.querySelector("aside .tree-group");
+    const g = document.querySelector("aside .group-title");
     return g ? getComputedStyle(g).fontWeight : null;
   });
   check("分组标题不加粗", groupWeight === "400", String(groupWeight));
+  // 全 app 一套：第三栏「谁引了它 / 问题链接」的标题同字号同色同字重同线
+  const unified = await page.evaluate(() => {
+    const pick = (el) => {
+      const cs = getComputedStyle(el);
+      const as = getComputedStyle(el, "::after");
+      return {
+        font: cs.fontSize,
+        color: cs.color,
+        weight: cs.fontWeight,
+        line: /linear-gradient/.test(as.backgroundImage),
+      };
+    };
+    const left = document.querySelector("aside.border-r .group-title");
+    const third = document.querySelector("aside.border-l .group-title");
+    return { left: left && pick(left), third: third && pick(third), thirdCount: third ? 1 : 0 };
+  });
+  check(
+    "第三栏分组标题与左栏同一套形式",
+    !!unified.third &&
+      unified.third.font === unified.left.font &&
+      unified.third.weight === unified.left.weight &&
+      unified.third.line &&
+      sameColor(unified.third.color, unified.left.color),
+    `left=${JSON.stringify(unified.left)} third=${JSON.stringify(unified.third)} （第三栏命中 ${unified.thirdCount} 个）`,
+  );
   check("文件夹与文档图标不同", treeStyle.folders > 0 && treeStyle.files > 0, `folder=${treeStyle.folders} file=${treeStyle.files}`);
   check("示例 vault 没有顶层文档（合规）", !treeText.includes("直接放在顶层"));
   check("树里未核验有标记", treeText.includes("未核验"));

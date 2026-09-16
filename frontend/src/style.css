@@ -234,16 +234,34 @@
   100% { background: transparent; }
 }
 
-/* 文件树的语义色：**集中定义在这里**，别处不要硬编码 */
+/* 分组标题的语义色：**集中定义在这里**，别处不要硬编码 */
 :root {
-  /* 分组标题（整理层/原始层/数据表）：最轻，它只是个标签 */
-  --tree-group: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+  /* 分组标题（整理层/原始层/数据表/谁引了它…）：最轻，它只是个标签 */
+  --group-fg: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+  /* 分组标题右侧那条渐隐细线的起点色：比分组标题**还淡** */
+  --group-rule: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
   /* 文件夹：浅蓝，和文档一眼分得开 */
   --tree-folder: oklch(0.66 0.09 235);
   /* 文件名：比正文淡一点，视线先落在标题上 */
   --tree-file: color-mix(in oklch, var(--foreground) 70%, transparent);
 }
-.tree-group { color: var(--tree-group); }
+/* 分组标题 = 标签 + 右侧延伸的渐隐细线（`整理层 ─────╌╌╌`）。
+   全 app 一套：左栏的分组、第三栏的「谁引了它 / 问题链接」都挂这个类。
+   ⚠️ 线用 `::after` 而不是 border/下划线：border 会通栏画出左边界（踩过），
+   下划线会压在文字下面被误读成选中态。flex 让线**从文字之后起**、只吃剩余宽度。 */
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--group-fg);
+}
+.group-title::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 0;
+  background: linear-gradient(to right, var(--group-rule), transparent);
+}
 /* ⚠️ 类要打在**图标本身**上：图标是文字 span 的**兄弟**节点，
    写 `.tree-folder svg` 这种后代选择器命不中（踩过——图标一直是默认前景色）。 */
 .tree-folder { color: var(--tree-folder); }
