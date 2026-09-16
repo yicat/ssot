@@ -84,10 +84,16 @@ function wikiLinkHTML(inner: string, opts: RenderOptions): string {
   if (res.kind === "ambiguous") {
     return `<a class="md-wikilink md-ambiguous" data-target="${esc(inner)}" title="有 ${res.candidates.length} 篇同名">${esc(label)}</a>`;
   }
-  const anchor = block ? `#^${esc(block)}` : heading ? `#${esc(heading)}` : "";
+  const anchor = block ? `#^${block}` : heading ? `#${heading}` : "";
+  // href 指向**真实的锚点 id**（标题 `h-<标题>`、块 `^<块id>`）：这样浏览器能原生滚动，
+  // 也让 CSS 的 `:target` 生效（高亮靠它，不用 JS 手加 class——那会被 React 重渲染擦掉）。
+  const anchorId = block ? `#^${block}` : heading ? `#h-${heading}` : "#";
+  // 锚点只**在有别名时**才额外标出来：没别名时 label 已经是「目标 › 标题」，
+  // 再挂一个 `#标题` 就成了 `… › 公式#公式`（踩过）。
+  const anchorMark = alias && anchor ? `<span class="md-anchor">${esc(anchor)}</span>` : "";
   return (
-    `<a class="md-wikilink" data-target="${esc(inner)}" href="#" title="${esc(res.path + anchor)}">` +
-    `${esc(label)}${anchor ? `<span class="md-anchor">${esc(anchor)}</span>` : ""}</a>${statusChip(res.status)}`
+    `<a class="md-wikilink" data-target="${esc(inner)}" href="${esc(anchorId)}" title="${esc(res.path + anchor)}">` +
+    `${esc(label)}${anchorMark}</a>${statusChip(res.status)}`
   );
 }
 
@@ -281,6 +287,20 @@ export function createMarkdown(opts: RenderOptions) {
     return true;
   });
 
+  // ── 标题加可定位属性：`[[文档#标题]]` 要真的跳过去 ──────────────
+  md.core.ruler.after("inline", "heading_anchor", (state) => {
+    for (let i = 0; i < state.tokens.length; i++) {
+      const t = state.tokens[i];
+      if (t.type !== "heading_open") continue;
+      const inline = state.tokens[i + 1];
+      if (!inline || inline.type !== "inline") continue;
+      const text = inline.content.trim();
+      t.attrSet("data-heading", text);
+      t.attrSet("id", `h-${text}`);
+    }
+    return true;
+  });
+
   // ── 块锚点：行尾的 `^id` ───────────────────────────────────
   md.core.ruler.after("inline", "blockref", (state) => {
     for (const token of state.tokens) {
@@ -317,5 +337,7 @@ function mathHTML(src: string, display: boolean): string {
 export function renderMarkdown(src: string, opts: RenderOptions): string {
   return createMarkdown(opts).render(src);
 }
+
+
 
 

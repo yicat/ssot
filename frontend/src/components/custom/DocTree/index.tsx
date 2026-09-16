@@ -48,7 +48,7 @@ export function DocTree({ items, selected, onSelect }: Props) {
       {tree.map((root) => (
         <div key={root.path} className="mb-3">
           {/* 分组标题：与「数据表」那一组同款，不参与缩进 */}
-          <div className="mb-1 px-3 font-semibold text-muted-foreground">{root.name}</div>
+          <div className="tree-group mb-1 px-3 font-semibold">{root.name}</div>
           {root.children.map((c) => (
             <Node key={c.path} node={c} collapsed={collapsed} onToggle={toggle} selected={selected} onSelect={onSelect} />
           ))}
@@ -86,11 +86,11 @@ function Node({
         >
           {open ? <ChevronDown className="size-3 shrink-0" /> : <ChevronRight className="size-3 shrink-0" />}
           {open ? (
-            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+            <FolderOpen className="tree-folder size-3.5 shrink-0" />
           ) : (
-            <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+            <Folder className="tree-folder size-3.5 shrink-0" />
           )}
-          <span className="truncate">{node.name}</span>
+          <span className="tree-folder truncate font-medium">{node.name}</span>
           <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{countDocs(node)}</span>
         </button>
         {open &&
@@ -112,8 +112,8 @@ function Node({
       className={"flex w-full items-center gap-2 rounded py-1 pr-2 text-left " + (active ? "bg-secondary" : "hover:bg-secondary/60")}
     >
       {/* 文档带文件图标：与文件夹一眼分得开 */}
-      <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="truncate">{node.name}</span>
+      <FileText className="tree-file size-3.5 shrink-0" />
+      <span className="tree-file truncate">{node.name}</span>
       {(node.tooDeep || node.topLevel) && (
         <AlertTriangle
           className="size-3 shrink-0 text-amber-600"
@@ -137,4 +137,6 @@ function countDocs(node: TreeNode): number {
   walk(node.children);
   return n;
 }
+
+
 

@@ -184,7 +184,7 @@ function TableList({
   if (tableInfos.length === 0 && tables.length === 0) return null;
   return (
     <div className="mt-3 px-3">
-      <div className="mb-1 text-xs font-semibold text-muted-foreground">数据表</div>
+      <div className="tree-group mb-1 text-xs font-semibold">数据表</div>
       {tableInfos.length > 0
         ? tableInfos.map((t) => (
             <button
@@ -470,5 +470,6 @@ function SidePanel({ icon, title, children }: { icon: ReactNode; title: string; 
 function Empty({ children }: { children: ReactNode }) {
   return <div className="px-1 py-1 text-xs text-muted-foreground">{children}</div>;
 }
+
 
 

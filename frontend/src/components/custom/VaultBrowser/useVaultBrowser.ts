@@ -4,7 +4,7 @@
  * 所有读写都走 bindings —— 也就是走 Go 侧的用例层，
  * 所以「谁能发布」那条门在界面上绕不过去（点按钮和敲命令是同一份实现）。
  */
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   Backlinks,
@@ -26,6 +26,8 @@ const UI_ACTOR = "human:界面";
 
 export function useVaultBrowser() {
   const store = useVaultStore();
+
+  const [locate, setLocate] = useState<{ path: string; kind: "heading" | "block"; value: string } | null>(null);
 
   const openDoc = useCallback(
     async (path: string, notice?: string) => {
@@ -168,6 +170,10 @@ export function useVaultBrowser() {
         if (res.heading) {
           parts.push(res.headingLine > 0 ? `标题锚点在第 ${res.headingLine} 行` : `标题锚点「${res.heading}」没找到`);
         }
+        // 带锚点时**真的跳过去**（滚动 + 闪一下），不是只弹一句「在第几行」——
+        // spec 写的是「点开跳到该标题/该块」（见 document.spec.md 第三节）。
+        if (res.block) setLocate({ path: res.path, kind: "block", value: res.block });
+        else if (res.heading) setLocate({ path: res.path, kind: "heading", value: res.heading });
         await openDoc(res.path, parts.join("｜"));
       } catch (e) {
         set({ notice: String(e), noticeIsError: true });
@@ -177,6 +183,32 @@ export function useVaultBrowser() {
     },
     [openDoc],
   );
+
+  /**
+   * 锚点跳转：等**目标文档渲染出来**再滚过去。
+   *
+   * 为什么用 effect 而不是 openDoc 里立刻滚：文档是先 set 状态、React 下次渲染才进 DOM 的，
+   * 立刻查 DOM 会查不到。这里等 doc.path 与目标一致（说明已经渲染）再找元素。
+   */
+  useEffect(() => {
+    if (!locate || !store.doc || store.doc.path !== locate.path) return;
+    const sel = locate.kind === "block" ? `[data-block="${locate.value}"]` : `[data-heading="${locate.value}"]`;
+    const el = document.querySelector<HTMLElement>(`.md-body ${sel}`);
+    if (el) {
+      // 三条一起做：
+      //  1) scrollIntoView —— 实测这条最可靠（只设 hash 时在 WebView2 里出现过不滚动）
+      //  2) 设 hash —— 让 CSS 的 `:target` 命中，链接也可复制
+      //  3) 渲染完成后再补一次闪烁类（命令式改 DOM 要等 React 这轮更新落定）
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      window.location.hash = locate.kind === "heading" ? `h-${locate.value}` : `^${locate.value}`;
+      // ⚠️ 不再自己加 class 做「闪一下」：正文是 dangerouslySetInnerHTML 渲染的，
+      // React 每轮更新会重设 innerHTML，命令式加的 class 会被冲掉或落在已被替换的节点上
+      // （实测：MutationObserver 只看到 childList 变动，没有任何 class 变动）。
+      // 高亮交给 CSS 的 `:target`（浏览器认 hash），跳转本身靠 scrollIntoView。
+    }
+    // 找不到也清掉：锚点坏了要让上面那条提示承担说明，不是无限重试。
+    setLocate(null);
+  }, [locate, store.doc]);
 
   /** 点正文里的双链：解析后跳过去（供列表里的链接用）。 */
   const follow = useCallback((link: VaultLink) => followLink(link.raw), [followLink]);
@@ -318,5 +350,10 @@ export function isDraft(doc: { status: string } | null | undefined): boolean {
 }
 
 export type { VaultDoc };
+
+
+
+
+
 
 

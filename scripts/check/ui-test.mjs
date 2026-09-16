@@ -95,6 +95,49 @@ async function main() {
     };
   });
   check("树用 12px 次要字号", treeStyle.font === "12px", String(treeStyle.font));
+  // 树的语义色：分组最淡、文件夹浅蓝、文件名比正文淡，且**图标与文字同色**
+  const treeColors = await page.evaluate(() => {
+    const color = (el) => (el ? getComputedStyle(el).color : null);
+    const folderBtn = [...document.querySelectorAll("aside button")].find((b) =>
+      b.querySelector(".lucide-folder, .lucide-folder-open"),
+    );
+    const fileBtn = [...document.querySelectorAll("aside button")].find((b) => b.querySelector(".lucide-file-text"));
+    const group = document.querySelector("aside .tree-group");
+    const h1 = document.querySelector("article h1");
+    return {
+      // 显式查图标：按钮里第一个 svg 是**折叠箭头**，不是文件夹图标（踩过）
+      folderIcon: color(folderBtn?.querySelector(".lucide-folder, .lucide-folder-open")),
+      folderText: color(folderBtn?.querySelector(".tree-folder")),
+      fileIcon: color(fileBtn?.querySelector(".lucide-file-text")),
+      fileText: color(fileBtn?.querySelector(".tree-file")),
+      group: color(group),
+      body: color(h1),
+    };
+  });
+  const oklch = (s) => {
+    const m = (s ?? "").match(/oklch\(([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?/);
+    return m ? { l: +m[1], c: +m[2], h: +m[3], a: m[4] ? +m[4] : 1 } : null;
+  };
+  const fc = oklch(treeColors.folderText);
+  const gc = oklch(treeColors.group);
+  const bc = oklch(treeColors.body);
+  const fl = oklch(treeColors.fileText);
+  // 比**解析后的值**而不是原始字符串：同一个颜色可能被序列化成 `oklch(…)` 或 `oklch(… / 1)`。
+  const sameColor = (x, y) => {
+    const a = oklch(x);
+    const b = oklch(y);
+    if (!a || !b) return x === y;
+    return Math.abs(a.l - b.l) < 0.01 && Math.abs(a.c - b.c) < 0.01 && Math.abs(a.h - b.h) < 1 && Math.abs(a.a - b.a) < 0.01;
+  };
+  check(
+    "文件夹图标与文字同色",
+    sameColor(treeColors.folderIcon, treeColors.folderText),
+    `icon=${treeColors.folderIcon} text=${treeColors.folderText}`,
+  );
+  check("文件夹是浅蓝（有彩度）", !!fc && fc.c > 0.03, `chroma=${fc?.c}`);
+  check("文档图标与文字同色", sameColor(treeColors.fileIcon, treeColors.fileText), `icon=${treeColors.fileIcon} text=${treeColors.fileText}`);
+  check("文件名比正文淡", !!fl && !!bc && fl.l >= bc.l && fl.a < bc.a, `file=${treeColors.fileText} body=${treeColors.body}`);
+  check("分组标题最淡", !!gc && !!fl && gc.l > fl.l, `group=${treeColors.group}`);
   check("文件夹与文档图标不同", treeStyle.folders > 0 && treeStyle.files > 0, `folder=${treeStyle.folders} file=${treeStyle.files}`);
   check("示例 vault 没有顶层文档（合规）", !treeText.includes("直接放在顶层"));
   check("树里未核验有标记", treeText.includes("未核验"));
@@ -203,6 +246,10 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
+
+
+
 
 
 
