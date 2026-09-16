@@ -14,7 +14,7 @@
  *  - 两层用**中文**分组标题：`docs` / `raw` 是结构名，不是给人看的标签。
  *  - **状态标记放行尾**：标题是这一行要认的东西，标记只是附注，不该先看到。
  */
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
 
 import type { VaultItem } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { statusStyle } from "../VaultBrowser/useVaultBrowser";
@@ -27,21 +27,28 @@ type Props = {
 };
 
 export function DocTree({ items, selected, onSelect }: Props) {
-  const { tree, collapsed, toggle, deepCount } = useDocTree(items);
+  const { tree, collapsed, toggle, deepCount, topLevelCount } = useDocTree(items);
 
   return (
-    <div className="text-sm">
+    // 树用**次要字号**：导航是辅助，不该跟正文抢视线（document.spec.md 第二节）
+    <div className="text-xs">
+      {topLevelCount > 0 && (
+        <div className="mx-3 mb-2 flex items-start gap-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+          有 {topLevelCount} 篇直接放在顶层——两层根下只放文件夹，文档要进分类文件夹
+        </div>
+      )}
       {deepCount > 0 && (
         <div className="mx-3 mb-2 flex items-start gap-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
           <AlertTriangle className="mt-0.5 size-3 shrink-0" />
           有 {deepCount} 篇超过 {MAX_DEPTH} 层——层级该重划了
         </div>
       )}
-      {tree.length === 0 && <div className="px-3 py-1 text-xs text-muted-foreground">（还没有文档）</div>}
+      {tree.length === 0 && <div className="px-3 py-1 text-muted-foreground">（还没有文档）</div>}
       {tree.map((root) => (
         <div key={root.path} className="mb-3">
           {/* 分组标题：与「数据表」那一组同款，不参与缩进 */}
-          <div className="mb-1 px-3 text-xs font-semibold text-muted-foreground">{root.name}</div>
+          <div className="mb-1 px-3 font-semibold text-muted-foreground">{root.name}</div>
           {root.children.map((c) => (
             <Node key={c.path} node={c} collapsed={collapsed} onToggle={toggle} selected={selected} onSelect={onSelect} />
           ))}
@@ -104,8 +111,15 @@ function Node({
       title={node.path + (node.tooDeep ? "（超过三层）" : "")}
       className={"flex w-full items-center gap-2 rounded py-1 pr-2 text-left " + (active ? "bg-secondary" : "hover:bg-secondary/60")}
     >
+      {/* 文档带文件图标：与文件夹一眼分得开 */}
+      <FileText className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="truncate">{node.name}</span>
-      {node.tooDeep && <AlertTriangle className="size-3 shrink-0 text-amber-600" />}
+      {(node.tooDeep || node.topLevel) && (
+        <AlertTriangle
+          className="size-3 shrink-0 text-amber-600"
+          aria-label={node.topLevel ? "不该放在顶层" : "超过三层"}
+        />
+      )}
       {/* 状态在行尾：标题先被看到 */}
       <span className={`ml-auto shrink-0 rounded px-1 text-[10px] leading-4 ${st.className}`}>{st.label}</span>
     </button>
@@ -123,3 +137,4 @@ function countDocs(node: TreeNode): number {
   walk(node.children);
   return n;
 }
+

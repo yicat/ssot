@@ -85,6 +85,18 @@ async function main() {
     layout ? JSON.stringify(layout) : "没找到那一行",
   );
   check("文件树显示文件夹", treeText.includes("式神") && treeText.includes("机制"));
+  // 树用次要字号 + 文件夹/文档一眼分得开（document.spec.md 第二节）
+  const treeStyle = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("aside button")].find((b) => b.innerText.includes("茨木童子"));
+    return {
+      font: row ? getComputedStyle(row).fontSize : null,
+      folders: document.querySelectorAll("aside .lucide-folder, aside .lucide-folder-open").length,
+      files: document.querySelectorAll("aside .lucide-file-text").length,
+    };
+  });
+  check("树用 12px 次要字号", treeStyle.font === "12px", String(treeStyle.font));
+  check("文件夹与文档图标不同", treeStyle.folders > 0 && treeStyle.files > 0, `folder=${treeStyle.folders} file=${treeStyle.files}`);
+  check("示例 vault 没有顶层文档（合规）", !treeText.includes("直接放在顶层"));
   check("树里未核验有标记", treeText.includes("未核验"));
   check("数据表列在左栏", treeText.includes("数据表"));
 
@@ -186,6 +198,7 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
 
 
 

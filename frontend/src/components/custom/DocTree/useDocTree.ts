@@ -23,6 +23,8 @@ export type TreeNode = {
   status?: string;
   /** 超过三层（layer + 2 层文件夹）的文档。 */
   tooDeep?: boolean;
+  /** **落在顶层**的文档（两层根下直接摊文件，不合规，见 document.spec.md 第一节）。 */
+  topLevel?: boolean;
   children: TreeNode[];
 };
 
@@ -63,6 +65,7 @@ export function buildTree(items: VaultItem[]): TreeNode[] {
           layer: it.layer,
           status: it.status,
           tooDeep: i + 1 > MAX_DEPTH,
+          topLevel: i + 1 === 2, // 只在两层根下 = 没进分类文件夹
           children: [],
         });
       } else {
@@ -103,19 +106,24 @@ export function useDocTree(items: VaultItem[]) {
     });
   }, []);
 
-  const deepCount = useMemo(() => {
-    let n = 0;
+  // 两类不合规分开数：越层是一回事，摊在顶层是另一回事。
+  const counts = useMemo(() => {
+    let deep = 0;
+    let top = 0;
     const walk = (nodes: TreeNode[]) => {
       for (const node of nodes) {
-        if (node.tooDeep) n++;
+        if (node.tooDeep) deep++;
+        if (node.topLevel) top++;
         walk(node.children);
       }
     };
     walk(tree);
-    return n;
+    return { deep, top };
   }, [tree]);
 
-  return { tree, collapsed, toggle, deepCount };
+  return { tree, collapsed, toggle, deepCount: counts.deep, topLevelCount: counts.top };
 }
+
+
 
 
