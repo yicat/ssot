@@ -94,7 +94,7 @@ export function useVaultBrowser() {
     try {
       set({ busy: true });
       const hits = await Search(query, 50);
-      set({ hits: hits ?? [], notice: null, noticeIsError: false });
+      set({ hits: hits ?? [], searchCursor: 0, notice: null, noticeIsError: false });
     } catch (e) {
       set({ notice: String(e), noticeIsError: true });
     } finally {
@@ -103,7 +103,30 @@ export function useVaultBrowser() {
   }, []);
 
   const clearSearch = useCallback(() => {
-    useVaultStore.getState().set({ query: "", hits: null });
+    useVaultStore.getState().set({ query: "", hits: null, searchCursor: 0 });
+  }, []);
+
+  /** 打开检索弹窗（`/` 或 Ctrl+K）。 */
+  const openSearch = useCallback(() => {
+    useVaultStore.getState().set({ searchOpen: true });
+  }, []);
+
+  /** 关掉弹窗：**保留**结果，方便再按一次 / 接着看。 */
+  const closeSearch = useCallback(() => {
+    useVaultStore.getState().set({ searchOpen: false });
+  }, []);
+
+  /** 弹窗里用上下键选结果（在结果条目上循环）。 */
+  const moveCursor = useCallback((delta: number) => {
+    const { hits, searchCursor, set } = useVaultStore.getState();
+    const n = hits?.length ?? 0;
+    if (n === 0) return;
+    set({ searchCursor: (((searchCursor + delta) % n) + n) % n });
+  }, []);
+
+  /** 在主体区打开一张数据表（左栏点表就走这里）。 */
+  const openTable = useCallback((file: string) => {
+    useVaultStore.getState().set({ selectedTable: file, searchOpen: false, notice: null, noticeIsError: false });
   }, []);
 
   /** 点左栏的文档。 */
@@ -229,7 +252,22 @@ export function useVaultBrowser() {
     [openDoc],
   );
 
-  return { ...store, reload: load, select, follow, followLink, publish, search, clearSearch, toggleTask, toggleComments };
+  return {
+    ...store,
+    reload: load,
+    select,
+    follow,
+    followLink,
+    publish,
+    search,
+    clearSearch,
+    openSearch,
+    closeSearch,
+    moveCursor,
+    openTable,
+    toggleTask,
+    toggleComments,
+  };
 }
 
 /**
@@ -276,3 +314,4 @@ export function isDraft(doc: { status: string } | null | undefined): boolean {
 }
 
 export type { VaultDoc };
+

@@ -33,6 +33,11 @@
 |---|---|---|---|---|
 | 正文 | **14px / 22px** | `text-sm` | 正文、按钮、输入、标题栏应用名 | `--dsh-content-font-size`，默认 14px |
 | 次要 | **12px / 18px** | `text-xs` | 次要说明、元信息、徽标、代码块 | 组件里的 12px 元信息档（11–12px） |
+| 文档正文 | **13px / 21px** | 见 `.md-body` | **只有文档正文**用这一档 | — |
+
+**为什么文档正文单独一档**：文档是这套东西的主产物，长时间**阅读**和点按钮不是一回事——
+界面控件用 14/22，文档正文用更紧的 13/21，一屏能多看几行；但**控件与说明仍守 14/12 两档**，
+不许在界面里随手插 13px。这条口径只在 `.md-body` 这一处生效。
 
 - 定义在 `frontend/src/style.css` 的 `@theme` 里：**改 token 就全局生效**，各处不要再写 `text-[13px]`
   这类字面量。
@@ -86,3 +91,4 @@ $c.Contains('.text-xs{font-size:12px;line-height:var(--tw-leading,18px)}')  # �
   `Select-String -Path frontend\src\components\custom\**\*.tsx -Pattern 'size="sm"'` 应为空。
 - 改动标题栏后按 `shell.spec.md` 的探针确认那条 bar 没被撑坏。
 - 类型检查：`cd frontend && npx tsc --noEmit`。
+

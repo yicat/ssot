@@ -40,7 +40,7 @@ export function buildTree(items: VaultItem[]): TreeNode[] {
     if (node === undefined) {
       const created: TreeNode = {
         kind: "folder",
-        name: layer === "raw" ? "原始层 raw/" : "整理层 docs/",
+        name: layer, // 显示**真实目录名**：不堆自造的中英混排前缀（见 document.spec.md）
         path: layer,
         depth: 1,
         children: [],
@@ -114,3 +114,4 @@ export function useDocTree(items: VaultItem[]) {
 
   return { tree, collapsed, toggle, deepCount };
 }
+

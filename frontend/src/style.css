@@ -142,9 +142,14 @@
 }
 
 .md-body {
+  /* 文档正文单独一档 13/21（见 typography.spec.md）：长文阅读比界面控件紧一点，一屏能多看几行 */
+  font-size: 13px;
+  line-height: 21px;
   color: var(--foreground);
-  line-height: 22px;
 }
+.md-body > *:first-child { margin-top: 0; }
+.md-body > *:last-child { margin-bottom: 0; }
+.md-body li { margin: 0.15em 0; }
 .md-body p,
 .md-body ul,
 .md-body ol,
@@ -307,3 +312,4 @@
     cursor: pointer;
     }
 }
+

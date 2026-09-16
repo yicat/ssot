@@ -63,10 +63,10 @@ async function main() {
   // ── 文件树（层级、排序、标记）─────────────────────────────
   const aside = page.locator("aside").first();
   const treeText = await aside.innerText();
-  check("文件树有两个根", treeText.includes("整理层 docs/") && treeText.includes("原始层 raw/"));
+  check("文件树显示真实目录名（docs / raw）", treeText.includes("docs") && treeText.includes("raw") && !treeText.includes("整理层"));
   check("文件树显示文件夹", treeText.includes("式神") && treeText.includes("机制"));
   check("树里未核验有标记", treeText.includes("未核验"));
-  check("数据表列出（可 SQL 查）", treeText.includes("数据表（可 SQL 查）"));
+  check("数据表列在左栏", treeText.includes("数据表"));
 
   // ── 文档渲染（切到语法示例那篇）───────────────────────────
   await page.locator("aside button", { hasText: "语法示例" }).first().click();
@@ -111,11 +111,47 @@ async function main() {
   const notice = await page.locator("div[class*='rose-50']").first().innerText();
   check("断链被如实报出来", notice.includes("御魂套装效果"), notice.slice(0, 40));
 
-  // ── 检索 ────────────────────────────────────────────────
-  await page.fill("input", "伤害");
-  await page.press("input", "Enter");
-  await page.waitForSelector("text=/检索「伤害」/", { timeout: 8000 });
-  check("检索出结果", (await aside.innerText()).includes("检索「伤害」"));
+  // ── 字号与视觉重心（用计算样式断言，不靠眼看）──────────
+  const sizes = await page.evaluate(() => {
+    const px = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el) : null;
+    };
+    const body = px(".md-body");
+    const h1 = px("article h1");
+    const tag = px("article button[title^='按标签检索']");
+    return {
+      bodyFont: body?.fontSize,
+      bodyLine: body?.lineHeight,
+      h1Font: h1?.fontSize,
+      tagFont: tag?.fontSize,
+      tagColor: tag?.color,
+      tagBg: tag?.backgroundColor,
+    };
+  });
+  check("文档正文是 13/21 那一档", sizes.bodyFont === "13px" && sizes.bodyLine === "21px", `${sizes.bodyFont}/${sizes.bodyLine}`);
+  check("标题仍是最大字号", parseFloat(sizes.h1Font) > parseFloat(sizes.tagFont), `h1=${sizes.h1Font} tag=${sizes.tagFont}`);
+  check("标签比标题轻（小一号 + 无底色）", parseFloat(sizes.tagFont) <= 11 && /rgba\(0, 0, 0, 0\)|transparent/.test(sizes.tagBg), `tag=${sizes.tagFont} bg=${sizes.tagBg}`);
+
+  // ── 检索弹窗（命令面板式）──────────────────────────────
+  await page.keyboard.press("/");
+  await page.waitForSelector("[role=dialog]", { timeout: 8000 });
+  check("按 / 能打开检索弹窗", true);
+  await page.locator("[role=dialog] input").fill("伤害");
+  await page.waitForSelector("[role=dialog] button:has-text('伤害计算')", { timeout: 8000 });
+  const hitsText = await page.locator("[role=dialog]").innerText();
+  check("弹窗里出结果", hitsText.includes("伤害计算") && hitsText.includes("未核验"));
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("text=防御减免", { timeout: 8000 });
+  check("回车打开选中的结果并关弹窗", (await page.locator("[role=dialog]").count()) === 0);
+
+  // ── 数据表能打开 ────────────────────────────────────────
+  await page.locator("aside button", { hasText: "技能倍率" }).first().click();
+  await page.waitForSelector("text=查询示例", { timeout: 8000 });
+  const tablePane = await page.locator("section").first().innerText();
+  check("点数据表能打开", tablePane.includes("技能倍率") && tablePane.includes("数据表"));
+  check("表里是真实数据", tablePane.includes("罗生门") && tablePane.includes("2.63"));
+  check("给出查询示例", tablePane.includes("SELECT * FROM"));
 
   check("期间没有页面异常", errors.length === 0, errors.slice(0, 2).join(" | "));
 
@@ -130,4 +166,6 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
+
 

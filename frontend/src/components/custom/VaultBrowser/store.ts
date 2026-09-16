@@ -32,12 +32,18 @@ export type VaultState = {
   tableData: Record<string, { columns: string[]; rows: string[][] }>;
   /** 是否显示 `%%注释%%`（默认不显示：注释是给自己看的）。 */
   showComments: boolean;
-  /** 检索框里的词。 */
+  /** 检索词（弹窗里当前输入的）。 */
   query: string;
+  /** 检索弹窗是否打开。 */
+  searchOpen: boolean;
+  /** 弹窗里选中的第几条（键盘上下键用）。 */
+  searchCursor: number;
   /** 检索结果；`null` 表示当前没在检索（左栏显示全部文档）。 */
   hits: VaultHit[] | null;
   /** 当前选中的文档路径。 */
   selected: string | null;
+  /** 当前在看的**数据表**（相对路径）；非空时主体区显示表而不是文档。 */
+  selectedTable: string | null;
   /** 右栏：当前文档。 */
   doc: VaultDoc | null;
   /** 右栏：当前文档的反链与问题链接。 */
@@ -58,8 +64,11 @@ export const useVaultStore = create<VaultState>((set) => ({
   tableData: {},
   showComments: false,
   query: "",
+  searchOpen: false,
+  searchCursor: 0,
   hits: null,
   selected: null,
+  selectedTable: null,
   doc: null,
   links: null,
   notice: null,
@@ -67,3 +76,4 @@ export const useVaultStore = create<VaultState>((set) => ({
   busy: false,
   set: (patch) => set(patch),
 }));
+
