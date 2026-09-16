@@ -289,7 +289,11 @@ export function makeResolver(items: VaultItem[]): (target: string) => ResolvedLi
     if (!t) return undefined;
     const hit = byPath.get(t) ?? byPath.get(`${t}.md`);
     if (hit) return { kind: "doc", path: hit.path, title: hit.title, status: hit.status };
-    const same = byBase.get(t.replace(/\.md$/, ""));
+    // ⚠️ 退一步按**文件名**匹配时，要用目标串的 basename（而不是整个 `docs/语法示例`）——
+    // 后端 domain/vault.Resolve 就是这么做的。少这一步会在文档挪过位置之后
+    // 把**还能解析**的链接误判成断链：渲染成红字、点它却不报错，两边规则不一致（踩过）。
+    const base = t.split("/").pop()!.replace(/\.md$/, "");
+    const same = byBase.get(base);
     if (!same || same.length === 0) return { kind: "broken" };
     if (same.length > 1) return { kind: "ambiguous", candidates: same.map((i) => i.path) };
     return { kind: "doc", path: same[0].path, title: same[0].title, status: same[0].status };
@@ -314,4 +318,5 @@ export function isDraft(doc: { status: string } | null | undefined): boolean {
 }
 
 export type { VaultDoc };
+
 

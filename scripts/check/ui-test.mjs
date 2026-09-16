@@ -174,8 +174,13 @@ async function main() {
   const hitsText = await page.locator("[role=dialog]").innerText();
   check("弹窗里出结果", hitsText.includes("伤害计算") && hitsText.includes("未核验"));
   await page.keyboard.press("Enter");
-  await page.waitForSelector("text=防御减免", { timeout: 8000 });
-  check("回车打开选中的结果并关弹窗", (await page.locator("[role=dialog]").count()) === 0);
+  // 断言要精确：不能用「防御减免」这类文本——它也会出现在**弹窗的片段**里，会误判成"已打开"。
+  await page.waitForSelector("[role=dialog]", { state: "detached", timeout: 8000 });
+  check(
+    "回车打开选中的结果并关弹窗",
+    (await page.locator("article h1").first().innerText()).includes("伤害计算"),
+    await page.locator("article h1").first().innerText(),
+  );
 
   // ── 数据表能打开 ────────────────────────────────────────
   await page.locator("aside button", { hasText: "技能倍率" }).first().click();
@@ -198,6 +203,7 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
 
 
 
