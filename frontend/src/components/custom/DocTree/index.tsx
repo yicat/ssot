@@ -48,7 +48,7 @@ export function DocTree({ items, selected, onSelect }: Props) {
       {tree.map((root) => (
         <div key={root.path} className="mb-3">
           {/* 分组标题：与「数据表」那一组同款，不参与缩进 */}
-          <div className="tree-group mb-1 px-3 font-semibold">{root.name}</div>
+          <div className="tree-group mb-1 px-3">{root.name}</div>
           {root.children.map((c) => (
             <Node key={c.path} node={c} collapsed={collapsed} onToggle={toggle} selected={selected} onSelect={onSelect} />
           ))}
@@ -137,6 +137,7 @@ function countDocs(node: TreeNode): number {
   walk(node.children);
   return n;
 }
+
 
 
 

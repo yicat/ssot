@@ -138,6 +138,11 @@ async function main() {
   check("文档图标与文字同色", sameColor(treeColors.fileIcon, treeColors.fileText), `icon=${treeColors.fileIcon} text=${treeColors.fileText}`);
   check("文件名比正文淡", !!fl && !!bc && fl.l >= bc.l && fl.a < bc.a, `file=${treeColors.fileText} body=${treeColors.body}`);
   check("分组标题最淡", !!gc && !!fl && gc.l > fl.l, `group=${treeColors.group}`);
+  const groupWeight = await page.evaluate(() => {
+    const g = document.querySelector("aside .tree-group");
+    return g ? getComputedStyle(g).fontWeight : null;
+  });
+  check("分组标题不加粗", groupWeight === "400", String(groupWeight));
   check("文件夹与文档图标不同", treeStyle.folders > 0 && treeStyle.files > 0, `folder=${treeStyle.folders} file=${treeStyle.files}`);
   check("示例 vault 没有顶层文档（合规）", !treeText.includes("直接放在顶层"));
   check("树里未核验有标记", treeText.includes("未核验"));
@@ -246,6 +251,7 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
 
 
 
