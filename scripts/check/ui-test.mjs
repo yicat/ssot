@@ -107,6 +107,7 @@ async function main() {
     return {
       // 显式查图标：按钮里第一个 svg 是**折叠箭头**，不是文件夹图标（踩过）
       folderIcon: color(folderBtn?.querySelector(".lucide-folder, .lucide-folder-open")),
+      folderCaret: color(folderBtn?.querySelector(".lucide-chevron-down, .lucide-chevron-right")),
       folderText: color(folderBtn?.querySelector(".tree-folder")),
       fileIcon: color(fileBtn?.querySelector(".lucide-file-text")),
       fileText: color(fileBtn?.querySelector(".tree-file")),
@@ -135,6 +136,11 @@ async function main() {
     `icon=${treeColors.folderIcon} text=${treeColors.folderText}`,
   );
   check("文件夹是浅蓝（有彩度）", !!fc && fc.c > 0.03, `chroma=${fc?.c}`);
+  check(
+    "折叠/展开图标与文件夹同色",
+    sameColor(treeColors.folderCaret, treeColors.folderText),
+    `caret=${treeColors.folderCaret} text=${treeColors.folderText}`,
+  );
   check("文档图标与文字同色", sameColor(treeColors.fileIcon, treeColors.fileText), `icon=${treeColors.fileIcon} text=${treeColors.fileText}`);
   check("文件名比正文淡", !!fl && !!bc && fl.l >= bc.l && fl.a < bc.a, `file=${treeColors.fileText} body=${treeColors.body}`);
   check("分组标题最淡", !!gc && !!fl && gc.l > fl.l, `group=${treeColors.group}`);
@@ -251,6 +257,7 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
 
 
 

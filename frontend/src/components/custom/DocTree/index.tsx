@@ -84,7 +84,7 @@ function Node({
           style={pad}
           className="flex w-full items-center gap-1 rounded py-1 pr-2 text-left hover:bg-secondary/60"
         >
-          {open ? <ChevronDown className="size-3 shrink-0" /> : <ChevronRight className="size-3 shrink-0" />}
+          {open ? <ChevronDown className="tree-folder size-3 shrink-0" /> : <ChevronRight className="tree-folder size-3 shrink-0" />}
           {open ? (
             <FolderOpen className="tree-folder size-3.5 shrink-0" />
           ) : (
@@ -137,6 +137,7 @@ function countDocs(node: TreeNode): number {
   walk(node.children);
   return n;
 }
+
 
 
 
