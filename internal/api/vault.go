@@ -98,6 +98,32 @@ type VaultOverview struct {
 	Tables []string    `json:"tables"`
 }
 
+// VaultHit 是一条检索命中（面向界面）。
+type VaultHit struct {
+	Path        string `json:"path"`
+	Layer       string `json:"layer"`
+	Status      string `json:"status"`
+	Title       string `json:"title"`
+	Snippet     string `json:"snippet"`
+	TitleMatch  bool   `json:"titleMatch"`
+	Occurrences int    `json:"occurrences"`
+}
+
+// VaultTableInfo 是索引里的一张数据表（面向界面）。
+type VaultTableInfo struct {
+	Name    string   `json:"name"`
+	File    string   `json:"file"`
+	Format  string   `json:"format"`
+	Rows    int      `json:"rows"`
+	Columns []string `json:"columns"`
+}
+
+// VaultResultSet 是一次只读查询的结果（面向界面）。
+type VaultResultSet struct {
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+}
+
 // VaultService 暴露文档库。
 type VaultService struct {
 	session *compose.Session
@@ -253,4 +279,65 @@ func toChange(c vaultapp.Change) VaultChange {
 		Path: c.Path, From: string(c.From), To: string(c.To),
 		Actor: c.Actor.Trailer(), CommitMessage: c.CommitMessage(),
 	}
+}
+
+// Search 在标题与正文里检索（走派生索引；索引缺失时后端会先建）。
+func (s *VaultService) Search(query string, limit int) ([]VaultHit, error) {
+	svc, err := s.service()
+	if err != nil {
+		return nil, err
+	}
+	hits, err := svc.Search(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VaultHit, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, VaultHit{
+			Path: h.Path, Layer: string(h.Layer), Status: string(h.Status), Title: h.Title,
+			Snippet: h.Snippet, TitleMatch: h.TitleMatch, Occurrences: h.Occurrences,
+		})
+	}
+	return out, nil
+}
+
+// TableInfos 列出数据表（含推断出来的列与行数）。
+func (s *VaultService) TableInfos() ([]VaultTableInfo, error) {
+	svc, err := s.service()
+	if err != nil {
+		return nil, err
+	}
+	tables, err := svc.TableInfos()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]VaultTableInfo, 0, len(tables))
+	for _, t := range tables {
+		out = append(out, VaultTableInfo{
+			Name: t.Name, File: t.File, Format: t.Format, Rows: t.Rows, Columns: t.Columns,
+		})
+	}
+	return out, nil
+}
+
+// Query 对派生索引跑一条只读查询（数据表 + 文档 front matter）。
+func (s *VaultService) Query(stmt string, limit int) (VaultResultSet, error) {
+	svc, err := s.service()
+	if err != nil {
+		return VaultResultSet{}, err
+	}
+	rs, err := svc.QueryTables(stmt, limit)
+	if err != nil {
+		return VaultResultSet{}, err
+	}
+	return VaultResultSet{Columns: rs.Columns, Rows: rs.Rows}, nil
+}
+
+// Reindex 重建派生索引（界面上给一个「重建索引」的入口）。
+func (s *VaultService) Reindex() error {
+	svc, err := s.service()
+	if err != nil {
+		return err
+	}
+	return svc.Reindex()
 }

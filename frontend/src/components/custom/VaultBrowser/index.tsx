@@ -24,8 +24,27 @@ import type {
 import { useVaultBrowser, statusStyle } from "./useVaultBrowser";
 
 export function VaultBrowser() {
-  const { root, items, tables, selected, doc, links, notice, noticeIsError, busy, set, reload, select, follow, publish } =
-    useVaultBrowser();
+  const {
+    root,
+    items,
+    tables,
+    tableInfos,
+    query,
+    hits,
+    selected,
+    doc,
+    links,
+    notice,
+    noticeIsError,
+    busy,
+    set,
+    reload,
+    select,
+    follow,
+    publish,
+    search,
+    clearSearch,
+  } = useVaultBrowser();
 
   const docs = items.filter((it) => it.layer === "docs");
   const raw = items.filter((it) => it.layer === "raw");
@@ -39,11 +58,33 @@ export function VaultBrowser() {
         <span className="shrink-0">
           {items.length} 篇文档 · {tables.length} 张表
         </span>
+        {/*
+          检索框用**非受控输入**：值不需要别处读，回车时直接读 DOM 值最省事——
+          少一层状态同步，也就不会出现「输入框里有字、状态没跟上」这类问题。
+        */}
+        <input
+          defaultValue=""
+          onKeyDown={(e) => {
+            const el = e.currentTarget;
+            if (e.key === "Enter") void search(el.value);
+            if (e.key === "Escape") {
+              el.value = "";
+              clearSearch();
+            }
+          }}
+          placeholder="检索标题与正文（回车）"
+          className="ml-auto w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-ring"
+        />
+        {hits !== null && (
+          <button type="button" onClick={clearSearch} className="shrink-0 rounded px-2 py-0.5 hover:bg-secondary">
+            清除检索
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void reload()}
           disabled={busy}
-          className="ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
         >
           <RefreshCw className="size-3" />
           刷新
@@ -74,20 +115,64 @@ export function VaultBrowser() {
 
       <div className="flex min-h-0 flex-1">
         <aside className="w-72 shrink-0 overflow-auto border-r border-border py-2">
+          {hits !== null && (
+            <div className="mb-2 px-3">
+              <div className="mb-1 text-xs font-semibold text-muted-foreground">
+                检索「{query}」（{hits.length}）
+              </div>
+              {hits.length === 0 && <div className="px-2 py-1 text-xs text-muted-foreground">没有命中</div>}
+              {hits.map((h) => {
+                const st = statusStyle(h.status);
+                return (
+                  <button
+                    key={h.path}
+                    type="button"
+                    onClick={() => void select(h.path)}
+                    className={
+                      "block w-full rounded px-2 py-1 text-left " + (h.path === selected ? "bg-secondary" : "hover:bg-secondary/60")
+                    }
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className={`shrink-0 rounded px-1 text-[10px] leading-4 ${st.className}`}>{st.label}</span>
+                      <span className="truncate text-sm">{h.title}</span>
+                      {h.titleMatch && <span className="shrink-0 text-[10px] text-muted-foreground">标题命中</span>}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{h.snippet}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <Group title={`整理层 docs/`} count={docs.length} items={docs} selected={selected} onSelect={select} />
           <Group title={`原始层 raw/`} count={raw.length} items={raw} selected={selected} onSelect={select} />
-          {tables.length > 0 && (
+          {tableInfos.length > 0 ? (
             <div className="mt-2 px-3">
-              <div className="mb-1 text-xs font-semibold text-muted-foreground">数据表</div>
-              {tables.map((t) => (
-                <div key={t} className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
-                  <Database className="size-3 shrink-0" />
-                  <span className="truncate" title={t}>
-                    {t}
-                  </span>
+              <div className="mb-1 text-xs font-semibold text-muted-foreground">数据表（可 SQL 查）</div>
+              {tableInfos.map((t) => (
+                <div key={t.file} className="px-2 py-1 text-xs text-muted-foreground" title={`查询用表名：${t.name}`}>
+                  <div className="flex items-center gap-2">
+                    <Database className="size-3 shrink-0" />
+                    <span className="truncate text-foreground">{t.name}</span>
+                    <span className="ml-auto shrink-0">{t.rows} 行</span>
+                  </div>
+                  <div className="truncate pl-5">{(t.columns ?? []).join("、")}</div>
                 </div>
               ))}
             </div>
+          ) : (
+            tables.length > 0 && (
+              <div className="mt-2 px-3">
+                <div className="mb-1 text-xs font-semibold text-muted-foreground">数据表</div>
+                {tables.map((t) => (
+                  <div key={t} className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+                    <Database className="size-3 shrink-0" />
+                    <span className="truncate" title={t}>
+                      {t}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </aside>
 

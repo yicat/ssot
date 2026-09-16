@@ -9,7 +9,9 @@ import { create } from "zustand";
 import type {
   VaultBacklinkResult,
   VaultDoc,
+  VaultHit,
   VaultItem,
+  VaultTableInfo,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 
 export type VaultState = {
@@ -17,8 +19,14 @@ export type VaultState = {
   root: string;
   /** 左栏：全部文档。 */
   items: VaultItem[];
-  /** 左栏：数据表。 */
+  /** 左栏：数据表（文件清单）。 */
   tables: string[];
+  /** 左栏：数据表（含索引里推断出来的列与行数）。 */
+  tableInfos: VaultTableInfo[];
+  /** 检索框里的词。 */
+  query: string;
+  /** 检索结果；`null` 表示当前没在检索（左栏显示全部文档）。 */
+  hits: VaultHit[] | null;
   /** 当前选中的文档路径。 */
   selected: string | null;
   /** 右栏：当前文档。 */
@@ -37,6 +45,9 @@ export const useVaultStore = create<VaultState>((set) => ({
   root: "",
   items: [],
   tables: [],
+  tableInfos: [],
+  query: "",
+  hits: null,
   selected: null,
   doc: null,
   links: null,

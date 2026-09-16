@@ -29,10 +29,24 @@ export function Overview(): $CancellablePromise<$models.VaultOverview> {
 }
 
 /**
+ * Query 对派生索引跑一条只读查询（数据表 + 文档 front matter）。
+ */
+export function Query(stmt: string, limit: number): $CancellablePromise<$models.VaultResultSet> {
+    return $Call.ByID(702410356, stmt, limit);
+}
+
+/**
  * Read 读一篇文档（含正文与双链）。
  */
 export function Read(path: string): $CancellablePromise<$models.VaultDoc> {
     return $Call.ByID(1076609188, path);
+}
+
+/**
+ * Reindex 重建派生索引（界面上给一个「重建索引」的入口）。
+ */
+export function Reindex(): $CancellablePromise<void> {
+    return $Call.ByID(3978968463);
 }
 
 /**
@@ -43,11 +57,25 @@ export function Resolve(ref: string): $CancellablePromise<$models.VaultResolutio
 }
 
 /**
+ * Search 在标题与正文里检索（走派生索引；索引缺失时后端会先建）。
+ */
+export function Search(query: string, limit: number): $CancellablePromise<$models.VaultHit[] | null> {
+    return $Call.ByID(1995314892, query, limit);
+}
+
+/**
  * SetStatus 改发布态。actor 形如 `human:名字` / `agent:名字`——
  * **只有人能发布**，这条规则在 case 层，界面绕不过去。
  */
 export function SetStatus(path: string, status: string, actor: string): $CancellablePromise<$models.VaultChange> {
     return $Call.ByID(3909640450, path, status, actor);
+}
+
+/**
+ * TableInfos 列出数据表（含推断出来的列与行数）。
+ */
+export function TableInfos(): $CancellablePromise<$models.VaultTableInfo[] | null> {
+    return $Call.ByID(271564161);
 }
 
 /**

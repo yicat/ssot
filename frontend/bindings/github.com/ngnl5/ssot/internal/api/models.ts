@@ -80,6 +80,19 @@ export interface VaultDoc {
 }
 
 /**
+ * VaultHit 是一条检索命中（面向界面）。
+ */
+export interface VaultHit {
+    "path": string;
+    "layer": string;
+    "status": string;
+    "title": string;
+    "snippet": string;
+    "titleMatch": boolean;
+    "occurrences": number;
+}
+
+/**
  * VaultIssue 是一条问题链接（面向界面）。
  */
 export interface VaultIssue {
@@ -139,4 +152,23 @@ export interface VaultResolution {
     "blockLine": number;
     "blockText": string;
     "candidates": string[] | null;
+}
+
+/**
+ * VaultResultSet 是一次只读查询的结果（面向界面）。
+ */
+export interface VaultResultSet {
+    "columns": string[] | null;
+    "rows": (string[] | null)[] | null;
+}
+
+/**
+ * VaultTableInfo 是索引里的一张数据表（面向界面）。
+ */
+export interface VaultTableInfo {
+    "name": string;
+    "file": string;
+    "format": string;
+    "rows": number;
+    "columns": string[] | null;
 }

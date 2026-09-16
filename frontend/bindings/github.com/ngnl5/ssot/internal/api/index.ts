@@ -15,9 +15,12 @@ export type {
     VaultBacklinkResult,
     VaultChange,
     VaultDoc,
+    VaultHit,
     VaultIssue,
     VaultItem,
     VaultLink,
     VaultOverview,
-    VaultResolution
+    VaultResolution,
+    VaultResultSet,
+    VaultTableInfo
 } from "./models.js";

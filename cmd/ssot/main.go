@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ngnl5/ssot/internal/application/vaultapp"
@@ -39,15 +40,15 @@ func main() {
 }
 
 func runVault(args []string) error {
-	cmd, rest, root, actor, err := splitCommand(args)
+	cmd, rest, f, err := splitCommand(args)
 	if err != nil {
 		return err
 	}
-	if root == "" {
+	if f.root == "" {
 		vaultUsage()
 		return fmt.Errorf("必须用 -root 指明 vault 根目录")
 	}
-	svc := vaultapp.New(root)
+	svc := vaultapp.New(f.root)
 
 	switch cmd {
 	case "":
@@ -62,21 +63,36 @@ func runVault(args []string) error {
 	case "resolve":
 		return vaultResolve(svc, rest)
 	case "status":
-		return vaultStatus(svc, rest, actor)
+		return vaultStatus(svc, rest, f.actor)
 	case "write":
-		return vaultWrite(svc, rest, actor)
+		return vaultWrite(svc, rest, f.actor)
+	case "index":
+		return vaultIndex(svc)
+	case "search":
+		return vaultSearch(svc, rest, f.limit)
+	case "tables":
+		return vaultTables(svc)
+	case "query":
+		return vaultQuery(svc, rest, f.limit)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
 	}
 }
 
-// splitCommand 手写解析：`-root` / `-actor` 放在子命令**前后都行**。
+// vaultFlags 是 vault 子命令共用的选项。
+type vaultFlags struct {
+	root  string
+	actor string
+	limit int
+}
+
+// splitCommand 手写解析：选项放在子命令**前后都行**。
 //
 // 用标准库的 flag 包做这件事会踩坑：它遇到第一个非选项参数就停止，
 // 于是 `status -actor human:我 ...` 里的 -actor 会被当成位置参数——
 // 而那恰好是用法说明里教人写的顺序。
-func splitCommand(args []string) (cmd string, positional []string, root, actor string, err error) {
+func splitCommand(args []string) (cmd string, positional []string, f vaultFlags, err error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		takeValue := func(name string) (string, error) {
@@ -89,21 +105,37 @@ func splitCommand(args []string) (cmd string, positional []string, root, actor s
 		switch {
 		case a == "-h" || a == "--help":
 			vaultUsage()
-			return "", nil, root, actor, nil
+			return "", nil, f, nil
 		case a == "-root" || a == "--root":
-			if root, err = takeValue(a); err != nil {
-				return "", nil, root, actor, err
+			if f.root, err = takeValue(a); err != nil {
+				return "", nil, f, err
 			}
 		case strings.HasPrefix(a, "-root="):
-			root = strings.TrimPrefix(a, "-root=")
+			f.root = strings.TrimPrefix(a, "-root=")
 		case a == "-actor" || a == "--actor":
-			if actor, err = takeValue(a); err != nil {
-				return "", nil, root, actor, err
+			if f.actor, err = takeValue(a); err != nil {
+				return "", nil, f, err
 			}
 		case strings.HasPrefix(a, "-actor="):
-			actor = strings.TrimPrefix(a, "-actor=")
+			f.actor = strings.TrimPrefix(a, "-actor=")
+		case a == "-limit" || a == "--limit":
+			v, verr := takeValue(a)
+			if verr != nil {
+				return "", nil, f, verr
+			}
+			n, cerr := strconv.Atoi(v)
+			if cerr != nil || n <= 0 {
+				return "", nil, f, fmt.Errorf("-limit 要一个正整数，收到 %q", v)
+			}
+			f.limit = n
+		case strings.HasPrefix(a, "-limit="):
+			n, cerr := strconv.Atoi(strings.TrimPrefix(a, "-limit="))
+			if cerr != nil || n <= 0 {
+				return "", nil, f, fmt.Errorf("-limit 要一个正整数")
+			}
+			f.limit = n
 		case strings.HasPrefix(a, "-"):
-			return "", nil, root, actor, fmt.Errorf("不认识的选项 %q（只认 -root 与 -actor）", a)
+			return "", nil, f, fmt.Errorf("不认识的选项 %q（只认 -root / -actor / -limit）", a)
 		default:
 			if cmd == "" {
 				cmd = a
@@ -112,7 +144,7 @@ func splitCommand(args []string) (cmd string, positional []string, root, actor s
 			}
 		}
 	}
-	return cmd, positional, root, actor, nil
+	return cmd, positional, f, nil
 }
 
 func vaultList(svc *vaultapp.Service) error {
@@ -272,6 +304,144 @@ func vaultWrite(svc *vaultapp.Service, args []string, actor string) error {
 	return nil
 }
 
+// vaultIndex 重建派生索引。索引是全派生的，随时可以重建，所以别怕跑。
+func vaultIndex(svc *vaultapp.Service) error {
+	if err := svc.Reindex(); err != nil {
+		return err
+	}
+	items, err := svc.List()
+	if err != nil {
+		return err
+	}
+	tables, err := svc.TableInfos()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("索引已重建：%s\n  文档 %d 篇，数据表 %d 张\n", svc.IndexPath(), len(items), len(tables))
+	for _, t := range tables {
+		fmt.Printf("  %-18s ← %s（%s，%d 行；列：%s）\n",
+			t.Name, t.File, t.Format, t.Rows, strings.Join(t.Columns, "、"))
+	}
+	return nil
+}
+
+func vaultSearch(svc *vaultapp.Service, args []string, limit int) error {
+	if len(args) == 0 {
+		return fmt.Errorf("search 后面要跟搜索词")
+	}
+	q := strings.Join(args, " ")
+	hits, err := svc.Search(q, limit)
+	if err != nil {
+		return err
+	}
+	if len(hits) == 0 {
+		fmt.Printf("没有命中「%s」\n", q)
+		return nil
+	}
+	for _, h := range hits {
+		mark := "·"
+		if h.Status == vault.StatusDraft {
+			mark = "!"
+		}
+		where := ""
+		if h.TitleMatch {
+			where = "（标题命中）"
+		}
+		fmt.Printf("%s [%-9s] %s%s\n    %s\n", mark, h.Status, h.Path, where, h.Snippet)
+	}
+	return nil
+}
+
+func vaultTables(svc *vaultapp.Service) error {
+	tables, err := svc.TableInfos()
+	if err != nil {
+		return err
+	}
+	if len(tables) == 0 {
+		fmt.Println("这个 vault 还没有数据表（tables/ 是空的）")
+		return nil
+	}
+	for _, t := range tables {
+		fmt.Printf("%-18s ← %s（%s，%d 行）\n  列：%s\n", t.Name, t.File, t.Format, t.Rows, strings.Join(t.Columns, "、"))
+	}
+	fmt.Println("\n查询示例：  ssot vault -root <vault> query \"SELECT * FROM 技能倍率\"")
+	return nil
+}
+
+func vaultQuery(svc *vaultapp.Service, args []string, limit int) error {
+	if len(args) == 0 {
+		return fmt.Errorf("query 后面要跟一条 SELECT（只读：派生索引不在这里改）")
+	}
+	rs, err := svc.QueryTables(strings.Join(args, " "), limit)
+	if err != nil {
+		return err
+	}
+	printResultSet(rs)
+	return nil
+}
+
+// printResultSet 按列对齐打印查询结果（中文按 rune 数算宽度）。
+func printResultSet(rs vault.ResultSet) {
+	if len(rs.Columns) == 0 {
+		fmt.Println("（没有列）")
+		return
+	}
+	widths := make([]int, len(rs.Columns))
+	for i, c := range rs.Columns {
+		widths[i] = runeLen(c)
+	}
+	rows := make([][]string, len(rs.Rows))
+	for r, row := range rs.Rows {
+		rows[r] = make([]string, len(row))
+		for i, v := range row {
+			s := truncateRunes(v, 40)
+			rows[r][i] = s
+			if w := runeLen(s); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	header := make([]string, len(rs.Columns))
+	for i, c := range rs.Columns {
+		header[i] = padRight(c, widths[i])
+	}
+	fmt.Println(strings.Join(header, " | "))
+	sep := make([]string, len(rs.Columns))
+	for i := range sep {
+		sep[i] = strings.Repeat("-", widths[i])
+	}
+	fmt.Println(strings.Join(sep, "-+-"))
+	for _, row := range rows {
+		cells := make([]string, len(rs.Columns))
+		for i := range rs.Columns {
+			v := ""
+			if i < len(row) {
+				v = row[i]
+			}
+			cells[i] = padRight(v, widths[i])
+		}
+		fmt.Println(strings.Join(cells, " | "))
+	}
+	fmt.Printf("（%d 行）\n", len(rs.Rows))
+}
+
+func runeLen(s string) int { return len([]rune(s)) }
+
+func padRight(s string, w int) string {
+	if d := w - runeLen(s); d > 0 {
+		return s + strings.Repeat(" ", d)
+	}
+	return s
+}
+
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
+}
+
 func describeLink(l vault.Link) string {
 	s := l.Raw
 	if s == "" {
@@ -302,16 +472,22 @@ func usage() {
 vault 子命令（读）：
   list                                       列文档与数据表（draft 会标 ! ）
   read <路径>                                读一篇（元信息 + 正文 + 双链）
-  backlinks <路径>                           反链，以及它自己链出去的断链
+  backlinks <路径>                           反链，以及它自己链出去的问题链接
   resolve <双链>                             解析到具体文档与锚点（块级锚点=主张级溯源）
+  search <词>                                在标题与正文里检索（走派生索引）
+  tables                                     列数据表：表名、来源文件、推断出来的列
+  query "<SQL>"                              对派生索引跑只读查询（数据表 + 文档 front matter）
 
 vault 子命令（写）：
   status -actor human:名字 <路径> <状态>      改发布态（**只有人能发布**）
   write  -actor <人|agent> <路径>            写正文（从标准输入读；agent 写入回落 draft）
+  index                                      重建派生索引（.data/index.db，删了能重建）
 
 示例：
   ssot vault -root projects/demo list
   ssot vault -root projects/demo resolve "[[raw/灰机wiki/茨木童子#^第3段]]"
+  ssot vault -root projects/demo search 伤害
+  ssot vault -root projects/demo query "SELECT title,status FROM docs WHERE status='draft'"
   ssot vault -root projects/demo status -actor human:我 docs/式神/茨木童子.md published
 
 界面（Wails 桌面 / 服务模式）：
@@ -332,14 +508,19 @@ func vaultUsage() {
 选项（放在子命令**前后都行**）：
   -root <vault>     vault 根目录（含 project.yml 的项目目录）
   -actor <身份>     human:名字 或 agent:名字；**写操作必填**
+  -limit <n>        检索/查询的行数上限
 
 子命令：
   list                     列文档与数据表
   read <路径>              读一篇文档
-  backlinks <路径>         反链 + 断链
+  backlinks <路径>         反链 + 问题链接（断链与「指不清」分开）
   resolve <双链>           解析双链到文档与锚点
+  search <词>              在标题与正文里检索
+  tables                   列数据表（含推断出来的列）
+  query "<SQL>"            只读查询派生索引
   status <路径> <状态>     改发布态（只有人能发布；需要 -actor）
   write <路径>             写正文，从标准输入读（需要 -actor）
+  index                    重建派生索引
 
 读操作不需要 -actor；写操作必须给，且分人还是 agent——
 agent 改过的文档一律回落 draft，等人复核（docs/specs/agent.spec.md）。

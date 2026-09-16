@@ -11,7 +11,9 @@ import {
   Overview,
   Read,
   Resolve,
+  Search,
   SetStatus,
+  TableInfos,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/vaultservice";
 import type { VaultDoc, VaultLink } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { useVaultStore } from "./store";
@@ -34,8 +36,13 @@ export function useVaultBrowser() {
     const { set } = useVaultStore.getState();
     set({ busy: true });
     try {
-      const overview = await Overview();
-      set({ root: overview.root, items: overview.items ?? [], tables: overview.tables ?? [] });
+      const [overview, tableInfos] = await Promise.all([Overview(), TableInfos()]);
+      set({
+        root: overview.root,
+        items: overview.items ?? [],
+        tables: overview.tables ?? [],
+        tableInfos: tableInfos ?? [],
+      });
       const first = overview.items?.[0]?.path;
       if (first) {
         await openDoc(first);
@@ -52,6 +59,35 @@ export function useVaultBrowser() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * 检索：走派生索引（后端在索引缺失时会先建）。
+   *
+   * 结果留在左栏（而不是弹层）：检索是「换一种方式看同一批文档」，
+   * 点结果就开那一篇，语义比弹层顺。
+   */
+  const search = useCallback(async (q: string) => {
+    const { set } = useVaultStore.getState();
+    const query = q.trim();
+    set({ query: q });
+    if (!query) {
+      set({ hits: null });
+      return;
+    }
+    try {
+      set({ busy: true });
+      const hits = await Search(query, 50);
+      set({ hits: hits ?? [], notice: null, noticeIsError: false });
+    } catch (e) {
+      set({ notice: String(e), noticeIsError: true });
+    } finally {
+      set({ busy: false });
+    }
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    useVaultStore.getState().set({ query: "", hits: null });
+  }, []);
 
   /** 点左栏的文档。 */
   const select = useCallback(
@@ -127,7 +163,7 @@ export function useVaultBrowser() {
     [openDoc],
   );
 
-  return { ...store, reload: load, select, follow, publish };
+  return { ...store, reload: load, select, follow, publish, search, clearSearch };
 }
 
 /** 状态徽标的样式与中文标签。draft（未核验）要最显眼。 */

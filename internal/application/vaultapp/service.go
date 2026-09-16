@@ -14,15 +14,19 @@ import (
 
 	"github.com/ngnl5/ssot/internal/domain/vault"
 	"github.com/ngnl5/ssot/internal/infrastructure/vaultfs"
+	"github.com/ngnl5/ssot/internal/infrastructure/vaultindex"
 )
 
 // Service 是一个 vault 上的用例入口。
 type Service struct {
 	loader *vaultfs.Loader
+	index  *vaultindex.Index
 }
 
 // New 构造 Service。
-func New(root string) *Service { return &Service{loader: vaultfs.New(root)} }
+func New(root string) *Service {
+	return &Service{loader: vaultfs.New(root), index: vaultindex.New(root)}
+}
 
 // Root 返回 vault 根目录。
 func (s *Service) Root() string { return s.loader.Root }
@@ -52,6 +56,49 @@ func (s *Service) List() ([]Item, error) {
 
 // Tables 列出数据表。
 func (s *Service) Tables() ([]string, error) { return s.loader.Tables() }
+
+// IndexPath 是派生索引的位置（`<vault>/.data/index.db`）。
+func (s *Service) IndexPath() string { return s.index.Path() }
+
+// Reindex 重建派生索引。
+//
+// 索引是**全派生**的：删了能重建，也可以随时重建——所以不担心它过期。
+func (s *Service) Reindex() error { return s.index.Rebuild() }
+
+// ensureIndex 索引缺失时先建起来。
+//
+// 「搜不到东西」不该是因为忘了建索引——那种误导比慢几十毫秒严重得多。
+func (s *Service) ensureIndex() error {
+	if s.index.Exists() {
+		return nil
+	}
+	return s.index.Rebuild()
+}
+
+// Search 在文档的标题与正文里检索。
+func (s *Service) Search(q string, limit int) ([]vault.Hit, error) {
+	if err := s.ensureIndex(); err != nil {
+		return nil, err
+	}
+	return s.index.Search(q, limit)
+}
+
+// TableInfos 列出数据表（含推断出来的列与行数）。
+func (s *Service) TableInfos() ([]vault.TableInfo, error) {
+	if err := s.ensureIndex(); err != nil {
+		return nil, err
+	}
+	return s.index.Tables()
+}
+
+// QueryTables 对索引跑一条只读查询：能查数据表，也能查文档的 front matter
+// （docs 表里有 path/title/status/tags/source）。
+func (s *Service) QueryTables(stmt string, limit int) (vault.ResultSet, error) {
+	if err := s.ensureIndex(); err != nil {
+		return vault.ResultSet{}, err
+	}
+	return s.index.Query(stmt, limit)
+}
 
 // Docs 读出全部文档（含正文与双链），供内部与需要全量的用例使用。
 func (s *Service) Docs() ([]vault.Doc, error) { return s.loader.Load() }
