@@ -99,17 +99,52 @@ skill 名必须 kebab-case（`dsh.spec.md` §5），所以：
 主 Agent 不需要 skill：它由后端提供，负责调度；它的约束（不直接改文档、只调子 Agent 与工具）
 写在 `AGENTS.md` 里。
 
+### 7. 聊天界面：主体区第三个模式，后端走 ACP
+
+**位置**：主体区三个模式——`文档` / `数据表` / `Agent`。文档仍是主角（`document.spec.md`），
+所以 Agent **不占左栏、不弹窗、不常驻**：切过去才占主体，切回来文档还在原处。
+
+**后端不是我们写的**：App 起一个 **ACP 后端**（`dsh --profile acp`，stdio），
+说标准 [Agent Client Protocol](https://agentclientprotocol.com) v1。选它的理由：它是**可替换后端**
+那条线的落地处（`agent.spec.md` 定位 §2）——换后端只换这一层，能力层与四个 skill 都不动。
+
+**MCP 按会话挂，不要全局配置**：ACP 的 `session/new` 直接收 `mcpServers`，
+所以 App 这条路是这么接的：
+
+```
+session/new { cwd: <vault 绝对路径>, mcpServers: [ { name: "ssot", command: <ssot 可执行文件的绝对路径>,
+                                                     args: ["mcp", "--root", <vault>], type: "stdio" } ] }
+```
+
+于是 **App 内置聊天不需要 `.dsh/mcp.patch.yml`、也不需要碰 profile**——
+overlay 那条路（`dsh.spec.md`）留给「用 DSH 自己的界面聊天」的场景。两条路都是会话级，互不干扰。
+
+**权限提示由界面问人**：ACP 的 `session/request_permission`（`allow-once` / `reject-once`）
+由 App 弹出来让人点——这是「批准必须是人」在聊天界面里的落地。
+⚠️ 但**发布仍然只能在文档页点**：MCP 里根本没有 `status_set`（§5），
+不因为多了个聊天界面就放宽。
+
+**会话由后端持久化，我们不自建一份**：ACP 提供 `session/list`、`session/resume`、`session/close`，
+所以「未定 #2 会话与上下文存哪」到此定了：**后端管**，我们只做列表与恢复的界面。
+（原先倾向「我们也存一份只读记录」，现在有实证：后端的持久化就是那份记录，再存一份是重复。）
+
+**模型与推理强度不进配置页**：它们来自 `session/new` 返回的 `configOptions`，
+用 `session/set_config_option` 改——是**这一次会话**的选择，所以放在 Agent 面板里，
+不是全局配置（见 `settings.spec.md`）。
+
+**第一版不做**：fork / 删除会话（ACP 不支持，只有 list / resume / close）、
+附件与图片提示词、计划与终端面板、elicitation（ACP 刻意不提供）、多后端并存（一次一个）。
+
 ## 未定
 
 1. **编排协议的具体形态**：聊天壳 ↔ 后端之间是自己定一套（消息 + 工具调用 + 流式），
    还是直接照 MCP 的客户端形状做。这决定后端能不能"即插即用"。
-2. **会话与上下文存哪**：我们存（可审计）还是后端自己管（更简单）。倾向前者存一份只读记录，
-   便于"这条结论是哪次会话产生的"这种追溯。
-3. 子 Agent 之间能不能互相调用（现在假设只能由主 Agent 调度）。
-4. 聊天壳的界面形态（并入现有标题栏那套壳，还是独立面板）。
+2. 子 Agent 之间能不能互相调用（现在假设只能由主 Agent 调度）。
+3. 换掉 DSH 之后，四个角色的 skill 怎么随 App 分发（现在靠 `.dsh/skills/`，那是 DSH 的发现规则）。
 
-> 「四个子 Agent 的实现形态」原列在此处，**已定**（DSH 场景 = `.dsh/skills/`，名字与目录见 §6）；
-> 「换成别的后端时角色定义怎么随 App 分发」仍没定。
+> 「四个子 Agent 的实现形态」已定（DSH 场景 = `.dsh/skills/`，见 §6）；
+> 「会话与上下文存哪」已定（后端持久化，见 §7）；
+> 「聊天壳的界面形态」已定（主体区第三个模式，见 §7）。
 
 ## 怎么验证
 
@@ -121,3 +156,6 @@ skill 名必须 kebab-case（`dsh.spec.md` §5），所以：
 - 每次写入的 commit trailer 里有 `Edited-By`（能力层代跑，见 §3）
 - MCP 与 CLI 走同一套权限规则（同一条规则在两个入口行为一致）：
   `scripts/check/mcp-smoke.mjs` 跑的就是「同一批断言，换一个入口」
+- 聊天界面（§7）：用**假 ACP 后端**（一个照协议说话的测试替身）验界面行为——
+  发一句话能收到流式更新、工具调用有轨迹、权限提示能允许/拒绝、能中止；
+  **不拿真模型跑测试**（慢、花钱、结果不稳）

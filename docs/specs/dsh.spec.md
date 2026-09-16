@@ -72,11 +72,33 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
    `--host` / `--port` 前面（后者不是启动器选项，`passThroughOptions` 一遇到就把后面全透传给 app）；
    而且 **dump 模式不收任何 app 参数**，多一个 `--host` 就报 `config dumps take no app arguments`。
 
+## ACP 后端（App 内置聊天用）
+
+聊天界面走 ACP（`agent.spec.md` §7）。这里只记**在本机探出来的事实**，形状与理由在那份 spec 里。
+
+### 已核实的事实
+
+| 事实 | 怎么知道的 |
+|---|---|
+| ACP 后端 = `dsh --profile acp`，说 ACP v1（`protocolVersion: 1`），agent 自称 `deepseek-harness-acp` | 真起了一次，`initialize` 的返回 |
+| `session/new {cwd, mcpServers}` → `{sessionId, configOptions}`：**MCP 服务器按会话挂**，`command` 必须是绝对路径 | 同上，`session/new` 返回 + `dsh-acp` 的 `resolveMcpConfigs` 校验 |
+| `configOptions` 里是模型目录（分组、`value` 是 `["provider","model"]` 这样的 JSON 元组） | 同上 |
+| 会话**持久化且全机器共享**：`session/list` 能看到用户自己在别处写的会话；它支持按绝对 `cwd` 过滤 | 探针的输出里出现了 cwd = 仓库根的会话，那是用户自己的 |
+| `DSH_HOME` 是 `%APPDATA%\dsh-desktop\harness`，**不是** `~/.dsh` | harness 启动时打在 stdout 上的那行 |
+| ⚠️ 真后端的 **stdout 上混着 `[harness-node] …` 诊断行**，而且夹在协议消息之间 | 探针把这些行判成了「非 JSON」 |
+| `acp` profile 本机原本不存在，已新建 `~/.dsh/profiles/acp/package.json`（bundles：`dsh-base` + `dsh-acp-app`）；**不用装东西**——`~/.dsh/profiles/node_modules/@deepseek-ai/` 下这些包本来就有 | 建完 `--dump-config` 无错误、`--help` 能起来、真连一次成功 |
+
+### 由此定下的两条实现要求
+
+1. **跳过非协议行**：客户端遇到 stdout 上不是 JSON 的行要**记下来继续读**，
+   不能当协议错误（`internal/infrastructure/acp` 里就是这么做的，并有测试守这条）。
+2. **列会话必须带 `cwd`**：不带筛选会把用户写代码的会话一起列进我们界面的会话列表里。
+
 ## 不做
 
 - 不做 `streamable-http`；不做 MCP resources / prompts（DSH 也不桥接）。
 - 不把 MCP 条目写进全局 profile（正是为了不跟「写代码的 DSH」冲突）。
-- 不做 App 内置聊天壳（`agent.spec.md` 未定 #5）——本轮只把 overlay 与 skill 备好。
+- 不做 App 内置聊天壳之外的第二套后端接入（`agent.spec.md` §7 的第一版范围）。
 - 不做 `raw.refresh`（抓取）：远超 MCP 默认 60s 超时，要单独设计。
 
 ## 怎么验证
