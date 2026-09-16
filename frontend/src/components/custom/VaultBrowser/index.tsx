@@ -354,8 +354,11 @@ function DocPane({
           <header className="mb-4 border-b border-border pb-3">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h1 className="font-heading text-lg font-semibold">{doc.title}</h1>
-              <span className={`rounded px-1.5 py-0.5 text-[11px] leading-4 ${st.className}`}>{st.label}</span>
-              <span className="text-[11px] text-muted-foreground">{doc.path}</span>
+              {/* 路径与状态让到右边：标题是这一行要认的东西 */}
+              <span className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span>{doc.path}</span>
+                <span className={`rounded px-1.5 py-0.5 leading-4 ${st.className}`}>{st.label}</span>
+              </span>
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
               {(doc.tags ?? []).length > 0 && (
@@ -467,4 +470,5 @@ function SidePanel({ icon, title, children }: { icon: ReactNode; title: string; 
 function Empty({ children }: { children: ReactNode }) {
   return <div className="px-1 py-1 text-xs text-muted-foreground">{children}</div>;
 }
+
 

@@ -89,9 +89,10 @@ export function SearchModal({ open, query, hits, busy, cursor, onQuery, onMove, 
                 className={"block w-full px-3 py-2 text-left " + (i === cursor ? "bg-secondary" : "hover:bg-secondary/60")}
               >
                 <span className="flex items-center gap-2">
-                  <span className={`shrink-0 rounded px-1 text-[10px] leading-4 ${st.className}`}>{st.label}</span>
                   <span className="truncate text-sm">{h.title}</span>
                   {h.titleMatch && <span className="shrink-0 text-[10px] text-muted-foreground">标题命中</span>}
+                  {/* 状态在行尾：先看到标题 */}
+                  <span className={`ml-auto shrink-0 rounded px-1 text-[10px] leading-4 ${st.className}`}>{st.label}</span>
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{h.snippet}</span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{h.path}</span>
@@ -109,3 +110,4 @@ export function SearchModal({ open, query, hits, busy, cursor, onQuery, onMove, 
     </div>
   );
 }
+

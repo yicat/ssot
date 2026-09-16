@@ -26,6 +26,9 @@ export type TreeNode = {
   children: TreeNode[];
 };
 
+/** 两层的分组标题：目录名是结构，标签给人看。 */
+export const LAYER_LABEL: Record<string, string> = { docs: "整理层", raw: "原始层" };
+
 /** 允许的最大层数：根 + 一层文件夹 + 文档。 */
 export const MAX_DEPTH = 3;
 
@@ -40,7 +43,7 @@ export function buildTree(items: VaultItem[]): TreeNode[] {
     if (node === undefined) {
       const created: TreeNode = {
         kind: "folder",
-        name: layer, // 显示**真实目录名**：不堆自造的中英混排前缀（见 document.spec.md）
+        name: LAYER_LABEL[layer] ?? layer, // 中文分组标题（见 document.spec.md）
         path: layer,
         depth: 1,
         children: [],
@@ -114,4 +117,5 @@ export function useDocTree(items: VaultItem[]) {
 
   return { tree, collapsed, toggle, deepCount };
 }
+
 

@@ -63,7 +63,27 @@ async function main() {
   // ── 文件树（层级、排序、标记）─────────────────────────────
   const aside = page.locator("aside").first();
   const treeText = await aside.innerText();
-  check("文件树显示真实目录名（docs / raw）", treeText.includes("docs") && treeText.includes("raw") && !treeText.includes("整理层"));
+  check("文件树用中文分组标题", treeText.includes("整理层") && treeText.includes("原始层"));
+  // 状态在行尾：用位置断言（chip 在标题右边、且贴着行的右边缘）
+  const layout = await page.evaluate(() => {
+    const row = [...document.querySelectorAll("aside button")].find(
+      (b) => b.innerText.includes("茨木童子") && b.innerText.includes("未核验"),
+    );
+    if (!row) return null;
+    const spans = [...row.querySelectorAll("span")];
+    const title = spans.find((s) => s.innerText.includes("茨木童子"));
+    const chip = spans.find((s) => s.innerText.trim() === "未核验");
+    if (!title || !chip) return null;
+    const rb = row.getBoundingClientRect();
+    const tb = title.getBoundingClientRect();
+    const cb = chip.getBoundingClientRect();
+    return { titleX: Math.round(tb.left - rb.left), chipX: Math.round(cb.left - rb.left), chipRightGap: Math.round(rb.right - cb.right) };
+  });
+  check(
+    "状态标记在标题右边、贴行尾",
+    !!layout && layout.chipX > layout.titleX && layout.chipRightGap <= 12,
+    layout ? JSON.stringify(layout) : "没找到那一行",
+  );
   check("文件树显示文件夹", treeText.includes("式神") && treeText.includes("机制"));
   check("树里未核验有标记", treeText.includes("未核验"));
   check("数据表列在左栏", treeText.includes("数据表"));
@@ -166,6 +186,7 @@ main().catch((e) => {
   console.error("测试脚本自身出错：" + e.message);
   process.exit(1);
 });
+
 
 
 
