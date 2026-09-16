@@ -21,8 +21,17 @@ export type VaultState = {
   items: VaultItem[];
   /** 左栏：数据表（文件清单）。 */
   tables: string[];
-  /** 左栏：数据表（含索引里推断出来的列与行数）。 */
+  /** 数据表（含索引里推断出来的列与行数）。 */
   tableInfos: VaultTableInfo[];
+  /**
+   * 数据表的行数据，按来源文件（`tables/xxx.csv`）索引。
+   *
+   * 预取而不是渲染时现取：文档里的 `![[表.csv]]` 是**同步渲染**的，
+   * 渲染函数不该等 IO——不然整篇文档会跳一下才出来。
+   */
+  tableData: Record<string, { columns: string[]; rows: string[][] }>;
+  /** 是否显示 `%%注释%%`（默认不显示：注释是给自己看的）。 */
+  showComments: boolean;
   /** 检索框里的词。 */
   query: string;
   /** 检索结果；`null` 表示当前没在检索（左栏显示全部文档）。 */
@@ -46,6 +55,8 @@ export const useVaultStore = create<VaultState>((set) => ({
   items: [],
   tables: [],
   tableInfos: [],
+  tableData: {},
+  showComments: false,
   query: "",
   hits: null,
   selected: null,

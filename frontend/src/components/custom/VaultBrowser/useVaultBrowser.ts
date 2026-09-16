@@ -9,13 +9,16 @@ import { useCallback, useEffect } from "react";
 import {
   Backlinks,
   Overview,
+  Query,
   Read,
   Resolve,
   Search,
   SetStatus,
   TableInfos,
+  Write,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/vaultservice";
-import type { VaultDoc, VaultLink } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import type { VaultDoc, VaultItem, VaultLink } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import type { ResolvedLink } from "../../../lib/markdown";
 import { useVaultStore } from "./store";
 
 /** 界面上点按钮的人。核验身份的分级（多个使用者）还没定，先用这一档。 */
@@ -43,6 +46,20 @@ export function useVaultBrowser() {
         tables: overview.tables ?? [],
         tableInfos: tableInfos ?? [],
       });
+      // 预取表数据：文档里的 `![[表.csv]]` 是同步渲染的，渲染函数不该等 IO。
+      const tableData: Record<string, { columns: string[]; rows: string[][] }> = {};
+      for (const t of tableInfos ?? []) {
+        try {
+          const rs = await Query(`SELECT * FROM "${t.name}" LIMIT 200`, 200);
+          tableData[t.file] = {
+            columns: rs.columns ?? [],
+            rows: (rs.rows ?? []).map((r) => r ?? []),
+          };
+        } catch {
+          // 单张表取不到不影响别的：它照样在左栏列出来，只是嵌入时提示取不到。
+        }
+      }
+      set({ tableData });
       const first = overview.items?.[0]?.path;
       if (first) {
         await openDoc(first);
@@ -111,12 +128,12 @@ export function useVaultBrowser() {
    * 解析失败**不吞**：断链与「指不清」（同名多篇）都要说出来——
    * 这正是这套东西该有的样子，报错信息里带着候选。
    */
-  const follow = useCallback(
-    async (link: VaultLink) => {
+  const followLink = useCallback(
+    async (raw: string) => {
       const { set } = useVaultStore.getState();
       try {
         set({ busy: true });
-        const res = await Resolve(link.raw);
+        const res = await Resolve(raw);
         const parts = [`已跳到 ${res.path}`];
         if (res.block) {
           parts.push(
@@ -137,6 +154,55 @@ export function useVaultBrowser() {
     },
     [openDoc],
   );
+
+  /** 点正文里的双链：解析后跳过去（供列表里的链接用）。 */
+  const follow = useCallback((link: VaultLink) => followLink(link.raw), [followLink]);
+
+  /**
+   * 勾选任务列表：把这一行的 `[ ]`/`[x]` 换掉并写回文件。
+   *
+   * 行号是**正文内行号**（渲染时 markdown-it 给的），写回时直接改正文那一行——
+   * 人写的 front matter 与其它行由后端原样保留。
+   * 界面上点的是人，所以按 human 记账（只有人能发布，agent 改动才回落 draft）。
+   */
+  const toggleTask = useCallback(
+    async (bodyLine: number, checked: boolean) => {
+      const { doc, set } = useVaultStore.getState();
+      if (!doc) return;
+      const lines = (doc.body ?? "").split("\n");
+      const i = bodyLine - 1;
+      if (i < 0 || i >= lines.length) {
+        set({ notice: `勾选失败：渲染给的是正文第 ${bodyLine} 行，但正文只有 ${lines.length} 行`, noticeIsError: true });
+        return;
+      }
+      const after = lines[i].replace(/\[([ xX])\]/, checked ? "[x]" : "[ ]");
+      if (after === lines[i]) {
+        // 静默返回会让人以为「点了没反应」；这里说清是哪一行对不上。
+        set({
+          notice: `勾选失败：正文第 ${bodyLine} 行（文件第 ${(doc.bodyOffset ?? 1) + i} 行）里没有任务标记，内容是「${lines[i].slice(0, 40)}」`,
+          noticeIsError: true,
+        });
+        return;
+      }
+      lines[i] = after;
+      try {
+        set({ busy: true });
+        const change = await Write(doc.path, lines.join("\n"), UI_ACTOR);
+        const fileLine = (doc.bodyOffset ?? 1) + i;
+        await openDoc(doc.path, `第 ${fileLine} 行已${checked ? "勾选" : "取消勾选"}（${change.from} → ${change.to}）`);
+      } catch (e) {
+        set({ notice: String(e), noticeIsError: true });
+      } finally {
+        set({ busy: false });
+      }
+    },
+    [openDoc],
+  );
+
+  const toggleComments = useCallback(() => {
+    const { showComments, set } = useVaultStore.getState();
+    set({ showComments: !showComments });
+  }, []);
 
   /**
    * 人改发布态。agent 走不了这条：后端会拒（只有人能发布）。
@@ -163,7 +229,33 @@ export function useVaultBrowser() {
     [openDoc],
   );
 
-  return { ...store, reload: load, select, follow, publish, search, clearSearch };
+  return { ...store, reload: load, select, follow, followLink, publish, search, clearSearch, toggleTask, toggleComments };
+}
+
+/**
+ * 渲染时的链接解析：只用已经拿到的文档列表，**同步**回答。
+ *
+ * 这样渲染是纯函数（同源码→同 HTML），点击时的准确性另由后端 `Resolve` 保证
+ * （歧义与锚点命中都在那时才查）。规则与 Go 侧一致：先精确路径，再补 `.md`，最后按文件名。
+ */
+export function makeResolver(items: VaultItem[]): (target: string) => ResolvedLink | undefined {
+  const norm = (t: string) => t.trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "");
+  const byPath = new Map(items.map((i) => [i.path, i]));
+  const byBase = new Map<string, VaultItem[]>();
+  for (const i of items) {
+    const base = i.path.split("/").pop()!.replace(/\.md$/, "");
+    byBase.set(base, [...(byBase.get(base) ?? []), i]);
+  }
+  return (target: string) => {
+    const t = norm(target);
+    if (!t) return undefined;
+    const hit = byPath.get(t) ?? byPath.get(`${t}.md`);
+    if (hit) return { kind: "doc", path: hit.path, title: hit.title, status: hit.status };
+    const same = byBase.get(t.replace(/\.md$/, ""));
+    if (!same || same.length === 0) return { kind: "broken" };
+    if (same.length > 1) return { kind: "ambiguous", candidates: same.map((i) => i.path) };
+    return { kind: "doc", path: same[0].path, title: same[0].title, status: same[0].status };
+  };
 }
 
 /** 状态徽标的样式与中文标签。draft（未核验）要最显眼。 */

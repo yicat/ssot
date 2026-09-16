@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "katex/dist/katex.min.css";
 /* 不引 @fontsource-variable/geist：Geist 没有中文字形，中西文混排不齐。
    字体照 DeepSeek Harness 走系统字，见 docs/specs/typography.spec.md。 */
 
@@ -126,6 +127,167 @@
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
 }
+
+/* ── 文档渲染（见 docs/specs/document.spec.md 第三节）────────────────────────
+   两条纪律：
+   1. 除了下面这一组**语义色**（状态 / callout），一律用主题 token，不硬编码颜色。
+   2. 注释（%%…%%）默认隐藏但留在 DOM 里，靠给容器加 .show-comments 切换——
+      开关一次注释不该重渲染整篇文档。 */
+:root {
+  --md-draft: oklch(0.75 0.15 75);
+  --md-ok: oklch(0.62 0.13 155);
+  --md-info: oklch(0.6 0.12 240);
+  --md-warn: oklch(0.75 0.15 75);
+  --md-danger: oklch(0.58 0.2 25);
+}
+
+.md-body {
+  color: var(--foreground);
+  line-height: 22px;
+}
+.md-body p,
+.md-body ul,
+.md-body ol,
+.md-body pre,
+.md-body blockquote,
+.md-body figure,
+.md-body table {
+  margin: 0.6em 0;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  margin: 1.1em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.md-body h1 { font-size: 1.35rem; }
+.md-body h2 { font-size: 1.15rem; }
+.md-body h3 { font-size: 1rem; }
+.md-body h4 { font-size: 0.95rem; color: var(--muted-foreground); }
+.md-body ul { list-style: disc; padding-left: 1.4em; }
+.md-body ol { list-style: decimal; padding-left: 1.4em; }
+.md-body a { color: var(--md-info); text-decoration: none; }
+.md-body a:hover { text-decoration: underline; }
+.md-body code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.md-body pre {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  overflow: auto;
+}
+.md-body pre code { background: none; padding: 0; }
+.md-body hr { margin: 1.2em 0; border-color: var(--border); }
+.md-body mark { background: color-mix(in oklch, var(--md-draft) 35%, transparent); color: inherit; padding: 0 2px; }
+.md-body del { color: var(--muted-foreground); }
+.md-body table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.md-body th,
+.md-body td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
+.md-body th { background: var(--secondary); font-weight: 600; }
+.md-body blockquote {
+  padding-left: 0.9em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+/* 双链 */
+.md-wikilink { color: var(--md-info); border-bottom: 1px solid transparent; cursor: pointer; }
+.md-wikilink:hover { border-bottom-color: currentColor; }
+.md-wikilink .md-anchor { font-size: 11px; color: var(--muted-foreground); margin-left: 3px; }
+.md-wikilink.md-broken { color: var(--md-danger); border-bottom: 1px dashed currentColor; }
+.md-wikilink.md-ambiguous { color: var(--md-warn); border-bottom: 1px dotted currentColor; }
+.md-broken { color: var(--md-danger); }
+
+/* 状态 chip（未核验永远显眼） */
+.md-chip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  vertical-align: 1px;
+  background: var(--secondary);
+  color: var(--muted-foreground);
+}
+.md-chip-draft { background: color-mix(in oklch, var(--md-draft) 22%, transparent); color: var(--md-warn); }
+.md-chip-ok { background: color-mix(in oklch, var(--md-ok) 18%, transparent); color: var(--md-ok); }
+
+/* 块锚点（主张级溯源） */
+.md-blockref {
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  background: var(--secondary);
+  border-radius: 4px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+/* 注释：默认隐藏，留在 DOM 里 */
+.md-comment { display: none; color: var(--muted-foreground); font-size: 12px; }
+.show-comments .md-comment {
+  display: inline;
+  background: color-mix(in oklch, var(--muted-foreground) 12%, transparent);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* 任务列表 */
+.md-task { margin-right: 6px; vertical-align: -1px; }
+.md-task-item { list-style: none; margin-left: -1.2em; }
+
+/* Callout */
+.md-callout {
+  margin: 0.8em 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+  border-radius: 0 8px 8px 0;
+  background: var(--secondary);
+}
+.md-callout-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+.md-callout-note { border-left-color: var(--md-info); }
+.md-callout-tip { border-left-color: var(--md-ok); }
+.md-callout-warning { border-left-color: var(--md-warn); }
+.md-callout-danger,
+.md-callout-error { border-left-color: var(--md-danger); }
+.md-callout-quote { border-left-color: var(--border); }
+
+/* 嵌入：表格 / 文档卡 */
+.md-embed {
+  margin: 0.9em 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.md-embed > figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--secondary);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.md-embed-rows { margin-left: auto; }
+.md-embed-table table { border: 0; }
+.md-embed-table th:first-child,
+.md-embed-table td:first-child { border-left: 0; }
+.md-embed-doc { padding: 10px 12px; }
+.md-embed-doc header { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.md-embed-doc p { margin: 4px 0 6px; color: var(--muted-foreground); font-size: 13px; }
+
+/* 公式 */
+.md-math-display { display: block; margin: 0.8em 0; text-align: center; }
+.md-math-error { color: var(--md-danger); }
 
 @layer base {
   * {

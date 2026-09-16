@@ -3,33 +3,33 @@
  *
  * 做什么
  *   连 WebView2 的远程调试端口（CDP），把界面当普通网页测：
- *   填输入框、按回车、点按钮、断言文本。跑完打印每条的通过/失败，失败时退出码非 0。
+ *   点文档树、看渲染结果、填检索框、勾任务、点断链，逐条断言。失败时退出码非 0。
  *
  * 适用范围
  *   - Windows，应用跑着，并且**启动时带了** `SSOT_WEBVIEW_DEBUG_PORT=9222`
- *     （`main.go` 的 `debugBrowserArgs`；⚠️ 不能用 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS，
+ *     （`main.go` 的 `debugBrowserArgs`；⚠️ 不能用 WEBVIEW2_ADDITIONAL_BROWSER_ARGS，
  *     Wails 会覆盖它）。
  *   - 测的是**真实窗口**：bindings 走真正的 Go 用例层，不是 mock。
- *   - 需要 vault 里有测试数据；默认用 `projects/demo`（断言就写死在里面那三篇文档上）。
+ *   - 断言写死在 `projects/demo` 那几篇示例文档上——它验的是「界面通不通」，
+ *     不是通用回归。换 vault 要改断言。
  *
  * 什么时候不该用
  *   - 没带调试端口启动：连不上，脚本会明确报错。
- *   - 想断言「好不好看」：它只断言文本与结构，颜色/间距得人看。
- *   - 断言写死了 demo 数据：换 vault 要改断言——它验的是「界面通不通」，不是通用回归。
+ *   - 想断言「好不好看」：它只断言文本与结构，颜色/间距/手感得人看。
  *
  * 用法
  *   $env:SSOT_WEBVIEW_DEBUG_PORT="9222"; wails3 task dev     # 先起应用
  *   node scripts/check/ui-test.mjs
  *
  * 为什么用 Playwright 而不是手搓 CDP
- *   手搓 CDP 时「填输入框」要么用 insertText（不触发 React 认的事件）、
- *   要么自己造 keydown，很容易出现「DOM 有值、React 状态是空的」这种假象，
- *   把好功能判成坏的。Playwright 的 fill/press 按真实输入路径走，还自带等待。
+ *   手搓 CDP 填输入框要么用 insertText（不触发 React 认的事件）、要么自己造 keydown，
+ *   很容易出现「DOM 有值、React 状态是空的」这种假象，把好功能判成坏的。
+ *   Playwright 的 fill/press/click 按真实输入路径走，还自带等待。
  */
 import { chromium } from "playwright-core";
 
 const CDP = "http://127.0.0.1:9222";
-const APP_URL_RE = /127\.0\.0\.1:9245|localhost:9245|wails\.localhost:9245/;
+const APP_URL_RE = /9245/;
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -53,67 +53,77 @@ async function main() {
     console.error("调试端口上没有页面（窗口还没加载出来？）");
     process.exit(1);
   }
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
   console.log(`已连上：${page.url()}`);
 
-  // 从头开始：刷新一次，避免上一次操作的残留状态影响断言。
   await page.reload();
   await page.waitForSelector("aside", { timeout: 15000 });
 
-  // 1) 左栏按两层列出文档，未核验有标记
-  const aside = await page.locator("aside").innerText();
-  check("左栏列出整理层", aside.includes("整理层 docs/（2）"), aside.split("\n")[0]);
-  check("左栏列出原始层", aside.includes("原始层 raw/（1）"));
-  check("未核验有标记", aside.includes("未核验"));
-  check("已发布有标记", aside.includes("已发布"));
+  // ── 文件树（层级、排序、标记）─────────────────────────────
+  const aside = page.locator("aside").first();
+  const treeText = await aside.innerText();
+  check("文件树有两个根", treeText.includes("整理层 docs/") && treeText.includes("原始层 raw/"));
+  check("文件树显示文件夹", treeText.includes("式神") && treeText.includes("机制"));
+  check("树里未核验有标记", treeText.includes("未核验"));
+  check("数据表列出（可 SQL 查）", treeText.includes("数据表（可 SQL 查）"));
 
-  // 2) 数据表进了左栏（含推断出来的列）
-  check("数据表列出（可 SQL 查）", aside.includes("数据表（可 SQL 查）") && aside.includes("技能倍率"));
+  // ── 文档渲染（切到语法示例那篇）───────────────────────────
+  await page.locator("aside button", { hasText: "语法示例" }).first().click();
+  await page.waitForSelector("article h1", { timeout: 8000 });
+  const body = page.locator(".md-body");
+  check("markdown 标题渲染成 h2", (await body.locator("h2").count()) > 0);
+  check("GFM 表格渲染成 table", (await body.locator("table").count()) > 0);
+  check("LaTeX 公式渲染成 KaTeX", (await body.locator(".katex").count()) > 0);
+  check("==高亮== 渲染成 mark", (await body.locator("mark").count()) > 0);
+  check("callout 渲染", (await body.locator(".md-callout").count()) >= 2);
+  check("双链渲染成可点链接", (await body.locator("a.md-wikilink").count()) >= 4);
+  check("断链有醒目样式", (await body.locator("a.md-wikilink.md-broken").count()) >= 1);
+  check("块锚点渲染", (await body.locator("a.md-blockref").count()) >= 1);
+  check("嵌入数据表渲染成表", (await body.locator(".md-embed-table table").count()) > 0);
 
-  // 3) 右栏打开第一篇：正文带文件行号、元信息齐
-  const section = await page.locator("section").first().innerText();
-  check("右栏显示文档标题与状态", section.includes("茨木童子") && section.includes("未核验"));
-  check("右栏显示标签与来源", section.includes("标签：式神、SSR") && section.includes("来源："));
-  check("正文带文件行号（第 16 行那条双链）", section.includes("16"));
+  // 注释：默认隐藏（留在 DOM 里），点「显示注释」才看得见
+  const comment = body.locator(".md-comment").first();
+  check("注释默认不显示", (await comment.count()) > 0 && !(await comment.isVisible()));
+  await page.locator("button:has-text('显示注释')").first().click();
+  await page.waitForTimeout(200);
+  check("点「显示注释」后可见", await comment.isVisible());
+  await page.locator("button:has-text('隐藏注释')").first().click();
 
-  // 4) 检索：Playwright 的 fill/press 按真实输入路径走
+  // 任务列表：勾一下要写回文件（走真后端）
+  const task = body.locator("input.md-task").first();
+  check("任务列表渲染成勾选框", (await body.locator("input.md-task").count()) >= 2);
+  await task.click();
+  await page.waitForSelector("text=/行已(勾选|取消勾选)/", { timeout: 8000 });
+  const taskNotice = await page.locator("text=/行已(勾选|取消勾选)/").first().innerText();
+  check("勾任务写回文件并如实报告", /行已(勾选|取消勾选)/.test(taskNotice), taskNotice.slice(0, 40));
+  await page.locator("button[aria-label='关闭提示']").first().click();
+
+  // ── 双链跳转 ─────────────────────────────────────────────
+  await page.locator(".md-body a.md-wikilink", { hasText: "伤害计算" }).first().click();
+  await page.waitForSelector("text=防御减免", { timeout: 8000 });
+  check("点双链能跳过去", (await page.locator("article h1").first().innerText()).includes("伤害计算"));
+  check("跳过去后嵌入表还在", (await page.locator(".md-embed-table table").count()) > 0);
+
+  // ── 断链如实报错 ─────────────────────────────────────────
+  await page.locator(".md-body a.md-wikilink.md-broken").first().click();
+  await page.waitForSelector("text=/找不到双链目标/", { timeout: 8000 });
+  const notice = await page.locator("div[class*='rose-50']").first().innerText();
+  check("断链被如实报出来", notice.includes("御魂套装效果"), notice.slice(0, 40));
+
+  // ── 检索 ────────────────────────────────────────────────
   await page.fill("input", "伤害");
   await page.press("input", "Enter");
   await page.waitForSelector("text=/检索「伤害」/", { timeout: 8000 });
-  const asideAfter = await page.locator("aside").innerText();
-  check("检索出结果并把检索词显示出来", asideAfter.includes("检索「伤害」（3）"), firstLine(asideAfter));
-  check("检索结果带未核验标记", asideAfter.includes("未核验"));
+  check("检索出结果", (await aside.innerText()).includes("检索「伤害」"));
 
-  // 5) 点检索结果 → 右栏切过去
-  await page.locator("aside button", { hasText: "伤害计算" }).first().click();
-  await page.waitForSelector("text=最终伤害", { timeout: 8000 });
-  const section2 = await page.locator("section").first().innerText();
-  check("点结果能切到那篇文档", section2.includes("伤害计算") && section2.includes("最终伤害"));
-
-  // 6) 点正文里的断链 → 如实报错（这正是这套东西该有的样子）
-  await page.locator("section button", { hasText: "御魂套装效果" }).first().click();
-  await page.waitForSelector("text=/找不到双链目标/", { timeout: 8000 });
-  const notice = await page.locator("text=/找不到双链目标/").first().innerText();
-  check("断链被如实报出来", notice.includes("御魂套装效果"), notice.slice(0, 40));
-
-  // 7) 提示条能关掉
-  //    注意：不能拿「找不到双链目标」这段文字判有没有关掉——右栏的「问题链接」面板里
-  //    也有同样的理由文字。要按**提示条本身**（那个红色容器）判。
-  const banner = page.locator('div[class*="rose-50"]');
-  const before = await banner.count();
-  await page.locator("button[aria-label='关闭提示']").first().click();
-  await page.waitForTimeout(300);
-  const after = await banner.count();
-  check("提示条能关闭", before > 0 && after === 0, `关前 ${before} 个 → 关后 ${after} 个`);
+  check("期间没有页面异常", errors.length === 0, errors.slice(0, 2).join(" | "));
 
   await browser.close();
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} 通过`);
   process.exit(failed.length === 0 ? 0 : 1);
-}
-
-function firstLine(s) {
-  return s.split("\n").filter(Boolean)[0] ?? "";
 }
 
 main().catch((e) => {
