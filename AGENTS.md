@@ -10,9 +10,10 @@
 
 ## 目录约定
 
-> ⚠️ **当前是骨架，方案重写中。** 上一套方案（六部件 + 断言库 + 核验流程）已整体作废，
-> 业务代码与 `docs/specs/` 已清空（作废实现在分支 `legacy/mvp-v1` 备查）。
-> 下面这棵树是**现在真实存在的**；新方案的结构定下来再补，不要照抄旧树。
+> ⚠️ **当前是骨架，方案重写中。** 上一套方案（六部件 + 断言库 + 核验流程）已整体作废并
+> **全部清除**：业务代码、规格集、示例项目数据、抓取脚本、调研笔记与项目 skill 都已删掉
+> （作废实现在分支 `legacy/mvp-v1` 备查）。下面这棵树是**现在真实存在的**；
+> 新方案的结构定下来再补，不要照抄旧树。
 
 ```
 ├─ main.go                  # 入口（Wails 桌面应用）
@@ -21,18 +22,12 @@
 │  ├─ compose/              # 组合根：唯一允许同时依赖各层的包（会话 + 项目装配）
 │  ├─ api/                  # 接口层：wails3 bindings（当前只有项目列表与切换）
 │  └─ infrastructure/       # 外部适配（当前只有 projectfile：project.yml 与项目发现）
-├─ projects/onmyoji/        # 一个项目 = 一个领域（阴阳师）：units.yml、schema/、formulas/、scenarios/
-│  └─ .data/                # 实例数据（gitignore）
 ├─ frontend/
 │  ├─ src/components/ui/        # shadcn 生成，勿手改
 │  ├─ src/components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts（新方案按此落位）
 │  ├─ src/pages/                # 页面 = 纯编排，无交互逻辑
 │  └─ bindings/                 # wails3 generate bindings 生成，勿手改
-├─ tools/wiki/              # 灰机 wiki 数据同步与体检（Node，需可见 Chrome）
-├─ docs/
-│  ├─ specs/                # 规格文档（重写中；旧的已清空）
-│  └─ notes/                # 调研与实测记录（非规范，可能过期）
-└─ .huiji/                  # wiki 抓取缓存与凭据（gitignore，勿提交）
+└─ projects/                # 项目根目录（当前为空，未提交）：一个项目 = 一个含 project.yml 的目录
 ```
 
 ## 分层铁律
@@ -41,11 +36,13 @@
 2. `domain` 只允许 Go 标准库，禁止 import 本仓库其他层
 3. 新业务组件必须落在 `components/custom/<Name>/`；页面不做交互逻辑
 4. 生成目录（`components/ui/`、`frontend/bindings/`）不手改
-5. 动 `internal/` 之前加载 `layering-guard` skill
+5. 动 `internal/` 之前先想清落位（换掉外部系统后还需要吗？需要 → `domain`）
 
-## SDD 流程（本项目开发规范）
+## 开发流程
 
-Spec 先行：每个特性先写 `docs/specs/<feature>.spec.md`（固定模板：目的 / 领域规则 Given-When-Then / 验收标准 / 边界与异常 / 前后端契约），流程为 `Spec → 验收测试(红) → 领域端口接口 → 实现(绿) → 重构`。规格即唯一事实源，实现变化时**先改规格再改代码**。写 spec 前加载 `writing-spec` skill。
+**流程本身也待重定**：旧的「Spec 先行」（`docs/specs/<feature>.spec.md` 固定五段模板 +
+`Spec → 验收测试(红) → 领域端口 → 实现(绿) → 重构`）随旧方案一起作废，
+对应的 `writing-spec` skill 已删。新方案定下来后在这里写清新流程。
 
 ## 技术栈
 
@@ -89,18 +86,13 @@ Go + Wails v3 + Vite/React/shadcn。构建编排走 Taskfile（`wails3 task ...`
 
 > `go` 会打印 `error acquiring upload token ... Access is denied` 遥测警告，是无害噪音。
 
-### 灰机 wiki 抓取
-
-该站是 Cloudflare **指纹门**（不下发 `cf_clearance`），cookie 复用无效，
-唯一可行通道是**可见窗口 Chrome + CDP**。详见 `docs/notes/wiki-data-source.md` 与 `tools/wiki/README.md`。
-
 ## dsh 协作约定
 
-- **项目 skill** 放 `.dsh/skills/<name>/SKILL.md`，随仓库提交、团队共享。已建：`writing-spec`、`layering-guard`
+- **项目 skill** 放 `.dsh/skills/<name>/SKILL.md`，随仓库提交、团队共享。
+  当前**一个都没有**：旧的 `writing-spec`、`layering-guard` 随旧方案一起删了
 - ⚠️ **不要**在 `.dsh/skills/` 下放 `README.md`：平铺 `<name>.md` 也会被当成 skill 发现，会产生幽灵条目
 - skill 的 `description` 是**唯一路由键**（模型目录不渲染 `whenToUse`），务必写清"什么时候用它"
 - 已加载的 skill 正文**没有大小上限**，保持精简
 - 分层/契约类改动先走 plan mode，用 `exit_plan_mode` 出完整方案再动手
 - 个人本地覆盖写 `AGENTS.local.md`（已在 `.gitignore`），不要改 `AGENTS.md`
-- 子目录局部规则写在各自的 `AGENTS.md`（`internal/`、`frontend/` 已有；
-  `docs/specs/` 的规则随旧规格集一起作废，重写规格时再补）
+- 子目录局部规则写在各自的 `AGENTS.md`（`internal/`、`frontend/` 已有）

@@ -15,7 +15,15 @@
 
 ## 动这一层之前
 
-加载 `layering-guard` skill，它带了依赖检查命令与常见违规对照表。
+先确认落位（见上）；当前 `domain/` 与 `application/` **都还不存在**——
+新方案定下来再建，不要为了「结构完整」先摆空目录。
+
+依赖检查（纯手工，旧的 `layering-guard` skill 已随旧方案删除）：
+
+```powershell
+# domain 是否混入了非标准库依赖或反向引用
+go list -deps ./internal/domain/... | Select-String -NotMatch '^(internal/|vendor/|errors|fmt|sort|strings|strconv|time|math|regexp|encoding/|unicode|cmp|slices|maps|iter|sync|context|os|path|io|bufio|bytes|hash|log|net|reflect|runtime|testing|gopkg.in/yaml.v3|github.com/ngnl5/ssot)'
+```
 
 ## 提交前
 

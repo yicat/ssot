@@ -20,7 +20,7 @@ var assets embed.FS
 
 func main() {
 	projectsRoot := flag.String("projects", "projects", "项目根目录（扫它来发现项目）")
-	projectDir := flag.String("project", "projects/onmyoji", "初始项目目录")
+	projectDir := flag.String("project", "", "初始项目目录；留空则自动取第一个")
 	flag.Parse()
 
 	// 当前项目是会话状态：界面可以在运行时切换，不必重启进程。

@@ -28,12 +28,16 @@ export default function App() {
       try {
         setProjects((await Projects()) ?? []);
         setSession(await Current());
+        setError(null);
       } catch (e) {
-        // 「加载失败」必须显示出来：留白与失败在界面上无法区分。
+        // 「一个项目都没有」不是「出错了」——两者必须能区分，
+        // 否则人会把「还没建项目」当成工具坏了。
         setError(String(e));
       }
     })();
   }, []);
+
+  const noProjects = error !== null && error.includes("没有可用项目");
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -66,20 +70,28 @@ export default function App() {
         </div>
       </header>
 
-      {error && (
+      {error && !noProjects && (
         <div className="border-b border-rose-200 bg-rose-50 px-5 py-2 text-sm text-rose-800">{error}</div>
       )}
 
       <main className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-8">
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>骨架就绪，等新方案</CardTitle>
+            <CardTitle>{noProjects ? "还没有项目" : "骨架就绪，等新方案"}</CardTitle>
             <CardDescription>
-              上一套方案（六部件 + 断言库 + 核验流程）已整体作废：
-              业务代码与规格集已清空，只保留技术栈与骨架。
+              {noProjects
+                ? "项目根目录下还没有任何项目。建一个含 project.yml 的目录就能在这里选到它。"
+                : "上一套方案（六部件 + 断言库 + 核验流程）已整体作废：业务代码、规格集与示例数据全部清除，只保留技术栈与骨架。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
+            {noProjects && (
+              <pre className="rounded bg-secondary/60 p-3 text-xs">
+{`# projects/<名字>/project.yml
+project: 项目名
+description: 一句话说明`}
+              </pre>
+            )}
             <p>
               技术栈：Go + Wails v3（bindings）+ Vite / React / shadcn，构建编排走 Taskfile
               （<code>wails3 task dev | build | check | test | run:server</code>）。
