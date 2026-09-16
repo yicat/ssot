@@ -2,6 +2,8 @@
 bin
 frontend/dist
 frontend/node_modules
+# scripts/ 下工具脚本自己的依赖（playwright-core 等），与前端分开装
+scripts/node_modules
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 # Mobile generated (per-machine; overlays hold absolute paths)

@@ -1,0 +1,9 @@
+{
+  "name": "ssot-scripts",
+  "private": true,
+  "type": "module",
+  "description": "scripts/ 下的工具脚本依赖（与 frontend 分开：脚本不该拖累前端构建）",
+  "devDependencies": {
+    "playwright-core": "^1.56.0"
+  }
+}
