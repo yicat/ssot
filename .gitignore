@@ -10,8 +10,11 @@ build/ios/xcode/gen/
 build/android/overlay.json
 build/android/gen/
 
-# 项目实例数据（可由「定义 + 数据源」重建，不进版本控制）
-projects/*/.data/
+# 项目 vault：**各自是独立的 git 仓库**（见 docs/specs/vault.spec.md §5）。
+# 工具仓库只管代码，不跟踪 vault 内容——外层如果跟踪它，git 会把 vault 记成
+# gitlink（嵌套仓库），两边版本互相搅。
+# 原先只忽略 projects/*/.data/（派生索引），现在整段忽略。
+projects/
 
 # dsh 沙箱：Go 构建缓存必须在工作区内，否则 go vet/test/tidy 被拒绝
 .gocache/
