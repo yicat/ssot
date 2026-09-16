@@ -1,0 +1,36 @@
+# 把 ssot 的能力层挂成 MCP 服务器——**只作用于这一次会话**。
+#
+# 用法（别手打，用脚本）：
+#   powershell -File scripts\dsh\dsh-ssot.ps1
+# 脚本负责设好下面两个环境变量，再带上这个文件启动：
+#   dsh web --patch <仓库>\.dsh\mcp.patch.yml
+#
+# 为什么不写进 ~/.dsh/profiles/web/cordis.patch.yml（那份是全局的）：
+# 那样你每次开 DSH——包括写代码那次——工具列表里都会多出八个 mcp__ssot__*，
+# 白吃 token，还有被误调的风险。见 docs/specs/dsh.spec.md §1。
+#
+# 为什么桌面 GUI 用不了这个文件：桌面版起 harness 时**写死**只叠加它自己的
+# dsh-desktop.patch.yml，没有给用户加 patch 的位置（同样记在 dsh.spec.md 里）。
+#
+# 由启动脚本提供的两个环境变量：
+#   SSOT_MCP_BIN    ssot 可执行文件的绝对路径（必须是**编译好的**二进制，不是 go run）
+#   SSOT_MCP_VAULT  要打开的 vault 根目录
+#
+# ⚠️ 新增插件行必须用 `insert:` 包起来。只写 `- id: xxx` 是「改**已存在**的那一行」，
+# 加载器会警告 `entry "mcp-ssot" not found` 然后什么都不做（踩过）。
+- insert:
+    - id: mcp-ssot
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: ssot # 工具会以 mcp__ssot__<工具名> 的形态出现
+        transport: stdio
+        command: !!js process.env.SSOT_MCP_BIN
+        # ⚠️ `!!js` 只能用在**标量**上。写成 `args: !!js ['mcp', …]` 是给整个序列打标签，
+        # js-yaml 会报 `unknown tag !<tag:yaml.org,2002:js>`（那个报错完全看不出是这个原因）。
+        # 要动态值就逐项标，像下面这样。
+        args:
+          - mcp
+          - --root
+          - !!js process.env.SSOT_MCP_VAULT
+        # 我们的查询都是本地文件，毫秒级；30s 够用，也免得一次卡住的调用占满默认的 60s。
+        toolCallTimeoutMs: 30000

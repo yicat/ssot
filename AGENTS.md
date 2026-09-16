@@ -129,7 +129,12 @@ Go + Wails v3 + Vite/React/shadcn。构建编排走 Taskfile（`wails3 task ...`
 ## dsh 协作约定
 
 - **项目 skill** 放 `.dsh/skills/<name>/SKILL.md`，随仓库提交、团队共享。
-  当前**一个都没有**：旧的 `writing-spec`、`layering-guard` 随旧方案一起删了
+  现在是**四个角色**（见 `docs/specs/agent.spec.md` §6）：`vault-organize`（整理）、
+  `vault-find`（查找）、`vault-verify`（核验）、`vault-rewrite`（优化重写）。
+  skill 名必须 kebab-case（发现规则限制），中文写在 `description` 与正文里
+- **把能力层接给 agent**：MCP 服务端是 `ssot mcp`（stdio），overlay 在 `.dsh/mcp.patch.yml`，
+  启动用 `pwsh -File scripts\dsh\dsh-ssot.ps1`。**不许写进全局 profile**
+  （`~/.dsh/profiles/web/cordis.patch.yml`）——那会污染写代码的会话。形状与理由见 `docs/specs/dsh.spec.md`
 - ⚠️ **不要**在 `.dsh/skills/` 下放 `README.md`：平铺 `<name>.md` 也会被当成 skill 发现，会产生幽灵条目
 - skill 的 `description` 是**唯一路由键**（模型目录不渲染 `whenToUse`），务必写清"什么时候用它"
 - 已加载的 skill 正文**没有大小上限**，保持精简

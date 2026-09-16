@@ -8,7 +8,7 @@ export {
     VaultService
 };
 
-export type {
+export {
     ProjectRef,
     SessionState,
     VaultBacklink,

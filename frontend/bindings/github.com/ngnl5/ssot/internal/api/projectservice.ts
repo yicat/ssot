@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -18,19 +18,30 @@ import * as $models from "./models.js";
  * Current 返回当前会话。
  */
 export function Current(): $CancellablePromise<$models.SessionState> {
-    return $Call.ByID(1610103818);
+    return $Call.ByID(1610103818).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
  * Open 切换项目。**失败时会话不变**，因此界面不会塌成空白。
  */
 export function Open(dir: string): $CancellablePromise<$models.SessionState> {
-    return $Call.ByID(522968697, dir);
+    return $Call.ByID(522968697, dir).then(($result: any) => {
+        return $$createType0($result);
+    });
 }
 
 /**
  * Projects 列出项目根目录下的全部项目，按目录名排序。
  */
-export function Projects(): $CancellablePromise<$models.ProjectRef[] | null> {
-    return $Call.ByID(4043538951);
+export function Projects(): $CancellablePromise<$models.ProjectRef[]> {
+    return $Call.ByID(4043538951).then(($result: any) => {
+        return $$createType2($result);
+    });
 }
+
+// Private type creation functions
+const $$createType0 = $models.SessionState.createFrom;
+const $$createType1 = $models.ProjectRef.createFrom;
+const $$createType2 = $Create.Array($$createType1);

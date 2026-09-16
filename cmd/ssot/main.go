@@ -16,6 +16,7 @@ import (
 
 	"github.com/ngnl5/ssot/internal/application/vaultapp"
 	"github.com/ngnl5/ssot/internal/domain/vault"
+	"github.com/ngnl5/ssot/internal/mcp"
 )
 
 func main() {
@@ -32,11 +33,49 @@ func main() {
 			fmt.Fprintln(os.Stderr, "错误："+err.Error())
 			os.Exit(1)
 		}
+	case "mcp":
+		// MCP 服务端：stdout 是协议流，出错也只能往 stderr 说（见 internal/mcp 包注释）。
+		if err := runMCP(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "错误："+err.Error())
+			os.Exit(1)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "未知命令 %q\n\n", args[0])
 		usage()
 		os.Exit(2)
 	}
+}
+
+// runMCP 跑 MCP 服务端（stdio）。
+//
+// 用法：ssot mcp -root <vault> [-actor agent:名字]
+//
+// 与 vault 子命令共用同一套选项解析（选项放前放后都行），但**没有 -h 之外的输出**：
+// stdout 是协议流，任何提示语都会把流弄坏。
+func runMCP(args []string) error {
+	cmd, _, f, err := splitCommand(args)
+	if err != nil {
+		return err
+	}
+	if cmd != "" {
+		return fmt.Errorf("mcp 不接受位置参数（收到 %q）；用法：ssot mcp -root <vault>，vault 子命令请走 ssot vault …", cmd)
+	}
+	if f.root == "" {
+		return fmt.Errorf("必须用 -root 指明 vault 根目录")
+	}
+	if f.actor == "" {
+		f.actor = "agent:dsh"
+	}
+	actor, err := vault.ParseActor(f.actor)
+	if err != nil {
+		return err
+	}
+	if actor.Kind != vault.ActorAgent {
+		// MCP 这条路上没有 human：发布只能走界面或 CLI（docs/specs/dsh.spec.md §4）。
+		return fmt.Errorf("mcp 的 actor 只能是 agent（收到 %q）——发布/归档请走界面或 ssot vault status", f.actor)
+	}
+	srv := mcp.New(vaultapp.New(f.root), actor)
+	return srv.Serve(os.Stdin, os.Stdout)
 }
 
 func runVault(args []string) error {
@@ -280,7 +319,7 @@ func vaultStatus(svc *vaultapp.Service, args []string, actor string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s：%s → %s\n\n建议的提交信息：\n%s\n", change.Path, change.From, change.To, change.CommitMessage())
+	fmt.Printf("%s：%s → %s\n%s\n", change.Path, change.From, change.To, versionLine(change))
 	return nil
 }
 
@@ -300,8 +339,23 @@ func vaultWrite(svc *vaultapp.Service, args []string, actor string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%s：%s → %s\n\n建议的提交信息：\n%s\n", change.Path, change.From, change.To, change.CommitMessage())
+	fmt.Printf("%s：%s → %s\n%s\n", change.Path, change.From, change.To, versionLine(change))
 	return nil
+}
+
+// versionLine 说明这次改动在 git 里留痕的结果。
+//
+// 留痕是硬要求（agent.spec.md §3），所以「没留痕」必须显式打出来——
+// 成功就报 short SHA，失败就报原因，没有第三种含糊说法。
+func versionLine(change vaultapp.Change) string {
+	if change.Committed {
+		sha := change.CommitSHA
+		if len(sha) > 7 {
+			sha = sha[:7]
+		}
+		return "已在 git 留痕：" + sha + "\n" + strings.TrimSpace(change.CommitMessage())
+	}
+	return "⚠️ " + change.VersionNote
 }
 
 // vaultIndex 重建派生索引。索引是全派生的，随时可以重建，所以别怕跑。
@@ -468,6 +522,11 @@ func usage() {
 用法：
   ssot help                                  看这段说明
   ssot vault -root <vault> <子命令> [...]
+  ssot mcp -root <vault> [-actor agent:名字]  MCP 服务端（stdio，给 agent 后端用）
+
+mcp：把同一套能力讲成 MCP。协议流走 stdout、日志走 stderr，中途不许有别的输出。
+形状与理由见 docs/specs/dsh.spec.md；接进 DSH 的启动方式见 scripts/dsh/README.md。
+⚠️ actor 只能是 agent——发布/归档在 MCP 上没有对应工具，只能走界面或 ssot vault status。
 
 vault 子命令（读）：
   list                                       列文档与数据表（draft 会标 ! ）

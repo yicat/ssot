@@ -14,6 +14,7 @@ import (
 
 	"github.com/ngnl5/ssot/internal/domain/vault"
 	"github.com/ngnl5/ssot/internal/infrastructure/vaultfs"
+	"github.com/ngnl5/ssot/internal/infrastructure/vaultgit"
 	"github.com/ngnl5/ssot/internal/infrastructure/vaultindex"
 )
 
@@ -21,11 +22,12 @@ import (
 type Service struct {
 	loader *vaultfs.Loader
 	index  *vaultindex.Index
+	git    *vaultgit.Repo
 }
 
 // New 构造 Service。
 func New(root string) *Service {
-	return &Service{loader: vaultfs.New(root), index: vaultindex.New(root)}
+	return &Service{loader: vaultfs.New(root), index: vaultindex.New(root), git: vaultgit.New(root)}
 }
 
 // Root 返回 vault 根目录。
@@ -164,14 +166,48 @@ type Change struct {
 	To     vault.Status
 	Actor  vault.Actor
 	Action string
+	// Committed / CommitSHA 报告这次改动有没有在 git 里留痕（agent.spec.md §3）。
+	Committed bool
+	CommitSHA string
+	// VersionNote 说明**为什么没留痕**（不是 git 仓库、没变化、git 报错）。
+	// 留痕失败不影响写入成功，但必须说出来——静默最坏：人以为有历史，其实没有。
+	VersionNote string
 }
 
-// CommitMessage 是建议的提交信息，带 `Edited-By` trailer（见 agent.spec.md §3）。
+// CommitMessage 是这次改动的提交信息，带 `Edited-By` trailer（见 agent.spec.md §3）。
 //
-// 我们**不代跑 git**：版本层是 git（vault.spec.md §5），但提交与否由人和
-// 上层流程决定——工具悄悄提交会让人找不到「我什么时候改的」。
+// 第一段说做了什么，最后一段是 trailer——git 只认最后一段里的 trailer。
 func (c Change) CommitMessage() string {
-	return fmt.Sprintf("vault: %s %s\n\nEdited-By: %s", c.Action, c.Path, c.Actor.Trailer())
+	return c.commitSubject() + "\n\n" + c.trailer()
+}
+
+func (c Change) commitSubject() string { return fmt.Sprintf("vault: %s %s", c.Action, c.Path) }
+
+func (c Change) trailer() string { return "Edited-By: " + c.Actor.Trailer() }
+
+// version 给这次改动留痕：提交**改动的那个文件**。
+//
+// 谁提交已定成能力层（agent.spec.md §3）：留痕不能靠 agent 记得做，
+// 也不能靠人记得做——否则 spec 里「每次写入的 commit trailer 里有 Edited-By」永远验不了。
+//
+// 三种「没提交成」都要如实写出原因，但都不算写入失败：
+// vault 不是独立仓库（最常见，起步态）、内容没变化、git 自己报错（如没配 user.name）。
+func (s *Service) version(c *Change) {
+	if !s.git.IsRepo() {
+		c.VersionNote = "本次改动未留痕：vault 不是独立的 git 仓库（在 vault 根目录跑 git init 即可）"
+		return
+	}
+	sha, err := s.git.Commit(c.Path, c.commitSubject(), c.trailer())
+	if err != nil {
+		c.VersionNote = "本次改动未留痕：" + err.Error()
+		return
+	}
+	if sha == "" {
+		c.VersionNote = "本次改动未留痕：文件内容没有变化，没有产生新提交"
+		return
+	}
+	c.Committed = true
+	c.CommitSHA = sha
 }
 
 // SetStatus 改发布态。
@@ -194,7 +230,9 @@ func (s *Service) SetStatus(rel string, st vault.Status, actor vault.Actor) (Cha
 	if err := s.loader.SetStatus(doc.Path, st); err != nil {
 		return Change{}, err
 	}
-	return Change{Path: doc.Path, From: doc.Status, To: st, Actor: actor, Action: "状态改为 " + string(st)}, nil
+	c := Change{Path: doc.Path, From: doc.Status, To: st, Actor: actor, Action: "状态改为 " + string(st)}
+	s.version(&c)
+	return c, nil
 }
 
 // Write 写入正文（front matter 原样保留）。
@@ -230,7 +268,9 @@ func (s *Service) Write(rel, body string, actor vault.Actor) (Change, error) {
 			}
 		}
 	}
-	return Change{Path: target, From: from, To: to, Actor: actor, Action: "写入"}, nil
+	c := Change{Path: target, From: from, To: to, Actor: actor, Action: "写入"}
+	s.version(&c)
+	return c, nil
 }
 
 // writeTarget 决定写入落到哪个路径。

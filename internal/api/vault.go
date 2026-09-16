@@ -45,13 +45,13 @@ type VaultDoc struct {
 
 // VaultBacklink 是一条反链（面向界面）。
 type VaultBacklink struct {
-	From     string `json:"from"`
-	Raw      string `json:"raw"`
-	Block    string `json:"block"`
-	Heading  string `json:"heading"`
-	Embed    bool   `json:"embed"`
-	Target   string `json:"target"`
-	Offset   int    `json:"offset"`
+	From    string `json:"from"`
+	Raw     string `json:"raw"`
+	Block   string `json:"block"`
+	Heading string `json:"heading"`
+	Embed   bool   `json:"embed"`
+	Target  string `json:"target"`
+	Offset  int    `json:"offset"`
 }
 
 // VaultIssue 是一条问题链接（面向界面）。
@@ -87,6 +87,11 @@ type VaultChange struct {
 	To            string `json:"to"`
 	Actor         string `json:"actor"`
 	CommitMessage string `json:"commitMessage"`
+	// Committed / CommitSHA / VersionNote 说明在 git 里留痕的结果：
+	// 成功给 SHA，没成功给原因（不是 git 仓库 / 没变化 / git 报错）。
+	Committed   bool   `json:"committed"`
+	CommitSHA   string `json:"commitSha"`
+	VersionNote string `json:"versionNote"`
 }
 
 // VaultOverview 是一次拿齐的界面数据：列文档 + 数据表。
@@ -278,6 +283,7 @@ func toChange(c vaultapp.Change) VaultChange {
 	return VaultChange{
 		Path: c.Path, From: string(c.From), To: string(c.To),
 		Actor: c.Actor.Trailer(), CommitMessage: c.CommitMessage(),
+		Committed: c.Committed, CommitSHA: c.CommitSHA, VersionNote: c.VersionNote,
 	}
 }
 

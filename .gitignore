@@ -33,6 +33,10 @@ projects/
 AGENTS.local.md
 CLAUDE.local.md
 
+# 临时工作区：探索脚本、dump 输出、以及**别的 vault 的备份**
+# （.tmp/backup-demo 就是换 vault 时挪出来的示例库，不是垃圾，别删）
+.tmp/
+
 # 编辑器与系统
 .DS_Store
 .idea/

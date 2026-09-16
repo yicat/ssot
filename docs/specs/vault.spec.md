@@ -73,6 +73,17 @@ projects/<领域>/              ← 一个项目 = 一个 vault（沿用 workspa
 - **vault 是独立 git 仓库，工具仓库不跟踪它**（已定）：`.gitignore` 里 `projects/` **整段忽略**。
   理由：外层若跟踪，git 会把 vault 记成 gitlink（嵌套仓库），两边版本互相搅。
   代价：`projects/demo` 这类示例 vault 也不进工具仓库——要看示例就本地留着（或另立仓库）。
+- **谁提交：能力层代跑**（`agent.spec.md` §3）。写入成功后：
+
+  1. 只 `git add` **改动的那个文件**（不用 `add -A`——不然会把用户手边未完成的改动一起卷进来，
+     也会把 `.data/` 的派生文件带进去）；
+  2. commit，信息两段：第一段说清做了什么，第二段是 trailer `Edited-By: agent:<名字>` / `human:<名字>`
+     （git 只认**最后一段**里的 trailer，所以 trailer 必须独占最后一段）；
+  3. **`.data/` 永不提交**：它是可重建的派生索引，vault 根要有 `.gitignore` 忽略它
+     （`git init` 一个 vault 时就把这条写上）。
+- **vault 不是 git 仓库时**：写入照样成功，但结果里**明确报告「本次未留痕」**并提示 `git init`——
+  不静默跳过（静默最坏：人以为有历史，其实没有），也不因此拒绝写入（没仓库是常见起步状态）。
+- `projects/demo` 按本节**应该是 git 仓库**（现在还不是）——示例 vault 也要能演示「有记录、有 diff」。
 
 ### 6. 冲突：并列，不裁决
 
