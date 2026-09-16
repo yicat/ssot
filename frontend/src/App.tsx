@@ -4,17 +4,20 @@
  * ⚠️ 当前状态：**骨架**。上一套方案（六部件 + 断言库 + 核验流程）已整体作废，
  * 页面与业务组件已清空，新的设计待定。
  *
- * 现在这里只证明一件事：Wails 的 bindings 是通的——顶栏能把项目列出来、能切换。
+ * 现在这里只证明一件事：Wails 的 bindings 是通的——标题栏能把项目列出来、能切换。
  * 新方案的页面按设计重写，落位约定不变（见 frontend/AGENTS.md）：
  *   components/ui/      shadcn 生成，勿手改
  *   components/custom/  自研业务组件：index.tsx + useXxx.ts + store.ts
  *   pages/              纯编排，不写交互逻辑
+ *
+ * 这一层是临时的编排：数据（项目列表、当前会话）在这里取，交互动作在这里接，
+ * 交给 components/custom/ 下的组件渲染。新方案定下来后按那时的页面结构重排。
  */
 import { useEffect, useState } from "react";
 
 import { Current, Open, Projects } from "../bindings/github.com/ngnl5/ssot/internal/api/projectservice";
 import type { ProjectRef, SessionState } from "../bindings/github.com/ngnl5/ssot/internal/api/models";
-import { Button } from "./components/ui/button";
+import { AppTitleBar } from "./components/custom/AppTitleBar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { Toaster } from "./components/ui/sonner";
 
@@ -37,38 +40,23 @@ export default function App() {
     })();
   }, []);
 
+  // 切换失败时会话不变（后端保证全有或全无），界面不会塌成空白。
+  const openProject = (dir: string) => {
+    void (async () => {
+      try {
+        setSession(await Open(dir));
+        setError(null);
+      } catch (e) {
+        setError(String(e));
+      }
+    })();
+  };
+
   const noProjects = error !== null && error.includes("没有可用项目");
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border bg-card px-5 py-3">
-        <div className="text-sm font-semibold">SSOT 工作台</div>
-        <div className="text-xs text-muted-foreground">
-          当前项目：
-          {session ? `${session.name}（${session.dir}）` : "（未打开）"}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {projects.map((p) => (
-            <Button
-              key={p.dir}
-              size="sm"
-              variant={p.current || session?.dir === p.dir ? "default" : "secondary"}
-              onClick={() =>
-                void (async () => {
-                  try {
-                    setSession(await Open(p.dir));
-                    setError(null);
-                  } catch (e) {
-                    setError(String(e));
-                  }
-                })()
-              }
-            >
-              {p.name}
-            </Button>
-          ))}
-        </div>
-      </header>
+      <AppTitleBar session={session} projects={projects} onOpenProject={openProject} />
 
       {error && !noProjects && (
         <div className="border-b border-rose-200 bg-rose-50 px-5 py-2 text-sm text-rose-800">{error}</div>

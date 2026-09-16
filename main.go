@@ -44,9 +44,22 @@ func main() {
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		// Title 从此只是窗口标识（任务栏、Alt-Tab 上显示的名字）：
+		// 原生标题栏已被下面的 Frameless 去掉，界面上那条是自绘的
+		// （frontend/src/components/custom/AppTitleBar/，见 docs/specs/shell.spec.md）。
 		Title:  "SSOT 工作台",
 		Width:  1440,
 		Height: 900,
+		// 去掉原生标题栏：整窗只保留自绘的那一条，免得出现两条 titlebar。
+		Frameless: true,
+		Windows: application.WindowsWindow{
+			// 打开「非客户区」机制：前端用 CSS 变量 --wails-non-client-region
+			// 标出的区域，由 WM_NCHITTEST 回 HTCAPTION/HTMINBUTTON/HTMAXBUTTON/HTCLOSE，
+			// 于是拖动、双击最大化、右键系统菜单、Snap Layouts 都是 Windows 原生行为。
+			// 注意开关是这一项，不是 NonClientRegionSupport——那只喂 WebView2 自带的 app-region，
+			// 而前端上报与 WM_NCHITTEST 这条路只在 WebView2CompositionHosting 下才走。
+			WebView2CompositionHosting: true,
+		},
 		Mac: application.MacWindow{
 			InvisibleTitleBarHeight: 50,
 			Backdrop:                application.MacBackdropTranslucent,
