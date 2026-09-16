@@ -1,5 +1,8 @@
 # internal/
 
+> 动手写代码之前先看根 `AGENTS.md`：**要改到代码的，先讨论、形成 spec 再动手**；
+> 已定下的规范不得擅自更改。
+
 ## 分层铁律
 
 依赖方向：`api → application → domain ← infrastructure`，**禁止反向**。
