@@ -85,7 +85,8 @@ projects/<领域>/              ← 一个项目 = 一个 vault（沿用 workspa
 2. `.data/index.db` 什么时候重建：启动时、手动、还是监听文件变更。
 3. 界面形态（文档列表 + 双链面板 + 查询台）——等壳长出来再定。
 4. **向量检索**：已验证可行（bge-small-zh-v1.5 int8 22.9MB + ONNX Runtime 15.7MB，
-  进程内、无 cgo、0.8ms/条、与 transformers.js 逐位一致），但**暂不引入**——
+  进程内、无 cgo、0.8ms/条、与 transformers.js 逐位一致；实测数字与三个坑见
+  `docs/notes/embedding-spike.md`），但**暂不引入**——
    双链 + 标签 + SQLite 全文检索已能覆盖召回；真要做就按端口接上。
 
 ## 怎么验证
