@@ -10,49 +10,27 @@
 
 ## 目录约定
 
+> ⚠️ **当前是骨架，方案重写中。** 上一套方案（六部件 + 断言库 + 核验流程）已整体作废，
+> 业务代码与 `docs/specs/` 已清空（作废实现在分支 `legacy/mvp-v1` 备查）。
+> 下面这棵树是**现在真实存在的**；新方案的结构定下来再补，不要照抄旧树。
+
 ```
 ├─ main.go                  # 入口（Wails 桌面应用）
-├─ cmd/ssot/                # CLI 入口（MVP 用它验证机制）
+├─ cmd/ssot/                # CLI 入口（当前只有 help；新命令按用例层加）
 ├─ internal/
-│  ├─ compose/              # 组合根：唯一允许同时依赖各层的包
-│  ├─ domain/               # 领域层：纯规则，只允许标准库
-│  │  ├─ value/             # 值的三态（有值/未知/空/缺失）
-│  │  ├─ unit/              # 量纲与换算
-│  │  ├─ metamodel/         # 类型与约束原语
-│  │  ├─ schema/            # 实体集合与双向漂移检测
-│  │  ├─ validate/          # 六类校验
-│  │  ├─ expr/              # 表达式求值器（含量纲检查）
-│  │  ├─ assertion/         # 断言模型与变更集（含解析方式→分级上限）
-│  │  ├─ verification/      # 核验记录：四级方法、参与者、责任归属
-│  │  └─ decision/          # 待判定：歧义事项、候选与裁决规则
-│  ├─ application/          # 应用层：用例编排
-│  │  ├─ ingest/            # 接入：原件 → 候选
-│  │  ├─ admit/             # 准入：候选 → 变更集
-│  │  ├─ formula/           # 公式加载、算例验证与求值
-│  │  ├─ derive/            # 派生：由断言产出 L3 断言
-│  │  ├─ review/            # 核验编排：优先级、冲突、批量
-│  │  ├─ disambig/          # 待判定编排：歧义登记、排队、裁决
-│  │  └─ scenario/          # 场景：requires 检查与运行
-│  ├─ infrastructure/       # 基础设施：外部适配
-│  │  ├─ store/             # SQLite 断言库、核验记录与待判定事项（原子应用）
-│  │  ├─ schemafile/        # YAML schema 与单位表加载
-│  │  └─ artifact/          # 原件存档读取
-│  └─ api/                  # 接口层：核验工作台后端（wails3 bindings）
-├─ projects/onmyoji/        # 一个项目 = 一个领域（阴阳师）
-│  ├─ project.yml
-│  ├─ units.yml
-│  ├─ schema/               # 定义：可版本控制、可分享
-│  ├─ formulas/             # 公式与算例
-│  ├─ scenarios/            # 场景：一个用途一个目录
-│  └─ .data/                # 实例：断言库（gitignore，可重建）
+│  ├─ compose/              # 组合根：唯一允许同时依赖各层的包（会话 + 项目装配）
+│  ├─ api/                  # 接口层：wails3 bindings（当前只有项目列表与切换）
+│  └─ infrastructure/       # 外部适配（当前只有 projectfile：project.yml 与项目发现）
+├─ projects/onmyoji/        # 一个项目 = 一个领域（阴阳师）：units.yml、schema/、formulas/、scenarios/
+│  └─ .data/                # 实例数据（gitignore）
 ├─ frontend/
 │  ├─ src/components/ui/        # shadcn 生成，勿手改
-│  ├─ src/components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts
+│  ├─ src/components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts（新方案按此落位）
 │  ├─ src/pages/                # 页面 = 纯编排，无交互逻辑
 │  └─ bindings/                 # wails3 generate bindings 生成，勿手改
 ├─ tools/wiki/              # 灰机 wiki 数据同步与体检（Node，需可见 Chrome）
 ├─ docs/
-│  ├─ specs/                # 规格文档（SDD 唯一事实源）
+│  ├─ specs/                # 规格文档（重写中；旧的已清空）
 │  └─ notes/                # 调研与实测记录（非规范，可能过期）
 └─ .huiji/                  # wiki 抓取缓存与凭据（gitignore，勿提交）
 ```
@@ -124,4 +102,5 @@ Go + Wails v3 + Vite/React/shadcn。构建编排走 Taskfile（`wails3 task ...`
 - 已加载的 skill 正文**没有大小上限**，保持精简
 - 分层/契约类改动先走 plan mode，用 `exit_plan_mode` 出完整方案再动手
 - 个人本地覆盖写 `AGENTS.local.md`（已在 `.gitignore`），不要改 `AGENTS.md`
-- 子目录局部规则写在各自的 `AGENTS.md`（`internal/`、`frontend/`、`docs/specs/` 已有）
+- 子目录局部规则写在各自的 `AGENTS.md`（`internal/`、`frontend/` 已有；
+  `docs/specs/` 的规则随旧规格集一起作废，重写规格时再补）

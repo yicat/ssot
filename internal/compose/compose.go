@@ -1,42 +1,31 @@
-// Package compose 是组合根：把领域、应用与基础设施装配成一个可用的项目。
+// Package compose 是组合根：唯一允许同时依赖各层的包。
 //
-// 它是唯一允许同时依赖各层的包——装配本来就需要看见全部零件。
-// 其余包必须遵守 AGENTS.md 的分层铁律（api → application → domain ← infrastructure）。
+// ⚠️ 当前状态：**骨架**。上一套方案（六部件 + 断言库 + 核验流程）已整体作废，
+// 业务代码与规格集已清空，新的设计待定。这里只保留「项目能被发现与打开」
+// 这一件与方案无关的事——界面要有东西可选，不然连壳都跑不起来。
+//
+// 依赖方向（对新写的代码同样适用）：api → application → domain ← infrastructure。
 package compose
 
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
-	"strings"
 
-	"github.com/ngnl5/ssot/internal/application/scenario"
-	"github.com/ngnl5/ssot/internal/domain/schema"
-	"github.com/ngnl5/ssot/internal/domain/unit"
 	"github.com/ngnl5/ssot/internal/infrastructure/projectfile"
-	"github.com/ngnl5/ssot/internal/infrastructure/schemafile"
-	"github.com/ngnl5/ssot/internal/infrastructure/store"
 )
 
-// Project 是一个已装配的项目：定义（schema、单位、场景）与实例（断言库）。
+// Project 是一个已打开的项目。
+//
+// 现在它只有目录与 project.yml 里的名字/描述；新方案要用什么结构，
+// 等设计定下来再长——不要为了「看起来完整」先塞一批字段进去。
 type Project struct {
-	Dir    string
-	File   projectfile.File
-	Units  *unit.Table
-	Schema *schema.Set
-	Store  *store.Store
-
-	// Scenarios 是该项目的场景声明，按名称排序。
-	//
-	// 场景**不拥有数据**：它们读同一批断言，只组织「读什么、算什么、产出什么」。
-	// 因此场景列表属于项目定义，而非某个存储。
-	Scenarios []scenario.Spec
-	// ScenarioSkipped 是被跳过的场景目录及原因。**必须显示出来**：
-	// 一场静默的跳过会让人以为「项目只有两个场景」。
-	ScenarioSkipped []scenario.Skipped
+	// Dir 是项目目录。
+	Dir string
+	// File 是 project.yml 的内容。
+	File projectfile.File
 }
 
-// Name 返回项目名。
+// Name 返回项目名；缺名时退回目录名。
 func (p *Project) Name() string {
 	if p.File.Project != "" {
 		return p.File.Project
@@ -47,87 +36,14 @@ func (p *Project) Name() string {
 // Description 返回项目描述。
 func (p *Project) Description() string { return p.File.Description }
 
-// Scenario 按名称取场景声明。
-func (p *Project) Scenario(name string) (scenario.Spec, bool) {
-	return scenario.Find(p.Scenarios, name)
-}
+// Close 释放资源（当前没有需要释放的，留着是为了让调用方不必关心这一点）。
+func (p *Project) Close() error { return nil }
 
-// Load 加载一个项目。
-//
-// withStore 为 false 时只加载定义，不开库——校验 schema 时不必创建文件。
-// schema 校验不通过时返回全部问题，而不是只报第一个：
-// 一次看到所有错误，比修一个跑一次快得多。
-func Load(dir string, withStore bool) (*Project, error) {
+// Load 打开一个项目目录。
+func Load(dir string) (*Project, error) {
 	f, err := projectfile.Load(filepath.Join(dir, projectfile.Name))
 	if err != nil {
-		if !withStore {
-			// 只校验 schema 的场景下允许没有 project.yml，
-			// 但那时也拿不到项目名——由调用方自己决定怎么显示。
-			f = projectfile.File{}
-		} else {
-			return nil, fmt.Errorf("加载项目定义：%w", err)
-		}
+		return nil, fmt.Errorf("加载项目定义：%w", err)
 	}
-
-	units, err := schemafile.LoadUnits(filepath.Join(dir, "units.yml"))
-	if err != nil {
-		return nil, fmt.Errorf("加载单位表：%w", err)
-	}
-	set, problems, err := schemafile.LoadSet(filepath.Join(dir, "schema"), units)
-	if err != nil {
-		return nil, fmt.Errorf("加载 schema：%w", err)
-	}
-	if len(problems) > 0 {
-		var sb strings.Builder
-		sb.WriteString("schema 校验未通过：\n")
-		for _, p := range problems {
-			sb.WriteString("  " + p.String() + "\n")
-		}
-		return nil, fmt.Errorf("%s", sb.String())
-	}
-
-	specs, skipped, err := scenario.ProjectScenarios(dir)
-	if err != nil {
-		return nil, fmt.Errorf("加载场景：%w", err)
-	}
-
-	p := &Project{
-		Dir: dir, File: f, Units: units, Schema: set,
-		Scenarios: specs, ScenarioSkipped: skipped,
-	}
-	if withStore {
-		st, err := store.Open(filepath.Join(dir, ".data", "store.db"))
-		if err != nil {
-			return nil, err
-		}
-		p.Store = st
-	}
-	return p, nil
+	return &Project{Dir: dir, File: f}, nil
 }
-
-// Close 释放资源。
-func (p *Project) Close() error {
-	if p.Store != nil {
-		return p.Store.Close()
-	}
-	return nil
-}
-
-// FormulasDir 返回公式目录。
-func (p *Project) FormulasDir() string { return filepath.Join(p.Dir, "formulas") }
-
-// FormulaFiles 返回公式文件的路径，按名称排序。
-//
-// 只列文件、不编译：概览页要的是「有几条公式」，一个写坏的公式不该
-// 让整个概览打不开——它应该在公式页上被单独指出。
-func (p *Project) FormulaFiles() ([]string, error) {
-	paths, err := filepath.Glob(filepath.Join(p.FormulasDir(), "*.formula.yml"))
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(paths)
-	return paths, nil
-}
-
-// ScenarioDir 返回某场景的目录。
-func (p *Project) ScenarioDir(name string) string { return filepath.Join(p.Dir, "scenarios", name) }

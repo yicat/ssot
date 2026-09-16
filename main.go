@@ -11,7 +11,9 @@ import (
 )
 
 // Wails 用 Go 的 embed 把前端产物打进二进制。
+//
 // 因此 frontend/dist 必须在编译前存在——先跑 `npm run build`（或 `wails3 task build`）。
+// 注意：显式列出要打进二进制的后端包，否则 bindings 可能因「没有引用」而被裁掉。
 //
 //go:embed all:frontend/dist
 var assets embed.FS
@@ -28,17 +30,10 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "ssot",
 		Description: "单一事实源工具",
-		// 界面后端。所有判断都在 domain 与 application 里，
-		// 这里只做暴露——CLI 与 GUI 因此看到同一份规则。
+		// ⚠️ 骨架：上一套方案已整体作废，服务列表只剩「项目能列出来、能切」这一件。
+		// 新方案的服务按设计逐个加回来——分层不变：api → application → domain ← infrastructure。
 		Services: []application.Service{
 			application.NewService(api.NewProjectService(session)),
-			application.NewService(api.NewScenarioService(session)),
-			application.NewService(api.NewDataService(session)),
-			application.NewService(api.NewDocumentService(session)),
-			application.NewService(api.NewFormulaService(session)),
-			application.NewService(api.NewExperienceService(session)),
-			application.NewService(api.NewAlternativesService(session)),
-			application.NewService(api.NewReviewService(session)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

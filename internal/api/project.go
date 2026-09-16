@@ -1,7 +1,8 @@
-// 会话、项目与场景的接口（见 docs/specs/workspace.spec.md）。
+// 项目接口：让界面能列出并切换项目。
 //
-// 本文件只做参数转换与调用转发：谁属于项目、谁属于场景这类判断在
-// compose 与 application 里，CLI 与 GUI 因此看到同一套规则。
+// ⚠️ 当前状态：**骨架**。上一套方案已整体作废（见 internal/compose/compose.go），
+// 这里只留下与方案无关的那一件：有哪些项目、当前是哪个。
+// 新方案的服务方法按设计逐个加到这里，而不是先铺一堆空壳。
 package api
 
 import (
@@ -23,68 +24,12 @@ type ProjectRef struct {
 	Current bool `json:"current"`
 }
 
-// ScenarioRef 是一个可选的场景（面向界面）。
-type ScenarioRef struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	// Inputs 是需要外部输入的项数。
-	Inputs int `json:"inputs"`
-	// RequiresMet 报告 requires 是否全部满足。
-	RequiresMet bool `json:"requiresMet"`
-	// RequiresTotal 是 requires 的项数，用于显示「3 项中 2 项满足」。
-	RequiresTotal int `json:"requiresTotal"`
-	// Skipped 说明该场景为什么不可用；空串表示可用。
-	Skipped string `json:"skipped"`
-}
-
 // SessionState 是当前会话（面向界面）。
 type SessionState struct {
-	Dir        string `json:"dir"`
-	Name       string `json:"name"`
-	ProjectDir string `json:"projectDir"`
-	// Description 是 project.yml 里的描述。
-	Description string `json:"description"`
-	// Scenarios 是该项目的场景，按名称排序。
-	Scenarios []ScenarioRef `json:"scenarios"`
-	// Scenario 是当前场景名；null 表示未选中或该项目没有场景。
-	Scenario *string `json:"scenario"`
-	// ScenarioSkipped 是被跳过的场景目录及原因。**必须显示**：
-	// 一场静默的跳过会让人以为「项目只有两个场景」。
-	ScenarioSkipped []SkippedRef `json:"scenarioSkipped"`
-}
-
-// SkippedRef 是一个被跳过的场景目录。
-type SkippedRef struct {
-	Dir    string `json:"dir"`
-	Reason string `json:"reason"`
-}
-
-// EntitySummary 是一个实体的规模。
-type EntitySummary struct {
-	Entity     string `json:"entity"`
-	Subjects   int    `json:"subjects"`
-	Assertions int    `json:"assertions"`
-}
-
-// ProjectOverview 是项目概览（面向界面）。
-type ProjectOverview struct {
 	Dir         string `json:"dir"`
 	Name        string `json:"name"`
-	Path        string `json:"path"`
+	ProjectDir  string `json:"projectDir"`
 	Description string `json:"description"`
-
-	Entities      []EntitySummary `json:"entities"`
-	Assertions    int             `json:"assertions"`
-	ByStatus      map[string]int  `json:"byStatus"`
-	ByConfidence  map[string]int  `json:"byConfidence"`
-	Verifications int             `json:"verifications"`
-	Conflicts     int             `json:"conflicts"`
-	Decisions     int             `json:"decisions"`
-
-	ScenarioCount int `json:"scenarioCount"`
-	FormulaCount  int `json:"formulaCount"`
-	// EntityTypes 是 schema 中声明的实体类型数（含尚无数据的）。
-	EntityTypes int `json:"entityTypes"`
 }
 
 // ProjectService 暴露项目与会话。
@@ -129,85 +74,7 @@ func (s *ProjectService) Current() (SessionState, error) {
 	if err != nil {
 		return SessionState{}, err
 	}
-	st := SessionState{
+	return SessionState{
 		Dir: p.Dir, Name: p.Name(), ProjectDir: p.Dir, Description: p.Description(),
-		Scenarios: []ScenarioRef{}, ScenarioSkipped: []SkippedRef{},
-	}
-	for _, sc := range p.Scenarios {
-		st.Scenarios = append(st.Scenarios, ScenarioRef{
-			Name: sc.Name, Description: sc.Description,
-			Inputs: len(sc.Inputs), RequiresTotal: len(sc.Requires),
-		})
-	}
-	for _, sk := range p.ScenarioSkipped {
-		st.ScenarioSkipped = append(st.ScenarioSkipped, SkippedRef{Dir: sk.Dir, Reason: sk.Reason})
-	}
-	if name := s.session.Scenario(); name != "" {
-		st.Scenario = &name
-	}
-	return st, nil
-}
-
-// Overview 返回项目概览：规模、状态与分级分布、缺口。
-func (s *ProjectService) Overview() (ProjectOverview, error) {
-	p, err := s.session.Project()
-	if err != nil {
-		return ProjectOverview{}, err
-	}
-	ov := ProjectOverview{
-		Dir: p.Dir, Name: p.Name(), Path: p.Dir, Description: p.Description(),
-		Entities: []EntitySummary{}, ByStatus: map[string]int{}, ByConfidence: map[string]int{},
-	}
-
-	byEntity, err := p.Store.CountByEntity()
-	if err != nil {
-		return ov, err
-	}
-	// 以 schema 声明的实体为准，而不是以库里有数据的实体为准：
-	// 「定义了但一条数据都没有」正是最该被看见的缺口，
-	// 若只遍历库里有的实体，它会永远不出现。
-	for _, name := range p.Schema.Names() {
-		n, err := p.Store.SubjectCount(name)
-		if err != nil {
-			return ov, err
-		}
-		ov.Entities = append(ov.Entities, EntitySummary{
-			Entity: name, Subjects: n, Assertions: byEntity[name],
-		})
-	}
-	ov.EntityTypes = len(ov.Entities)
-
-	if ov.Assertions, err = p.Store.Count(); err != nil {
-		return ov, err
-	}
-	if ov.ByStatus, err = p.Store.StatusCounts(); err != nil {
-		return ov, err
-	}
-	if ov.ByConfidence, err = p.Store.ConfidenceCounts(); err != nil {
-		return ov, err
-	}
-	if ov.Verifications, err = p.Store.VerificationCount(); err != nil {
-		return ov, err
-	}
-	conflicts, err := p.Store.Conflicts()
-	if err != nil {
-		return ov, err
-	}
-	ov.Conflicts = len(conflicts)
-
-	counts, err := p.Store.DecisionCounts()
-	if err != nil {
-		return ov, err
-	}
-	for _, n := range counts {
-		ov.Decisions += n
-	}
-
-	ov.ScenarioCount = len(p.Scenarios)
-	files, err := p.FormulaFiles()
-	if err != nil {
-		return ov, err
-	}
-	ov.FormulaCount = len(files)
-	return ov, nil
+	}, nil
 }
