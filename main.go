@@ -4,11 +4,25 @@ import (
 	"embed"
 	"flag"
 	"log"
+	"os"
 
 	"github.com/ngnl5/ssot/internal/api"
 	"github.com/ngnl5/ssot/internal/compose"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// debugBrowserArgs 给 WebView2 的额外启动参数。
+//
+// 设了 SSOT_WEBVIEW_DEBUG_PORT 才返回 `--remote-debugging-port=<端口>`——
+// 有了它，`scripts/check/ui-dump.mjs` 能把窗口里渲染出来的东西读成文本
+// （看不了屏幕时用这个验证界面，而不是只靠「日志里没报错」猜）。
+func debugBrowserArgs() []string {
+	port := os.Getenv("SSOT_WEBVIEW_DEBUG_PORT")
+	if port == "" {
+		return nil
+	}
+	return []string{"--remote-debugging-port=" + port}
+}
 
 // Wails 用 Go 的 embed 把前端产物打进二进制。
 //
@@ -30,13 +44,22 @@ func main() {
 	app := application.New(application.Options{
 		Name:        "ssot",
 		Description: "单一事实源工具",
-		// ⚠️ 骨架：上一套方案已整体作废，服务列表只剩「项目能列出来、能切」这一件。
-		// 新方案的服务按设计逐个加回来——分层不变：api → application → domain ← infrastructure。
+		// 服务按设计逐个加回来——分层不变：api → application → domain ← infrastructure。
+		// 界面与 CLI 走同一套用例层，所以「谁能发布」这类规则只有一份实现。
 		Services: []application.Service{
 			application.NewService(api.NewProjectService(session)),
+			application.NewService(api.NewVaultService(session)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
+		},
+		Windows: application.WindowsOptions{
+			// 调试用：只有显式设了 SSOT_WEBVIEW_DEBUG_PORT 才开远程调试端口。
+			//
+			// ⚠️ 不要用 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 那个环境变量：Wails 在
+			// preventEnvAndRegistryOverrides 里会 os.Setenv 成自己的值把它盖掉
+			// （internal/webview2/webviewloader/native_module.go），从外面设没用。
+			AdditionalBrowserArgs: debugBrowserArgs(),
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

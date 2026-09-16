@@ -30,3 +30,113 @@ export interface SessionState {
     "projectDir": string;
     "description": string;
 }
+
+/**
+ * VaultBacklink 是一条反链（面向界面）。
+ */
+export interface VaultBacklink {
+    "from": string;
+    "raw": string;
+    "block": string;
+    "heading": string;
+    "embed": boolean;
+    "target": string;
+    "offset": number;
+}
+
+/**
+ * VaultBacklinkResult 是反链面板要的全部内容。
+ */
+export interface VaultBacklinkResult {
+    "target": string;
+    "backlinks": VaultBacklink[] | null;
+    "issues": VaultIssue[] | null;
+}
+
+/**
+ * VaultChange 是一次写入的结果（面向界面）。
+ */
+export interface VaultChange {
+    "path": string;
+    "from": string;
+    "to": string;
+    "actor": string;
+    "commitMessage": string;
+}
+
+/**
+ * VaultDoc 是一篇文档（面向界面）。
+ */
+export interface VaultDoc {
+    "path": string;
+    "title": string;
+    "layer": string;
+    "status": string;
+    "tags": string[] | null;
+    "source": string;
+    "body": string;
+    "bodyOffset": number;
+    "links": VaultLink[] | null;
+}
+
+/**
+ * VaultIssue 是一条问题链接（面向界面）。
+ */
+export interface VaultIssue {
+    "raw": string;
+    "target": string;
+
+    /**
+     * broken | ambiguous
+     */
+    "kind": string;
+    "reason": string;
+}
+
+/**
+ * VaultItem 是列表里的一项（面向界面）。
+ */
+export interface VaultItem {
+    "path": string;
+    "title": string;
+    "layer": string;
+    "status": string;
+    "links": number;
+}
+
+/**
+ * VaultLink 是正文里的一条双链（面向界面）。
+ */
+export interface VaultLink {
+    "raw": string;
+    "target": string;
+    "heading": string;
+    "block": string;
+    "alias": string;
+    "embed": boolean;
+    "offset": number;
+}
+
+/**
+ * VaultOverview 是一次拿齐的界面数据：列文档 + 数据表。
+ * 
+ * 一次拿齐而不是两次调用：界面一进来就要它俩，分成两次会让左栏闪一下。
+ */
+export interface VaultOverview {
+    "root": string;
+    "items": VaultItem[] | null;
+    "tables": string[] | null;
+}
+
+/**
+ * VaultResolution 是一条双链被解析到的结果（面向界面）。
+ */
+export interface VaultResolution {
+    "path": string;
+    "heading": string;
+    "block": string;
+    "headingLine": number;
+    "blockLine": number;
+    "blockText": string;
+    "candidates": string[] | null;
+}
