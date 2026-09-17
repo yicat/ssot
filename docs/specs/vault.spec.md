@@ -28,7 +28,8 @@ projects/<领域>/              ← 一个项目 = 一个 vault（沿用 workspa
 ├─ tables/                   ← 数据表：一表一文件
 │   ├─ 技能倍率.csv
 │   └─ README.md             ← 字段含义与用途
-└─ .data/                    ← 派生索引（SQLite），可重建、不进 git
+└─ .data/                    ← **派生层**（SQLite：索引 + KV + 关系 + 向量），可重建、不进 git
+                              水面下的东西都在这儿，用户只看文档与表，见 derived.spec.md
 ```
 
 ## 已确认的约定
@@ -62,6 +63,9 @@ projects/<领域>/              ← 一个项目 = 一个 vault（沿用 workspa
 - 每个表旁边有说明（字段含义、用途、什么时候不该用它），照 `scripts/README.md` 的做法。
 - 查询走 **SQLite**：把 `tables/` 与各文档的 front matter 载进 `.data/index.db`，
   它是**派生索引**，删掉可重建、不进版本控制。
+- ⚠️ `.data/index.db` 只是派生层的**开始**：它下面还要长 KV、实体关系、向量
+  （借 LightRAG 的机制，但沉在水下、用户只看见文档与表）。那一层单独一份 spec：
+  `derived.spec.md`。
 
 ### 5. 版本与 diff：用 git
 

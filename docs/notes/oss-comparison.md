@@ -86,10 +86,28 @@ WeKnora 的 schema 与 types 是我自己独立挖的，与分头读的结论一
 ## 五、对我们的结论
 
 1. **不采用任何一家的定位**（问答/RAG/智能体平台），也不做它们的检索-生成链。
-2. **借机制、不借架构**：抓取管线（WeKnora）、双粒度溯源与改动来源四分类（WeKnora）、
-   取代不删除 + 有效期（WeKnora memory）→ 落进 `docs/specs/vault.spec.md` 与 `agent.spec.md`。
+2. **借机制、不借架构**。
 3. **明确拒绝**：LLM 合并冲突（LightRAG）、未验证内容同权进库（MaxKB）。
 4. 我们要的那条缝：**把来源整理成文档，冲突并列不裁决，发布必须是人，未核验可见**。
+
+### 落位表（2026-09-17 补：下面这句原来只写了「要落进 spec」，实际没落，已核对）
+
+⚠️ 教训：这条笔记一度写着「借机制…→ 落进 `vault.spec.md` 与 `agent.spec.md`」，
+但**根本没落**——spec 里 grep 这些关键词全是 0 命中。写着「已落进」而没人核对，
+等于给自己签了张空头支票。所以这里改成逐条落位：
+
+| 借来的机制 | 落在哪 | 状态 |
+|---|---|---|
+| **LightRAG 的 KV / 向量 / 图 / 文档状态四层存储** | `derived.spec.md`（整份都是） | **本轮定方向**：照搬机制、沉到水下、自动维护；用户只看文档与表 |
+| LightRAG 的**混合检索**（local/global/hybrid → 我们只借「混合」这一个概念） | `derived.spec.md` §二 | 方向已定，具体排序待做 |
+| LightRAG 的「抽取→候选」与「谓词＋值＋单位」目标形态 | `derived.spec.md` §二（实体/关系字段） | 借字段；**不做**实体/关系图那套问答模式 |
+| LightRAG 的 LLM 合并冲突 | 无（`vault.spec.md` §6 反面参照） | **明确拒绝** |
+| WeKnora 的取代不删除 + 有效期（`superseded_by` / `valid_from`） | `derived.spec.md` §五.4（作为**图上的边**） | 待定：不新增用户可见概念，长在派生层里 |
+| WeKnora 的改动来源四分类（agent/user/revert/pipeline） | 未落 | 只有 human/agent 两类（`agent.spec.md` §3） |
+| WeKnora 的抓取管线（HTTP 先行→403 退 Chromium、钉 IP、readability+table） | 未落（`vault.spec.md` 未定 #1、`agent.spec.md` §5「未做」里有 `raw_refresh`） | 口径只在本文里，做抓取时以本文为准 |
+| WeKnora 的双粒度溯源（文档级 + 块级 refs） | `vault.spec.md` §3（块级） | 只做了更紧的那半 |
+| WeKnora 的内容 lint 六类 | `vault.spec.md` §3（断链/歧义两类） | 其余（孤儿页/引用失效/缺交叉引用/空内容）未做，也没写「未做」 |
+| 向量检索（`embedding-spike.md` 的实测） | `vault.spec.md` 未定 #4 + `derived.spec.md` §五.2 | 已验证可行；先上不上未定 |
 
 ## 六、什么时候不该用这份笔记
 
