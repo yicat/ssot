@@ -157,10 +157,12 @@ type AppSettingsView struct {
 	// ProjectRoot 是当前实际用的项目根（来自会话，不是设置里的值）。
 	ProjectRoot string `json:"projectRoot"`
 	DSHInstall  string `json:"dshInstall"`
-	Profile     string `json:"profile"`
-	CLIBin      string `json:"cliBin"`
-	Actor       string `json:"actor"`
-	Theme       string `json:"theme"`
+	// DSHHome 是 harness 的配置根（profile / 会话 / 凭据都在这儿）。显式钉住，见 appconfig 里的注释。
+	DSHHome string `json:"dshHome"`
+	Profile string `json:"profile"`
+	CLIBin  string `json:"cliBin"`
+	Actor   string `json:"actor"`
+	Theme   string `json:"theme"`
 	// SettingsPath 是设置文件在哪（要能告诉人去哪改）。
 	SettingsPath string `json:"settingsPath"`
 	ProfileDir   string `json:"profileDir"`
@@ -184,6 +186,7 @@ func (s *AgentService) view(cfg appconfig.Settings, notes []string) AppSettingsV
 		ProjectsRoot: cfg.ProjectsRoot,
 		ProjectRoot:  s.session.Root(),
 		DSHInstall:   cfg.Agent.DSHInstall,
+		DSHHome:      cfg.Agent.DSHHome,
 		Profile:      cfg.Agent.Profile,
 		CLIBin:       cfg.Agent.CLIBin,
 		Actor:        cfg.Agent.Actor,
@@ -213,6 +216,7 @@ func (s *AgentService) SaveSettings(v AppSettingsView) (AppSettingsView, error) 
 	cfg := appconfig.Defaults()
 	cfg.ProjectsRoot = v.ProjectsRoot
 	cfg.Agent.DSHInstall = v.DSHInstall
+	cfg.Agent.DSHHome = v.DSHHome
 	cfg.Agent.Profile = v.Profile
 	cfg.Agent.CLIBin = v.CLIBin
 	cfg.Agent.Actor = v.Actor
@@ -253,7 +257,7 @@ func (s *AgentService) service() (*agentapp.Service, error) {
 	}
 	key := strings.Join([]string{
 		vault, cfg.Agent.DSHExe(), strings.Join(cfg.Agent.Args(), "\x00"),
-		cfg.Agent.CLIBin, cfg.Agent.Actor,
+		strings.Join(cfg.Agent.Env(), "\x00"), cfg.Agent.CLIBin, cfg.Agent.Actor,
 	}, "\x01")
 
 	s.mu.Lock()

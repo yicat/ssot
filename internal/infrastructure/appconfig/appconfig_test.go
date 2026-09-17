@@ -106,15 +106,85 @@ func TestCheckReportsEachMissingPiece(t *testing.T) {
 }
 
 func TestAgentArgsAndEnv(t *testing.T) {
-	a := Agent{DSHInstall: `C:\d`, Profile: "acp"}
+	a := Agent{DSHInstall: `C:\d`, Profile: "ssot-agent", DSHHome: `C:\dshhome`}
 	args := strings.Join(a.Args(), " ")
 	// 这三个参数一个都不能少（Electron 当 node 用；见 dsh.spec.md）。
-	for _, want := range []string{"--expose-internals", "harness-node-entry.mjs", "bin.js", "--profile acp"} {
+	for _, want := range []string{"--expose-internals", "harness-node-entry.mjs", "bin.js", "--profile ssot-agent"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("命令行缺 %q：%s", want, args)
 		}
 	}
-	if len(a.Env()) != 1 || a.Env()[0] != "ELECTRON_RUN_AS_NODE=1" {
-		t.Errorf("环境变量不对（少了它会报 --profile is required）：%v", a.Env())
+	env := strings.Join(a.Env(), " ")
+	if !strings.Contains(env, "ELECTRON_RUN_AS_NODE=1") {
+		t.Errorf("环境变量缺 ELECTRON_RUN_AS_NODE（少了它会报 --profile is required）：%v", a.Env())
+	}
+	// DSH_HOME 必须显式钉住：不钉住，profile/会话/凭据落在哪取决于 App 是谁启动的。
+	if !strings.Contains(env, "DSH_HOME=") {
+		t.Errorf("环境变量缺 DSH_HOME：%v", a.Env())
+	}
+}
+
+// TestGuardsBypassTools 验「profile 到底堵没堵住」这个检查。
+//
+// 样例照**真的 dump 形状**写：条目中间会夹 `__dshPluginOwner` 块，`disabled:` 落在 id 后面第 7 行——
+// 我第一版窗口只留 4 行，于是把「已经关掉」读成「没关」，白折腾了一轮。这条就是那个 bug 的回归。
+func TestGuardsBypassTools(t *testing.T) {
+	dir := t.TempDir()
+	profile := filepath.Join(dir, "profiles", "ssot-agent")
+	if err := os.MkdirAll(profile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	patch := `# 说明
+- id: tool-pwsh
+  disabled: true
+- id: tool-bash
+  disabled: true
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+  __dshPluginOwner:
+    packageName: '@deepseek-ai/dsh-base'
+    version: 0.1.2-rc.1
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+- id: tool-str-replace-editor
+  disabled: true
+- id: tool-skill
+  disabled: false
+`
+	if err := os.WriteFile(filepath.Join(profile, "cordis.patch.yml"), []byte(patch), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := Agent{DSHHome: dir, Profile: "ssot-agent"}
+	ok, missing := a.guardsBypassTools()
+	if !ok {
+		t.Errorf("这份 patch 已经全关掉了，不该报缺：%v", missing)
+	}
+
+	// 少关一个 → 必须报出来（假绿最危险：以为堵住了其实没堵）
+	weak := strings.Replace(patch, "- id: tool-fs-search\n  disabled: true\n", "", 1)
+	if err := os.WriteFile(filepath.Join(profile, "cordis.patch.yml"), []byte(weak), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, missing = a.guardsBypassTools()
+	if ok || len(missing) != 1 || missing[0] != "tool-fs-search" {
+		t.Errorf("少关一个该被报出来：ok=%v missing=%v", ok, missing)
+	}
+
+	// `!!js` 条件式不算「关掉了」：运行时才知道，配置检查不该假装看得懂。
+	cond := strings.Replace(patch, "- id: tool-fs-search\n  disabled: true\n", "- id: tool-fs-search\n  disabled: !!js process.env.NOPE\n", 1)
+	if err := os.WriteFile(filepath.Join(profile, "cordis.patch.yml"), []byte(cond), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := a.guardsBypassTools(); ok {
+		t.Error("条件式禁用不该被当成「已关掉」")
+	}
+
+	// 没有 patch 文件 → 报缺全部（别静默当成没问题）。
+	if err := os.Remove(filepath.Join(profile, "cordis.patch.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if ok, missing := a.guardsBypassTools(); ok || len(missing) != len(bypassToolIDs) {
+		t.Errorf("没有 patch 文件该报缺全部：ok=%v missing=%v", ok, missing)
 	}
 }

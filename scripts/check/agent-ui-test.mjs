@@ -98,19 +98,30 @@ async function main() {
     checkRows[0]?.slice(0, 60) ?? "",
   );
 
+  // 光看「目录在不在」不够：必须能看出**这个 profile 堵没堵住绕过能力层的工具**
+  // （留着 pwsh / fs，agent 就能直接改文件、直接 commit，门就白设了）。
+  const guardRow = dialog.locator("li", { hasText: "关掉了绕过能力层" });
+  check("检查项里有「profile 关掉了绕过能力层的工具」", (await guardRow.count()) > 0);
+  if ((await guardRow.count()) > 0) {
+    const iconClass = (await guardRow.locator("svg").first().getAttribute("class")) ?? "";
+    check(
+      "这个 profile 确实堵住了绕过路径",
+      /circle-check/.test(iconClass),
+      (await guardRow.first().innerText()).replace(/\n/g, " ").slice(0, 100),
+    );
+  }
+
   // 设置文件路径要显示出来：读不动的时候人得知道去哪改
   check("显示了设置文件路径", /settings\.json/.test(dialogText), dialogText.match(/[^\s]*settings\.json/)?.[0] ?? "");
 
-  // 保存：改一个字段再存，重新打开要还在（走真后端读写用户级配置）
+  // 保存：**存回原值**再读一遍（验读写链路，但不改用户的配置）。
   //
-  // ⚠️ **按 data-field 取字段，不要按 input 的下标**：踩过一次——下标算错一位，
-  // 测试把 "acp" 写进了 DSH 安装目录，而断言因为回读的是同一个错字段还「通过」了；
-  // 后果是用户点「启动后端」直接报 `acp\DSH Desktop.exe` 找不到。
-  // 所以这里除了回读，还**交叉断言别的字段没被带坏**。
+  // ⚠️ 这里绝不能写死一个值：第一版写死 "acp"，于是每跑一次测试就把用户的 profile
+  // 从受限的 ssot-agent 改回不受限的 acp——测试自己把安全设置拆了。
   const dshBefore = await dialog.locator("[data-field=dshInstall]").inputValue();
   const profileInput = dialog.locator("[data-field=profile]");
   const before = await profileInput.inputValue();
-  await profileInput.fill("acp");
+  await profileInput.fill(before); // 幂等
   await dialog.getByRole("button", { name: /保存/ }).click();
   await page.waitForTimeout(600);
   await dialog.getByRole("button", { name: "关闭配置" }).click();
@@ -121,8 +132,9 @@ async function main() {
   await page.waitForSelector("[role=dialog][aria-label=配置]", { timeout: 8000 });
   const reopened = page.locator("[role=dialog][aria-label=配置]");
   const after = await reopened.locator("[data-field=profile]").inputValue();
-  check("保存后能读回（配置真的落盘了）", after === "acp", `before=${before} after=${after}`);
-  // 这条就是能提前抓到上面那个错的断言：写 profile 不该动到 DSH 安装目录。
+  check("保存后能读回（配置真的落盘了）", after === before, `before=${before} after=${after}`);
+  check("profile 指向受限的那个（不是不受限的 acp）", after === "ssot-agent", after);
+  // 这条就是能提前抓到「写一个字段带坏另一个」的断言。
   const dshAfter = await reopened.locator("[data-field=dshInstall]").inputValue();
   check("写一个字段不会带坏别的字段", dshAfter === dshBefore && /DSH Desktop/.test(dshAfter), `dsh=${dshAfter}`);
   // 而且检查项要仍然指向一个真实存在的 DSH 目录（路径被写坏时这条会红）。

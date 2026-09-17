@@ -122,7 +122,8 @@ export function SettingsModal({ open, onClose }: Props) {
               Agent 后端 <span className="text-xs text-muted-foreground">（聊天用哪个后端；模型与 key 不在这里）</span>
             </h3>
             {field("DSH 安装目录", "dshInstall", "下面要有「DSH Desktop.exe」与 resources/")}
-            {field("profile 名", "profile", "我们建的那个 ACP profile（默认 acp）")}
+            {field("DSH 配置根（DSH_HOME）", "dshHome", "profile / 会话 / 凭据都在这下面；本机桌面版是 %APPDATA%\\dsh-desktop\\harness")}
+            {field("profile 名", "profile", "用我们建的 ssot-agent：它关掉了 pwsh / 文件读写这些绕过能力层的工具")}
             {field("ssot CLI 路径", "cliBin", "MCP 服务器就是它：<这个路径> mcp --root <vault>；跑 wails3 task build:cli 生成")}
             {field("actor 名字", "actor", "agent 写入时记进 git trailer 的名字（agent:<名字>）")}
           </section>
@@ -191,3 +192,4 @@ export function SettingsModal({ open, onClose }: Props) {
     </div>
   );
 }
+

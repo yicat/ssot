@@ -104,6 +104,34 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 表现为配置改对了、界面仍拿旧值去起进程，报的还是旧的错。
 缓存键要包含 vault + 后端命令 + 参数 + CLI + actor 的指纹。
 
+### 后端工具集必须收紧：**只给能力层的工具**
+
+**为什么**：ACP profile 继承 `dsh-base`，而 `dsh-base` 带着一整套编码 agent 工具——
+`tool-pwsh`、`tool-bash`、`tool-fs`、`tool-fs-search`、`tool-str-replace-editor`
+（在本机 `--dump-config` 里逐个查过）。留着它们，agent 可以直接改 vault 文件、
+直接 `git commit`、直接改 front matter 里的 `status`——**整条门就绕过去了**。
+这直接违反 `agent.spec.md` §1「门在能力层，后端可替换也绕不过」，
+所以我们自己的后端 profile 必须把它们关掉。
+
+**约定**（我们的 profile = `dsh-base` + `dsh-acp-app` + 一份禁用 patch）：
+
+| 处理 | 行 id | 为什么 |
+|---|---|---|
+| **禁用** | `tool-pwsh`、`tool-bash` | 能跑任意命令 → 能改文件、能 commit |
+| **禁用** | `tool-fs`、`tool-fs-search`、`tool-str-replace-editor` | 直接读写文件 → 绕过 `doc_write` 与留痕 |
+| 保留 | MCP（`mcp__ssot__*` 八个工具） | **这就是能力层**，vault 的读/写/查都在里面 |
+| 保留 | `tool-skill`、`dsh-skill-filesystem` | 四个角色靠它分发（`agent.spec.md` §6） |
+| 保留 | `tool-subagent`、`tool-todo` | 主 Agent 的调度用，**不碰文件** |
+| 保留 | `tool-web` | 只读外部；要落进 vault 仍得走 `doc_write`，绕不过门 |
+
+**落地形态**：专属 profile `ssot-agent`（不是通用的 `acp`）——名字就说明它是给谁用的。
+App 默认指向它；配置页的「后端检查」要能看出**这个 profile 到底堵没堵住**，
+而不是只看目录在不在。
+
+**能验到哪一步**：`--dump-config` 里那些行必须是 `disabled: true`（组合层面的事实）；
+而**模型最终看到的工具清单**只有真跑一轮才看得见——界面里的工具调用行会显示工具名，
+如果那一行出现 `pwsh`/`read`/`write`，就说明没堵住（这条要人看一眼，我不假装能自动验）。
+
 ## 不做
 
 - 不做 `streamable-http`；不做 MCP resources / prompts（DSH 也不桥接）。

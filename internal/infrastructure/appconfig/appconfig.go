@@ -30,7 +30,14 @@ type Settings struct {
 type Agent struct {
 	// DSHInstall 是 DSH Desktop 的安装目录（下面有 DSH Desktop.exe 与 resources/）。
 	DSHInstall string `json:"dshInstall"`
-	// Profile 是起后端用的 profile 名（我们建的那个叫 acp）。
+	// DSHHome 是 harness 的配置根（profiles / sessions / .credentials.yaml 都在这儿）。
+	//
+	// ⚠️ **必须显式钉住**：默认值取决于环境变量 DSH_HOME，而它存不存在又取决于
+	// 「App 是被谁启动的」——从 DSH 会话里启动会继承桌面版那套 home，直接双击启动则落到
+	// `~/.dsh`。不钉住就会出现「同一个 profile 一会儿在一会儿不在」
+	// （本机实测：`~/.dsh/profiles` 与 `%APPDATA%\dsh-desktop\harness\profiles` 是两个根）。
+	DSHHome string `json:"dshHome"`
+	// Profile 是起后端用的 profile 名（用我们建的 `ssot-agent`：它关掉了绕过能力层的工具）。
 	Profile string `json:"profile"`
 	// CLIBin 是 ssot CLI 的路径——**MCP 服务器就是它**（`<CLIBin> mcp --root <vault>`）。
 	CLIBin string `json:"cliBin"`
@@ -45,7 +52,9 @@ type Appearance struct {
 
 // 默认值（写下来免得靠猜）。
 const (
-	DefaultProfile = "acp"
+	// DefaultProfile 是**我们自己的** profile：它比通用的 acp 多一件事——
+	// 关掉了 pwsh / bash / fs / str-replace-editor，agent 只能通过能力层碰 vault。
+	DefaultProfile = "ssot-agent"
 	DefaultActor   = "agent:dsh"
 	DefaultTheme   = "system"
 )
@@ -102,6 +111,10 @@ func (s *Store) Load() (Settings, []string, error) {
 		got.Agent.DSHInstall = def.Agent.DSHInstall
 		notes = append(notes, "agent.dshInstall 为空，用默认值："+def.Agent.DSHInstall)
 	}
+	if got.Agent.DSHHome == "" {
+		got.Agent.DSHHome = def.Agent.DSHHome
+		notes = append(notes, "agent.dshHome 为空，用默认值："+def.Agent.DSHHome)
+	}
 	if got.Agent.Profile == "" {
 		got.Agent.Profile = def.Agent.Profile
 		notes = append(notes, "agent.profile 为空，用默认值："+def.Agent.Profile)
@@ -147,6 +160,7 @@ func Defaults() Settings {
 		ProjectsRoot: "projects",
 		Agent: Agent{
 			DSHInstall: install,
+			DSHHome:    DefaultDSHHome(),
 			Profile:    DefaultProfile,
 			CLIBin:     DefaultCLIPath(),
 			Actor:      DefaultActor,
@@ -178,13 +192,30 @@ func (a Agent) DSHBin() string {
 	return filepath.Join(a.DSHInstall, "resources", "app", "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js")
 }
 
-// ProfileDir 是 profile 目录（本机是 `~/.dsh/profiles/<名字>`）。
+// ProfileDir 是 profile 目录（在钉住的 DSHHome 下：`<dshHome>/profiles/<名字>`）。
 func (a Agent) ProfileDir() string {
+	if a.DSHHome == "" {
+		return ""
+	}
+	return filepath.Join(a.DSHHome, "profiles", a.Profile)
+}
+
+// DefaultDSHHome 猜 harness 的配置根。
+//
+// 优先桌面版自己的那个（`%APPDATA%\\dsh-desktop\\harness`，本机装了桌面版就有它），
+// 否则退回 DSH 的标准位置 `~/.dsh`。两台机器上这两套是**并行**的：桌面版一套、CLI 一套。
+func DefaultDSHHome() string {
+	if appData := os.Getenv("APPDATA"); appData != "" && runtime.GOOS == "windows" {
+		desktop := filepath.Join(appData, "dsh-desktop", "harness")
+		if _, err := os.Stat(desktop); err == nil {
+			return desktop
+		}
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".dsh", "profiles", a.Profile)
+	return filepath.Join(home, ".dsh")
 }
 
 // Args 是起 ACP 后端要拼的命令行。
@@ -195,9 +226,19 @@ func (a Agent) Args() []string {
 	return []string{"--expose-internals", a.NodeEntry(), a.DSHBin(), "--profile", a.Profile}
 }
 
-// Env 是子进程要多带的环境变量。不设 ELECTRON_RUN_AS_NODE 会被当成 Electron 应用启动，
-// 参数错位后只报「--profile <name> is required」（那个报错完全看不出真实原因）。
-func (a Agent) Env() []string { return []string{"ELECTRON_RUN_AS_NODE=1"} }
+// Env 是子进程要多带的环境变量。
+//
+//   - 不设 ELECTRON_RUN_AS_NODE 会被当成 Electron 应用启动，参数错位后只报
+//     「--profile <name> is required」（那个报错完全看不出真实原因）；
+//   - 显式给 DSH_HOME：不钉住的话，profile / 会话 / 凭据落在哪取决于 App 是谁启动的
+//     （见 DSHHome 的注释）。
+func (a Agent) Env() []string {
+	env := []string{"ELECTRON_RUN_AS_NODE=1"}
+	if a.DSHHome != "" {
+		env = append(env, "DSH_HOME="+a.DSHHome)
+	}
+	return env
+}
 
 // Check 逐条检查后端能不能用（spec §4：配置页要能报「缺什么」）。
 //
@@ -227,12 +268,72 @@ func (s Settings) Check() []Check {
 		{Name: "dsh 入口", Path: a.DSHBin(), OK: exists(a.DSHBin()),
 			Hint: "DSH 安装不完整（缺 dsh/lib/bin.js）"},
 		{Name: "profile 目录", Path: a.ProfileDir(), OK: exists(a.ProfileDir()),
-			Hint: fmt.Sprintf("需要 %s/profile/package.json：bundles 写 @deepseek-ai/dsh-base 与 @deepseek-ai/dsh-acp-app（见 docs/specs/dsh.spec.md）", a.Profile),
+			Hint: fmt.Sprintf("需要在 %s 下建 profile：package.json 的 bundles 写 @deepseek-ai/dsh-base 与 @deepseek-ai/dsh-acp-app（见 docs/specs/dsh.spec.md）", a.ProfileDir()),
 		},
-		{Name: "ssot CLI（MCP 服务器）", Path: a.CLIBin, OK: exists(a.CLIBin),
-			Hint: "跑 wails3 task build:cli 生成 bin\\ssot-cli.exe（App 起 MCP 服务器用的就是它）"},
 	}
+	// 光有 profile 目录不够：**必须堵住绕过能力层的工具**，
+	// 否则 agent 能直接改 vault 文件、直接 commit，「门在能力层」就白设了。
+	patchPath := filepath.Join(a.ProfileDir(), "cordis.patch.yml")
+	guarded, missing := a.guardsBypassTools()
+	items = append(items, Check{
+		Name: "profile 关掉了绕过能力层的工具", Path: patchPath, OK: guarded,
+		Hint: fmt.Sprintf("cordis.patch.yml 里要禁用 %s（禁用后 agent 只能走 mcp__ssot__*）", strings.Join(missing, "、")),
+	})
+	items = append(items, Check{
+		Name: "ssot CLI（MCP 服务器）", Path: a.CLIBin, OK: exists(a.CLIBin),
+		Hint: "跑 wails3 task build:cli 生成 bin\\ssot-cli.exe（App 起 MCP 服务器用的就是它）",
+	})
 	return items
+}
+
+// bypassToolIDs 是**必须禁用**的那几个工具行。
+//
+// 留着它们，agent 就能绕过能力层：pwsh/bash 能跑任意命令（包括 git commit），
+// fs / str-replace-editor 能直接读写文件（包括改 front matter 里的 status）。
+// 见 docs/specs/dsh.spec.md「后端工具集必须收紧」。
+var bypassToolIDs = []string{"tool-pwsh", "tool-bash", "tool-fs", "tool-fs-search", "tool-str-replace-editor"}
+
+// guardsBypassTools 检查 profile 的 patch 有没有把那些工具关掉。
+//
+// 这是**配置检查**（读文件看有没有 `disabled: true`），不是安全边界——边界是运行时那行标志本身。
+// 已知误判：patch 用 `!!js` 表达式动态决定时这里看不出来。
+func (a Agent) guardsBypassTools() (bool, []string) {
+	b, err := os.ReadFile(filepath.Join(a.ProfileDir(), "cordis.patch.yml"))
+	if err != nil {
+		return false, bypassToolIDs
+	}
+	lines := strings.Split(string(b), "\n")
+	var missing []string
+	for _, id := range bypassToolIDs {
+		if !disabledIn(lines, id) {
+			missing = append(missing, id)
+		}
+	}
+	return len(missing) == 0, missing
+}
+
+// disabledIn 看某一行 id 后面（同一条目内）有没有 `disabled: true`。
+//
+// ⚠️ 窗口要给够：dump 出来的条目中间会夹 `__dshPluginOwner` 这类块，
+// `disabled:` 可能落在 id 后面**第 7 行**；窗口只留 4 行会误判成「启用」
+// （我就这么误读过一次：明明关掉了，却以为没关上）。
+func disabledIn(lines []string, id string) bool {
+	for i, line := range lines {
+		if !strings.Contains(line, "id:") || !strings.Contains(line, id) {
+			continue
+		}
+		for j := i + 1; j < len(lines) && j <= i+12; j++ {
+			t := strings.TrimSpace(lines[j])
+			if strings.HasPrefix(t, "-") && strings.Contains(t, "id:") {
+				break // 到下一条了
+			}
+			if strings.Contains(t, "disabled:") {
+				// 只认字面 true：`!!js` 表达式要看运行时才知道，配置检查不该假装看得懂。
+				return strings.Contains(t, "true")
+			}
+		}
+	}
+	return false
 }
 
 // AllOK 报告后端是否齐了。

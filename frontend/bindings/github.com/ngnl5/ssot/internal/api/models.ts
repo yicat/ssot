@@ -79,6 +79,11 @@ export interface AppSettingsView {
      */
     "projectRoot": string;
     "dshInstall": string;
+
+    /**
+     * DSHHome 是 harness 的配置根（profile / 会话 / 凭据都在这儿）。显式钉住，见 appconfig 里的注释。
+     */
+    "dshHome": string;
     "profile": string;
     "cliBin": string;
     "actor": string;
