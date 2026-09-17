@@ -72,9 +72,12 @@
 
 - **按标题／段落做语义合并**：它这版用的是 paragraph-semantic chunker，注释里写明
   「heading-aligned paragraph merging needs more」——正好与我们要的「标题 → 空行」一致，不算冲突。
-- 目标块大小 **`DEFAULT_CHUNK_P_SIZE = 2000`** token；嵌入重叠
-  **`DEFAULT_EMBEDDING_CHUNK_OVERLAP_TOKEN_SIZE = 100`** token。
+- 目标块大小 **`DEFAULT_CHUNK_P_SIZE = 2000`** token；嵌入重叠  **`DEFAULT_EMBEDDING_CHUNK_OVERLAP_TOKEN_SIZE = 100`** token。
 - 块的 `doc` + 行号区间必须与文件对得上（**文件行号**，与 `vaultfs` 的 `bodyOffset` 同一套）——这是叠加。
+- **打包顺序（P2 实测定的口径）**：超长段落**先在段内**把句子打包成 ≤ 目标大小的片段，
+  **再**把这些片段与相邻段落合并；**不许把一个长段的句子摊平后直接与别的段拼成一个块**。
+  理由：段落是语义单元，跨段拼出来的块「意思不聚焦」，检索质量明显变差
+  （同 vault 同查询 R@1 48.3% vs 65.9%，见 `docs/notes/embedding-spike.md` §六.8）。
 - 整块不重叠的部分仍然要留：重叠只用于**嵌入**，正文命中按块自己的行号区间报（免得同一段报两次）。
 - ⚠️ **[待定] 2000 token 的块 × 512 token 的嵌入模型**：LightRAG 默认配的是长上下文嵌入
   （bge-m3 那类 8192）；我们选的是 bge-small-zh-v1.5，上限 **512 token**。

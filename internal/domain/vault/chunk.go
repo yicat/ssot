@@ -143,16 +143,40 @@ func ChunkBody(body string, bodyOffset, target int) []Chunk {
 		paras = append(paras, para{text: strings.TrimSpace(strings.Join(buf, "\n")), line: start + 1, endLn: i})
 	}
 
-	// 第二步：超长的段先按句子切开（不许切碎一句话）。
+	// 第二步：超长的段**先在段内**按句子打包成 ≤ target 的片段（不许切碎一句话，也不许跨段拼）。
+	//
+	// 为什么必须段内先打包（2026-09-18 改，P2 实测）：早先的版本把长段的句子摊平成一串句子，
+	// 再在第三步与**相邻段落**一起贪心打包——结果一个块里常常横跨两段，
+	// 「意思不聚焦」，检索质量明显变差（同 vault 同查询：R@1 48.3% vs 参照 65.9%，
+	// 见 docs/notes/embedding-spike.md §六.8）。段落是语义单元，先包段内、再谈跨段合并。
 	var pieces []para
 	for _, p := range paras {
 		if EstimateTokens(p.text) <= target || p.head {
 			pieces = append(pieces, p)
 			continue
 		}
-		for _, s := range splitSentences(p.text) {
-			pieces = append(pieces, para{text: s, line: p.line, endLn: p.endLn})
+		var buf []string
+		bufTok := 0
+		flush := func() {
+			if len(buf) == 0 {
+				return
+			}
+			pieces = append(pieces, para{
+				text: strings.TrimSpace(strings.Join(buf, "")), // 句与句直接相接（标点已在句尾）
+				line: p.line, endLn: p.endLn,
+			})
+			buf = buf[:0]
+			bufTok = 0
 		}
+		for _, s := range splitSentences(p.text) {
+			t := EstimateTokens(s)
+			if len(buf) > 0 && bufTok+t > target {
+				flush()
+			}
+			buf = append(buf, s)
+			bufTok += t
+		}
+		flush()
 	}
 
 	// 第三步：按目标大小合并；遇到标题就断开（块不跨标题）。

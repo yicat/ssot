@@ -3,7 +3,7 @@
 > 这份文件的**唯一职责**是让「进度」不再靠翻对话。规范在 `docs/specs/`，方案在 `docs/plans/`，
 > 决策在 `docs/adr/`，问题在 `docs/OPEN.md`。**每次收尾（见 ADR 0013）都更新这里。**
 
-**上次整理：2026-09-18（P2 混合检索落地并实测：**没达到验收线**，差距已定位到块/池一侧）**
+**上次整理：2026-09-18（P2 完成：**打包顺序**是 17.6pp 的元凶，修完基线复现、验收达标）**
 
 ## 整理台账
 
@@ -13,7 +13,8 @@
 | 2026-09-18 | 派生层 P0 收尾 | 切块进索引（`chunk`/`extract_chunk`/`sync` 三表 + 读取口）；发现 spike 的 JS 切块脚本与 Go 实现差 5%，已对拍定位并记账 | `embedding-spike.md` §六.4、plan §3 |
 | 2026-09-18 | P1 地基验证 | 纯 Go（免 cgo）加载 ONNX Runtime 跑通 bge-small-zh int8；依赖离线可装；新增探针 `scripts/check/onnx-probe/` | `embedding-spike.md` §六.5 |
 | 2026-09-18 | P1 主体完成 | 自研 WordPiece 分词 + ONNX 推理 + `embedding` 表 + 暴力扫；对拍逐条一致；量出两个坑（落盘放大 2.29×、每查一次读 25MB → P2 必须缓存向量） | `embedding-spike.md` §六.6、`OPEN.md` #17–19 |
-| 2026-09-18 | P2 第一轮 | 混合检索（内存 Searcher + 标题项融合）落地并接到 `ssot vault find`；**验收未达标**：Go 纯向量 48.3%/71.5% 低于 JS 路径 65.9%/77.8%（嵌入已排除，嫌疑在块边界）；β 与 spike 不一致 | `embedding-spike.md` §六.7、`OPEN.md` #19–22 |
+| 2026-09-18 | P2 第一轮 | 混合检索（内存 Searcher + 标题项融合）落地；**验收未达标**：Go 纯向量 48.3% 低于 JS 65.9%（嵌入已排除，嫌疑在块边界） | `embedding-spike.md` §六.7、`OPEN.md` #19–22 |
+| 2026-09-18 | P2 第二轮（收口） | **找到并修掉元凶：切块的打包顺序**（长段的句子被摊平后与相邻段拼块）。改「段内先打包」后纯向量 **61.6%/80.1%**，head/mid/tail 与 spike 表逐字相同 → 基线复现、验收达标（实体名式 R@1 +3.0pp） | `embedding-spike.md` §六.8、`chunk.go`、`derived.spec.md` |
 
 ## 现在在哪
 
@@ -31,23 +32,20 @@
   + `embedding` 表与暴力扫（`PendingChunks`/`PutEmbeddings`/`SearchVector`/`ScanVectors`）
   + CLI `vault embed` / `vault vector` + `SchemaVersion` 自动重建旧索引
   + 对拍参照 `scripts/check/embed-ref.mjs` → `vembed/testdata/parity.json`
+- **P2 完成**：`vaultindex.Searcher`（内存 37.9 MB / 13,181 块 / 装载 647 ms，检索 **9 ms/次**）
+  + 融合规则（`domain/vault/rank.go`，默认 β_title=0.05）+ CLI `ssot vault find`
+  + 评测工具 `scripts/check/hybrid-bench`
+  + **验收**：正文句查询 61.6%/80.1%（基线 61.6%/79.8%，不降）；实体名式查询 R@1 **34.3% → 37.3%**、R@5 70.6% → 73.5%
+  + 顺带修掉切块打包顺序（`chunk.go`）——它让 R@1 少了 13.3pp（`OPEN.md` #20）
 
 **进行中**
-- **P2 第一轮：混合检索落地了，但验收没达标**（详见 `embedding-spike.md` §六.7）：
-  - ✅ 已落地：`vaultindex.Searcher`（内存 36.8 MB / 12,512 块 / 装载 835 ms）+ 融合规则
-    （`domain/vault/rank.go`）+ CLI `ssot vault find`；**检索 8.7 ms/次**（原 222～241 ms）
-  - ✅ 评测工具：`scripts/check/hybrid-bench`（复现 spike 方法，走生产代码；判分规则与 `recall.mjs` 一致）
-  - ❌ 没达标：Go 纯向量 **48.3%/71.5%**，而同 vault 同查询的 JS 路径是 **65.9%/77.8%**（差 17.6pp）；
-    标题项只让标题式查询 +3.0pp（33.3% → 36.3%），正文句查询**没动**
-  - 🔍 已排除：**嵌入不是原因**（真实块文本上 Go 与 transformers.js cos=1.0000000，含 512 截断）
-  - ❓ 嫌疑：**块边界/检索池**（Go 40.8 块/篇 vs JS ≈33.9）——下一轮第一件事
+- 无（P2 已收口；P3 未开工）
 
 **下一步**
-1. **P2 第二**：查清 17.6pp —— 拿同一批块文本分别走两套排序，分清「块边界」还是「池构造」
-2. P2 尾巴：定标题项权重（现在 0.05，样本只有 102 条查询）；真人问法的查询集（正文项才有意义）
-3. P3：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项
-4. P4：图检索并入（local/global/hybrid/mix）
-5. P5：增量与索引状态接到界面
+1. **P3**：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项（纠正块语法、抽取触发方式、`agent.spec` 工具清单）
+2. P2 尾巴（不挡 P3）：实体名式查询只 +3.0pp（n=102），要更硬得靠 P4 图检索；真人问法的查询集（正文项才有意义，`OPEN.md` #22）
+3. P4：图检索并入（local/global/hybrid/mix）
+4. P5：增量与索引状态接到界面
 
 ## 卡在哪
 
