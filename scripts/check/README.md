@@ -14,6 +14,7 @@
 | `chunk-sizing.mjs` | 只读地量「按不同目标大小切块，vault 会长成什么样」：块数、块大小分布、截断损失、向量内存 | 无（Node 内置；也可被别的脚本 import 复用切块逻辑） |
 | `onnx-probe/`（Go） | 探「纯 Go（免 cgo）能不能加载 ONNX Runtime 跑嵌入模型」：ORT 版本、建会话/推理耗时、输出形状 | Go（`onnxruntime_purego`，离线可装）+ 本机 `onnxruntime.dll` 与模型 |
 | `embed-ref.mjs` | 生成**参照数据**：transformers.js 的 token id 与句向量 → `internal/infrastructure/vembed/testdata/parity.json`（Go 侧拿它当考卷） | `@huggingface/transformers` + `onnxruntime-node`（**不在仓库依赖里**，见文件头怎么跑） |
+| `hybrid-bench/`（Go） | 量检索质量：复现 spike 的查询集与方法，走生产代码（`vaultapp.Searcher`），比纯向量与多套融合权重 | Go + 本机模型（`SSOT_EMBED_DIR`）+ 已建好并嵌入过的索引 |
 | `agent-e2e.mjs` | 点界面上的「启动后端」，验真后端能起来（握手 + 开会话 + 按会话挂 MCP，**不发提示词、不花额度**）；**默认跳过**，要 `SSOT_E2E_AGENT=1` | `playwright-core` + 本机装了 DSH |
 
 什么时候用哪个：
@@ -37,6 +38,18 @@
 （⚠️ 重跑等于**换考卷**：只有真的换了模型才跑；跑完把新数字记进
 `docs/notes/embedding-spike.md`）。它需要 `@huggingface/transformers`，而那是 spike 环境
 才有的依赖，所以得按文件头写的办法拷进 `%TEMP%\tfjs-probe` 跑。
+
+**改检索（切块、融合权重、排序）** → `hybrid-bench`（Go）：
+
+```powershell
+$env:SSOT_EMBED_DIR="$env:TEMP\embed-spike"
+go run ./scripts/check/hybrid-bench -root projects/demo -docs 200 [-debug 6]
+```
+
+⚠️ 三点：① 它跟 spike 的 `recall.mjs` 比数字时，**判分规则必须一致**
+（同文档优先含句、退化为同文档最靠前）——规则不同差 15pp（踩过）；
+② 池子限定前 N 篇，是为了跟 spike 可比，**不代表全库表现**；
+③ 「正文项」的分数在原文整句查询上是**假象**（测的是「句子在不在块里」），别拿它当检索质量。
 
 ⚠️ `ui-test.mjs` 断言的是**当前打开的那个 vault 的内容**（示例 doc 名、表里的数、任务行号）。
 vault 一换它就对不上——那是内容依赖，不是界面坏了。遇到「界面测试突然全红」，先确认 app 打开的是哪个 vault。

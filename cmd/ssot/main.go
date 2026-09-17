@@ -127,6 +127,8 @@ func runVault(args []string) error {
 		return vaultEmbed(svc, f.limit)
 	case "vector":
 		return vaultVector(svc, rest, f.limit)
+	case "find":
+		return vaultFind(svc, rest, f.limit, f.beta, f.betaSet)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -138,6 +140,9 @@ type vaultFlags struct {
 	root  string
 	actor string
 	limit int
+	// beta 是混合检索里字面项的权重（-beta 0 就是纯向量）。负数表示「用默认值」。
+	beta    float64
+	betaSet bool
 }
 
 // splitCommand 手写解析：选项放在子命令**前后都行**。
@@ -187,8 +192,22 @@ func splitCommand(args []string) (cmd string, positional []string, f vaultFlags,
 				return "", nil, f, fmt.Errorf("-limit 要一个正整数")
 			}
 			f.limit = n
+		case a == "-beta" || a == "--beta":
+			v, verr := takeValue(a)
+			if verr != nil {
+				return "", nil, f, verr
+			}
+			if f.beta, err = parseBeta(v); err != nil {
+				return "", nil, f, err
+			}
+			f.betaSet = true
+		case strings.HasPrefix(a, "-beta="):
+			if f.beta, err = parseBeta(strings.TrimPrefix(a, "-beta=")); err != nil {
+				return "", nil, f, err
+			}
+			f.betaSet = true
 		case strings.HasPrefix(a, "-"):
-			return "", nil, f, fmt.Errorf("不认识的选项 %q（只认 -root / -actor / -limit）", a)
+			return "", nil, f, fmt.Errorf("不认识的选项 %q（只认 -root / -actor / -limit / -beta）", a)
 		default:
 			if cmd == "" {
 				cmd = a
@@ -198,6 +217,15 @@ func splitCommand(args []string) (cmd string, positional []string, f vaultFlags,
 		}
 	}
 	return cmd, positional, f, nil
+}
+
+// parseBeta 解析 -beta（字面项权重；允许 0，不允许负数）。
+func parseBeta(s string) (float64, error) {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 || v > 10 {
+		return 0, fmt.Errorf("-beta 要 0～10 之间的数（0 = 纯向量），收到 %q", s)
+	}
+	return v, nil
 }
 
 func vaultList(svc *vaultapp.Service) error {
@@ -437,6 +465,49 @@ func vaultVector(svc *vaultapp.Service, args []string, limit int) error {
 	if err != nil {
 		return err
 	}
+	if len(hits) == 0 {
+		fmt.Println("没有命中（索引里可能还没有向量：先跑 ssot vault embed）")
+		return nil
+	}
+	for _, h := range hits {
+		status := string(h.Status)
+		if status == "" {
+			status = "?"
+		}
+		fmt.Printf("%.4f  %s:%d-%d [%s]\n", h.Score, h.Doc, h.FromLine, h.ToLine, status)
+		fmt.Printf("        %s\n", firstLine(h.Text, 100))
+	}
+	return nil
+}
+
+// vaultFind 是**混合检索**：向量余弦 + 标题/标签的字面项（P2 的正式检索口）。
+//
+// 与 vaultVector 的区别：vector 是「只看向量」的对照口，find 是给人用的那个。
+func vaultFind(svc *vaultapp.Service, args []string, limit int, beta float64, betaSet bool) error {
+	if len(args) == 0 {
+		return fmt.Errorf("find 后面要跟查询词")
+	}
+	w := vault.DefaultHybridWeights()
+	if betaSet {
+		w.TitleTags = beta // -beta 0 = 纯向量（对照用）
+	}
+	q := strings.Join(args, " ")
+	start := time.Now()
+	sr, err := svc.NewSearcher(w)
+	if err != nil {
+		return err
+	}
+	defer sr.Close()
+	opened := time.Since(start)
+
+	hits, err := sr.Search(q, limit)
+	if err != nil {
+		return err
+	}
+	elapsed := time.Since(start)
+	fmt.Printf("混合检索（字面项权重 %.2f，%d 块在内存 %.1f MB；加载 %.0f ms，含检索共 %.0f ms）\n",
+		w.TitleTags, sr.Chunks(), float64(sr.MemoryBytes())/(1<<20),
+		float64(opened.Milliseconds()), float64(elapsed.Milliseconds()))
 	if len(hits) == 0 {
 		fmt.Println("没有命中（索引里可能还没有向量：先跑 ssot vault embed）")
 		return nil

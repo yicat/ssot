@@ -330,6 +330,7 @@ func (idx *Index) ScanVectors(kind string, q []float32) (int, error) {
 	}
 	return n, rows.Err()
 }
+
 // encodeVector 把向量编成 float32 小端裸字节。
 func encodeVector(v []float32) []byte {
 	b := make([]byte, len(v)*4)

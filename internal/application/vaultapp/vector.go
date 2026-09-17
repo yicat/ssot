@@ -24,6 +24,70 @@ type EmbedResult struct {
 	Seconds  float64 // 花了多久（嵌进索引的实测，不含模型加载）
 }
 
+// Searcher 是「打开一次、查很多次」的检索器：模型与向量都只加载一次。
+//
+// 界面与 MCP 都是常驻进程，所以**必须**用它——每次现开模型、每次从库里读 25MB 向量
+// 是 222～241 ms（实测），用它是 2 ms 量级（见 docs/OPEN.md #19）。
+type Searcher struct {
+	eng *vembed.Engine
+	s   *vaultindex.Searcher
+	st  time.Duration // 打开（加载模型 + 读向量）用了多久，给状态显示用
+}
+
+// NewSearcher 加载模型与向量，返回检索器。weights 是字面项权重（零值 = 纯向量）。
+func (s *Service) NewSearcher(weights vault.HybridWeights) (*Searcher, error) {
+	if err := s.ensureIndex(); err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	eng, err := s.openEmbedder()
+	if err != nil {
+		return nil, err
+	}
+	is, err := s.index.NewSearcher(vaultindex.KindChunk, weights)
+	if err != nil {
+		eng.Close()
+		return nil, err
+	}
+	return &Searcher{eng: eng, s: is, st: time.Since(start)}, nil
+}
+
+// Close 释放模型会话。
+func (sr *Searcher) Close() {
+	if sr.eng != nil {
+		sr.eng.Close()
+	}
+}
+
+// Chunks 是参与检索的块数。
+func (sr *Searcher) Chunks() int { return sr.s.Len() }
+
+// LoadDuration 是打开检索器的耗时（模型加载 + 读向量）。
+func (sr *Searcher) LoadDuration() time.Duration { return sr.st }
+
+// MemoryBytes 是常驻内存的粗略估算。
+func (sr *Searcher) MemoryBytes() int { return sr.s.MemoryBytes() }
+
+// Search 做一次混合检索。
+func (sr *Searcher) Search(q string, limit int) ([]vault.VectorHit, error) {
+	if q == "" {
+		return nil, fmt.Errorf("查询词不能为空")
+	}
+	vec, err := sr.eng.Embed(q)
+	if err != nil {
+		return nil, err
+	}
+	return sr.s.Search(q, vec, limit)
+}
+
+// SearchQuery 只把查询词编码一次、返回向量（基准脚本要对同一个查询跑多套权重时用）。
+func (sr *Searcher) Embed(q string) ([]float32, error) { return sr.eng.Embed(q) }
+
+// SearchWithVector 用给定向量检索（避免同一查询重复编码）。
+func (sr *Searcher) SearchWithVector(q string, vec []float32, limit int) ([]vault.VectorHit, error) {
+	return sr.s.Search(q, vec, limit)
+}
+
 // openEmbedder 打开嵌入引擎，错误里给**人话**（缺模型是常见情况，别只说 file not found）。
 func (s *Service) openEmbedder() (*vembed.Engine, error) {
 	if s.embedDir == "" {
