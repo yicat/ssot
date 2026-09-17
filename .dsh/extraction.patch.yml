@@ -1,14 +1,28 @@
-# 抽取任务用：**关掉推理**（省 token 的那一档）。
+# 抽取/后台任务用：**关推理 + 收工具集**。
 #
-# 依据：DeepSeek 适配器只接受 reasoningEffort ∈ {off, low, high, max}，而 `off` 在协议上
-# 落成 `thinking: disabled`（见 dsh-llm-deepseek 的 reasoningEffort() 与 resolve 处）。
-# 实测（docs/notes/extraction-spike.md）：开着推理做 3 篇抽取，输出 13,327 token，
-# 其中大头是 reasoning；关掉之后要重测一遍，看 token 与质量的取舍。
-#
-# 用法（可与 .dsh/mcp.patch.yml 一起叠加，--patch 可重复）：
+# 用法（与 MCP overlay 一起叠加，--patch 可重复）：
 #   dsh --profile headless --patch .dsh\mcp.patch.yml --patch .dsh\extraction.patch.yml "<任务>"
+#
+# 两件事，都有实测依据（docs/notes/extraction-spike.md）：
+
+# 1) 关推理：DeepSeek 适配器只接受 reasoningEffort ∈ {off, low, high, max}，
+#    `off` 落成 wire 上的 `thinking: disabled`。
+#    实测同一任务：输入 −47%、耗时 −41%、输出 −10%。
 - id: agent-default-model
   config:
     provider: deepseek-official
     model: deepseek-v4-flash
     reasoningEffort: off
+
+# 2) 收工具集：单次调用的**工具定义就占 7,863 token**（headless 默认挂 dsh-base 全套）。
+#    抽取只需要「读 + 产出」，所以把能写/能执行的那些一并关掉——
+#    既省每次调用的固定开销，也顺便强制它走能力层（写只能走 mcp__ssot__*）。
+#    与 ssot-agent profile 里的禁用清单保持一致（docs/specs/dsh.spec.md）。
+- id: tool-pwsh
+  disabled: true
+- id: tool-bash
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-str-replace-editor
+  disabled: true
