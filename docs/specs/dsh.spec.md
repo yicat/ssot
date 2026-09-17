@@ -88,11 +88,21 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 | ⚠️ 真后端的 **stdout 上混着 `[harness-node] …` 诊断行**，而且夹在协议消息之间 | 探针把这些行判成了「非 JSON」 |
 | `acp` profile 本机原本不存在，已新建 `~/.dsh/profiles/acp/package.json`（bundles：`dsh-base` + `dsh-acp-app`）；**不用装东西**——`~/.dsh/profiles/node_modules/@deepseek-ai/` 下这些包本来就有 | 建完 `--dump-config` 无错误、`--help` 能起来、真连一次成功 |
 
-### 由此定下的两条实现要求
+### 由此定下的三条实现要求
 
 1. **跳过非协议行**：客户端遇到 stdout 上不是 JSON 的行要**记下来继续读**，
    不能当协议错误（`internal/infrastructure/acp` 里就是这么做的，并有测试守这条）。
 2. **列会话必须带 `cwd`**：不带筛选会把用户写代码的会话一起列进我们界面的会话列表里。
+3. **`cwd` 必须是绝对路径**：后端会直接拒绝 `cwd must be an absolute path`。
+   项目根平时是相对的（`projects/demo`），所以交给 ACP 之前必须先转绝对路径——
+   相对路径还依赖 App 的当前工作目录，本来就不该当会话工作区（踩过）。
+
+### 改配置要立刻生效（踩过的坑）
+
+`api.AgentService` 里那个 `agentapp.Service` **不能只按 vault 缓存**：
+后端命令、CLI 路径、actor 都是从设置里读的，只按 vault 缓存会让「配置页改了没用」——
+表现为配置改对了、界面仍拿旧值去起进程，报的还是旧的错。
+缓存键要包含 vault + 后端命令 + 参数 + CLI + actor 的指纹。
 
 ## 不做
 

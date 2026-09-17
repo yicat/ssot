@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,10 +43,10 @@ type AgentService struct {
 	session *compose.Session
 	store   *appconfig.Store
 
-	mu       sync.Mutex
-	svc      *agentapp.Service
-	svcVault string // 记住这个 Service 是给哪个 vault 建的
-	notes    []string
+	mu     sync.Mutex
+	svc    *agentapp.Service
+	svcKey string // 这个 Service 是按哪份配置 + 哪个 vault 建的（配置或项目变了就重建）
+	notes  []string
 
 	permMu  sync.Mutex
 	permSeq int
@@ -226,26 +228,42 @@ func (s *AgentService) SaveSettings(v AppSettingsView) (AppSettingsView, error) 
 
 // service 按需装配 agentapp.Service。
 //
-// 换项目之后必须重建：会话的工作区是 vault，换了项目还沿用旧会话就会把
-// 另一个 vault 当成工作区（那是很难查的一类错）。
+// 两条都必须重建，不能只看 vault：
+//   - **换项目**：会话的工作区是 vault，沿用旧会话会把另一个 vault 当成工作区；
+//   - **改配置**：后端命令/参数、CLI 路径、actor 变了，旧 Service 里存的是旧值——
+//     按 vault 缓存会导致「配置页改了没用」（踩过：救回一个写坏的 DSH 路径之后，
+//     界面仍拿旧值去起进程，报的还是旧的错）。
+//
+// 所以用指纹：vault + 后端命令 + 参数 + CLI + actor，任一变化就重建。
 func (s *AgentService) service() (*agentapp.Service, error) {
 	proj, err := s.session.Project()
 	if err != nil {
 		return nil, err
 	}
-	vault := proj.Dir
+	// ⚠️ ACP 要求 `cwd` 是**绝对路径**（后端会校验：cwd must be an absolute path）。
+	// 项目根平时是相对路径（projects/demo），而相对路径又依赖 App 的当前工作目录——
+	// 拿它当会话工作区既会被后端直接拒绝，也不稳。所以这里先转绝对路径。
+	vault, err := filepath.Abs(proj.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("算不出 vault 的绝对路径（%s）：%w", proj.Dir, err)
+	}
 	cfg, notes, err := s.store.Load()
 	if err != nil {
 		return nil, err
 	}
+	key := strings.Join([]string{
+		vault, cfg.Agent.DSHExe(), strings.Join(cfg.Agent.Args(), "\x00"),
+		cfg.Agent.CLIBin, cfg.Agent.Actor,
+	}, "\x01")
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.notes = notes
-	if s.svc != nil && s.svcVault == vault {
+	if s.svc != nil && s.svcKey == key {
 		return s.svc, nil
 	}
 	if s.svc != nil {
-		s.svc.Shutdown(2 * time.Second) // 换 vault 了，把旧后端的会话收掉
+		s.svc.Shutdown(2 * time.Second) // 换 vault 或改了配置：把旧后端的会话收掉
 	}
 	s.svc = agentapp.New(agentapp.Config{
 		Vault:          vault,
@@ -261,7 +279,7 @@ func (s *AgentService) service() (*agentapp.Service, error) {
 		AskPermission: s.askPermission,
 		OnLog:         func(string) {}, // 后端诊断行先丢掉（要查问题时再开）
 	})
-	s.svcVault = vault
+	s.svcKey = key
 	return s.svc, nil
 }
 

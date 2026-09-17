@@ -63,6 +63,10 @@ export function SettingsModal({ open, onClose }: Props) {
       <span className="text-xs text-muted-foreground">{label}</span>
       <input
         type="text"
+        // data-field 是给测试用的稳定锚点：**不要**让测试按 input 的先后下标去取字段——
+        // 踩过：下标取错了一个字段，测试把 "acp" 写进了 DSH 安装目录，而断言因为回读同一个错字段
+        // 还「通过」了（表现是点启动后端报 `acp\DSH Desktop.exe` 找不到）。
+        data-field={String(key)}
         value={String(view?.[key] ?? "")}
         onChange={(e) => patch({ [key]: e.target.value } as Partial<AppSettingsView>)}
         className="rounded border border-border bg-transparent px-2 py-1 text-sm outline-none focus:border-ring"

@@ -102,7 +102,13 @@ async function main() {
   check("显示了设置文件路径", /settings\.json/.test(dialogText), dialogText.match(/[^\s]*settings\.json/)?.[0] ?? "");
 
   // 保存：改一个字段再存，重新打开要还在（走真后端读写用户级配置）
-  const profileInput = dialog.locator("input").nth(1); // 0=projectsRoot, 1=profile
+  //
+  // ⚠️ **按 data-field 取字段，不要按 input 的下标**：踩过一次——下标算错一位，
+  // 测试把 "acp" 写进了 DSH 安装目录，而断言因为回读的是同一个错字段还「通过」了；
+  // 后果是用户点「启动后端」直接报 `acp\DSH Desktop.exe` 找不到。
+  // 所以这里除了回读，还**交叉断言别的字段没被带坏**。
+  const dshBefore = await dialog.locator("[data-field=dshInstall]").inputValue();
+  const profileInput = dialog.locator("[data-field=profile]");
   const before = await profileInput.inputValue();
   await profileInput.fill("acp");
   await dialog.getByRole("button", { name: /保存/ }).click();
@@ -113,8 +119,16 @@ async function main() {
   // 只按名字取 first 会赌 DOM 顺序，而且弹窗还没卸干净时点击会被背景盖住（踩过，超时 30s）。
   await page.locator("button[title*='配置']").first().click();
   await page.waitForSelector("[role=dialog][aria-label=配置]", { timeout: 8000 });
-  const after = await page.locator("[role=dialog][aria-label=配置]").locator("input").nth(1).inputValue();
+  const reopened = page.locator("[role=dialog][aria-label=配置]");
+  const after = await reopened.locator("[data-field=profile]").inputValue();
   check("保存后能读回（配置真的落盘了）", after === "acp", `before=${before} after=${after}`);
+  // 这条就是能提前抓到上面那个错的断言：写 profile 不该动到 DSH 安装目录。
+  const dshAfter = await reopened.locator("[data-field=dshInstall]").inputValue();
+  check("写一个字段不会带坏别的字段", dshAfter === dshBefore && /DSH Desktop/.test(dshAfter), `dsh=${dshAfter}`);
+  // 而且检查项要仍然指向一个真实存在的 DSH 目录（路径被写坏时这条会红）。
+  const rowsAfter = await reopened.locator("li").allInnerTexts();
+  const dshRow = rowsAfter.find((t) => t.includes("DSH 可执行文件")) ?? "";
+  check("后端检查里的 DSH 路径是完整路径", /DSH Desktop[\\/]DSH Desktop\.exe/.test(dshRow), dshRow.replace(/\n/g, " ").slice(0, 80));
   await page.locator("[role=dialog][aria-label=配置]").getByRole("button", { name: "关闭配置" }).click();
 
   console.log("\n== 回到文档模式 ==");
