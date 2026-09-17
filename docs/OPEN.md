@@ -18,6 +18,8 @@
 | 12 | 仓库是 **public**，32 个文件含本机绝对路径（`C:\Users\ngnl5\…`）；build/darwin 的 5.2MB 仍在历史里 | 观察 | — | 用户已知，暂不处理 |
 | 13 | `scripts/ingest/`（另一个 session 的导入脚本）未提交 | 观察 | — | 待其作者决定 |
 | 14 | ADR 0013（定期整理）状态为「提议」 | 待定 | — | ADR 0013 |
+| 15 | **模型与 ONNX 运行时怎么分发**：`onnxruntime.dll`（27.4MB）+ 模型（int8 22.9MB）现在只在本机临时目录里。选项：随包内置（仓库/安装包 +50MB，public 仓库不合适）／首次运行下载（要校验 + 失败提示）／只认用户指定路径 | **阻塞** | P1 定稿（P1 开发不受影响，用本机路径即可） | `embedding-spike.md` §六.5 |
+| 16 | **分词器要自己写**：`tokenizer.json`（0.4MB，BERT WordPiece + 中文按字切）在 Go 侧没有现成依赖，得照 `tokenizer.json` 的 normalizer/pre-tokenizer/WordPiece 实现，并跟 transformers.js 对拍 | 待定 | P1（嵌入质量全靠它） | `embedding-spike.md` §二、§六.5 |
 
 ## 怎么用这份清单
 

@@ -12,6 +12,7 @@
 | `agent-ui-test.mjs` | 验聊天界面与配置页：三个模式的切换、Agent 面板、配置弹窗与逐条后端检查（**不依赖 vault 内容**） | `playwright-core` |
 | `ui-chrome-test.mjs` | 验界面外壳的口径：滚动条（细 / 半透明 / 轨道透明，见 `shell.spec.md` §7，**不依赖 vault 内容**） | `playwright-core` |
 | `chunk-sizing.mjs` | 只读地量「按不同目标大小切块，vault 会长成什么样」：块数、块大小分布、截断损失、向量内存 | 无（Node 内置；也可被别的脚本 import 复用切块逻辑） |
+| `onnx-probe/`（Go） | 探「纯 Go（免 cgo）能不能加载 ONNX Runtime 跑嵌入模型」：ORT 版本、建会话/推理耗时、输出形状 | Go（`onnxruntime_purego`，离线可装）+ 本机 `onnxruntime.dll` 与模型 |
 | `agent-e2e.mjs` | 点界面上的「启动后端」，验真后端能起来（握手 + 开会话 + 按会话挂 MCP，**不发提示词、不花额度**）；**默认跳过**，要 `SSOT_E2E_AGENT=1` | `playwright-core` + 本机装了 DSH |
 
 什么时候用哪个：
@@ -26,6 +27,10 @@
 
 什么时候用哪个（补充）：改 **Agent 面板 / 配置页** → `agent-ui-test.mjs`（它特意不依赖 vault 内容，
 所以换 vault 也不会假红）。
+
+改 **嵌入（P1）** → 先跑 `onnx-probe`：它证明「纯 Go 加载 ORT」这条地基还在
+（DLL 换版本、模型损坏、路径写错都会在这儿露出来）。它**不验嵌入质量**，也不含分词——
+那两件事在 `internal/infrastructure/vembed` 与 transformers.js 对拍里。
 
 ⚠️ `ui-test.mjs` 断言的是**当前打开的那个 vault 的内容**（示例 doc 名、表里的数、任务行号）。
 vault 一换它就对不上——那是内容依赖，不是界面坏了。遇到「界面测试突然全红」，先确认 app 打开的是哪个 vault。

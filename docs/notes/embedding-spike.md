@@ -181,6 +181,43 @@ JS 只是把块在段落边界处装得更松。
 **顺带实测**（Go，`bin/ssot-cli.exe vault index -root projects/demo`）：
 全量重建（410 篇文档 + 13 张表 + 两套块）**127 秒**，产出 12,512 + 7,147 行块。
 
+### 六.5 纯 Go 跑 ONNX Runtime：可行性实测（2026-09-18，P1 的地基）
+
+P1 整条路压在一个假设上：**本机没有 gcc，所以不能 cgo 链接 ORT**，只能走 purego 加载 DLL。
+已实测（探针 `scripts/check/onnx-probe/main.go`）：
+
+```
+go run ./scripts/check/onnx-probe <onnxruntime.dll> <model_quantized.onnx>
+  ORT 版本 1.30.0，加载耗时 57ms
+  会话建好，耗时 56ms
+  推理完成，耗时 1ms，输出 1 个
+    输出 last_hidden_state：形状 [1 8 512]，共 4096 个数
+```
+
+结论：**这条路通**。依赖 `github.com/getcharzp/onnxruntime_purego v1.24.0`
+（+ `ebitengine/purego v0.9.0`、`up-zero/gotool`）已在本机模块缓存里，`GOPROXY=off` 也能装上——
+离线可复现。
+
+本机现有文件（都是 spike 时 transformers.js 下的，在临时目录，**没进仓库**）：
+
+| 文件 | 体积 | 路径 |
+|---|---|---|
+| `onnxruntime.dll`（x64，napi-v6） | **27.4 MB** | `%TEMP%\tfjs-probe\node_modules\onnxruntime-node\bin\napi-v6\win32\x64\` |
+| `model_quantized.onnx`（bge-small-zh-v1.5 int8） | 22.9 MB | `…\@huggingface\transformers\.cache\Xenova\bge-small-zh-v1.5\onnx\` |
+| `tokenizer.json`（同模型） | 0.4 MB | `…\bge-small-zh-v1.5\` |
+
+⚠️ **更正一处旧数字**：本文 §一/§六 里 ORT 写作「15.7 MB」，那是下载包的体积；
+本机真正加载的这个 DLL 是 **27.4 MB**。算分发体积时按 27.4 MB 算。
+
+**还差的两块**（P1 的活，见 `docs/OPEN.md` #15/#16）：
+1. **分词器要自己写**——`tokenizer.json` 是 BERT WordPiece（中文按字切），Go 侧没有现成依赖，
+   得照文件里的 normalizer/pre-tokenizer/WordPiece 实现，再跟 transformers.js 逐条对拍。
+2. **模型与 DLL 怎么分发**没定（现在只在本机临时目录里）。
+
+⚠️ 这个绑定**没导出「取输入名」的方法**（`getInputName` 是小写），
+所以 `input_ids` / `attention_mask` / `token_type_ids` 是写死的——BGE 系列都是 BERT 结构，
+名字固定，但换模型时要先确认。
+
 ## 七、什么时候不该用这份记录
 
 - **先问要不要向量**：双链 + 标签 + SQLite 全文检索够用，就别背这 39MB。
