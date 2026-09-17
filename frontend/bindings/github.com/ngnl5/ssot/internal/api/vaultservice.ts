@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -18,36 +18,28 @@ import * as $models from "./models.js";
  * Backlinks 算反链与问题链接。
  */
 export function Backlinks(path: string): $CancellablePromise<$models.VaultBacklinkResult> {
-    return $Call.ByID(1338444180, path).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(1338444180, path);
 }
 
 /**
  * Overview 列出当前项目的文档与数据表。
  */
 export function Overview(): $CancellablePromise<$models.VaultOverview> {
-    return $Call.ByID(586482035).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(586482035);
 }
 
 /**
  * Query 对派生索引跑一条只读查询（数据表 + 文档 front matter）。
  */
 export function Query(stmt: string, limit: number): $CancellablePromise<$models.VaultResultSet> {
-    return $Call.ByID(702410356, stmt, limit).then(($result: any) => {
-        return $$createType2($result);
-    });
+    return $Call.ByID(702410356, stmt, limit);
 }
 
 /**
  * Read 读一篇文档（含正文与双链）。
  */
 export function Read(path: string): $CancellablePromise<$models.VaultDoc> {
-    return $Call.ByID(1076609188, path).then(($result: any) => {
-        return $$createType3($result);
-    });
+    return $Call.ByID(1076609188, path);
 }
 
 /**
@@ -61,18 +53,14 @@ export function Reindex(): $CancellablePromise<void> {
  * Resolve 解析一条双链（界面点双链时用）。
  */
 export function Resolve(ref: string): $CancellablePromise<$models.VaultResolution> {
-    return $Call.ByID(2665719932, ref).then(($result: any) => {
-        return $$createType4($result);
-    });
+    return $Call.ByID(2665719932, ref);
 }
 
 /**
  * Search 在标题与正文里检索（走派生索引；索引缺失时后端会先建）。
  */
-export function Search(query: string, limit: number): $CancellablePromise<$models.VaultHit[]> {
-    return $Call.ByID(1995314892, query, limit).then(($result: any) => {
-        return $$createType6($result);
-    });
+export function Search(query: string, limit: number): $CancellablePromise<$models.VaultHit[] | null> {
+    return $Call.ByID(1995314892, query, limit);
 }
 
 /**
@@ -80,37 +68,19 @@ export function Search(query: string, limit: number): $CancellablePromise<$model
  * **只有人能发布**，这条规则在 case 层，界面绕不过去。
  */
 export function SetStatus(path: string, status: string, actor: string): $CancellablePromise<$models.VaultChange> {
-    return $Call.ByID(3909640450, path, status, actor).then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByID(3909640450, path, status, actor);
 }
 
 /**
  * TableInfos 列出数据表（含推断出来的列与行数）。
  */
-export function TableInfos(): $CancellablePromise<$models.VaultTableInfo[]> {
-    return $Call.ByID(271564161).then(($result: any) => {
-        return $$createType9($result);
-    });
+export function TableInfos(): $CancellablePromise<$models.VaultTableInfo[] | null> {
+    return $Call.ByID(271564161);
 }
 
 /**
  * Write 写正文（界面暂时用不到，但留着让界面与命令行走同一条路）。
  */
 export function Write(path: string, body: string, actor: string): $CancellablePromise<$models.VaultChange> {
-    return $Call.ByID(3248378463, path, body, actor).then(($result: any) => {
-        return $$createType7($result);
-    });
+    return $Call.ByID(3248378463, path, body, actor);
 }
-
-// Private type creation functions
-const $$createType0 = $models.VaultBacklinkResult.createFrom;
-const $$createType1 = $models.VaultOverview.createFrom;
-const $$createType2 = $models.VaultResultSet.createFrom;
-const $$createType3 = $models.VaultDoc.createFrom;
-const $$createType4 = $models.VaultResolution.createFrom;
-const $$createType5 = $models.VaultHit.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = $models.VaultChange.createFrom;
-const $$createType8 = $models.VaultTableInfo.createFrom;
-const $$createType9 = $Create.Array($$createType8);

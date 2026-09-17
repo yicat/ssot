@@ -1,0 +1,226 @@
+/**
+ * AgentPane 的交互逻辑：起后端、发话、收流式更新、回答权限提示。
+ *
+ * 所有调用都走 bindings（也就是走 Go 侧的应用层）——界面不直接跟 ACP 后端说话。
+ * 流式更新是 Go 那边推过来的事件（`agent:update` / `agent:turn` / `agent:permission`）。
+ */
+import { Events } from "@wailsio/runtime";
+import { useCallback, useEffect, useRef } from "react";
+
+import * as AgentService from "../../../../bindings/github.com/ngnl5/ssot/internal/api/agentservice";
+import type { AgentStatus } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
+import { useAgentStore } from "./store";
+
+/** 与 Go 侧 api/agent.go 里的事件名一致。 */
+const EVENT_UPDATE = "agent:update";
+const EVENT_TURN = "agent:turn";
+const EVENT_PERMISSION = "agent:permission";
+
+type UpdatePayload = {
+  kind: string;
+  text: string;
+  tool?: { id: string; title: string; status: string; kind: string };
+};
+
+type TurnPayload = { stopReason: string; error: string };
+
+type PermissionPayload = {
+  id: string;
+  tool: string;
+  options: { optionId: string; name: string; kind: string }[];
+};
+
+export function useAgent() {
+  const store = useAgentStore();
+  const { set, push } = store;
+
+  /** 工具调用按 callId 归一行：ACP 会先发 tool_call、结束再发 tool_call_update。 */
+  const toolRows = useRef<Map<string, number>>(new Map());
+
+  const applyStatus = useCallback(
+    (st: AgentStatus) => {
+      set({
+        running: st.running,
+        busy: st.busy,
+        agent: st.agent,
+        version: st.version,
+        sessionId: st.sessionId,
+        vault: st.vault,
+        model: st.model,
+        models: st.models ?? [],
+      });
+    },
+    [set],
+  );
+
+  /** 刷新状态（打开面板、起后端之后调）。 */
+  const refresh = useCallback(async () => {
+    try {
+      applyStatus(await AgentService.Status());
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [applyStatus, push]);
+
+  /** 起后端并开会话。 */
+  const start = useCallback(async () => {
+    set({ busyMessage: "正在起后端…" });
+    try {
+      applyStatus(await AgentService.Start());
+      set({ busyMessage: null });
+      push({ kind: "notice", text: "后端就绪，可以开始说话了。", isError: false });
+    } catch (err) {
+      set({ busyMessage: null });
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [applyStatus, push, set]);
+
+  /** 发一句。 */
+  const send = useCallback(async () => {
+    const text = store.draft.trim();
+    if (!text) return;
+    push({ kind: "user", text });
+    set({ draft: "", busy: true, busyMessage: "正在跑…" });
+    try {
+      await AgentService.Send(text);
+    } catch (err) {
+      // 发不出去（没起后端、上一轮还在跑）：如实说出来，别把输入吞掉。
+      set({ busy: false, busyMessage: null });
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [push, set, store.draft]);
+
+  /** 停当前这一轮。 */
+  const cancel = useCallback(async () => {
+    try {
+      await AgentService.Cancel();
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [push]);
+
+  /** 关掉后端。 */
+  const stop = useCallback(async () => {
+    try {
+      await AgentService.Stop();
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+    await refresh();
+  }, [push, refresh]);
+
+  /** 换模型（会话级）。 */
+  const setModel = useCallback(
+    async (value: string) => {
+      try {
+        applyStatus(await AgentService.SetModel(value));
+      } catch (err) {
+        push({ kind: "notice", text: String(err), isError: true });
+      }
+    },
+    [applyStatus, push],
+  );
+
+  /** 列历史会话。 */
+  const loadSessions = useCallback(async () => {
+    try {
+      const list = await AgentService.Sessions();
+      set({ sessions: list ?? [], sessionsOpen: true });
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [push, set]);
+
+  /** 恢复历史会话。 */
+  const resume = useCallback(
+    async (id: string) => {
+      try {
+        applyStatus(await AgentService.Resume(id));
+        set({ sessionsOpen: false });
+        push({ kind: "notice", text: "已切到那个会话（之前的对话内容在后端那边，界面这一版不重放）。", isError: false });
+      } catch (err) {
+        push({ kind: "notice", text: String(err), isError: true });
+      }
+    },
+    [applyStatus, push, set],
+  );
+
+  /** 回答权限提示：**这一步是人点的**（批准必须是人）。 */
+  const answer = useCallback(
+    async (optionId: string) => {
+      const cur = useAgentStore.getState().permission;
+      if (!cur) return;
+      set({ permission: null });
+      try {
+        await AgentService.AnswerPermission(cur.id, optionId);
+      } catch (err) {
+        push({ kind: "notice", text: String(err), isError: true });
+      }
+    },
+    [push, set],
+  );
+
+  // 订阅后端推来的事件。
+  useEffect(() => {
+    const offUpdate = Events.On(EVENT_UPDATE, (e) => {
+      const u = e.data as UpdatePayload;
+      if (!u) return;
+      if (u.kind === "agent_message_chunk" || u.kind === "agent_message") {
+        push({ kind: "assistant", text: u.text });
+        return;
+      }
+      if (u.kind === "agent_thought_chunk") {
+        push({ kind: "thought", text: u.text });
+        return;
+      }
+      if ((u.kind === "tool_call" || u.kind === "tool_call_update") && u.tool) {
+        const map = toolRows.current;
+        const existing = map.get(u.tool.id);
+        if (existing === undefined) {
+          map.set(u.tool.id, useAgentStore.getState().items.length);
+          push({ kind: "tool", callId: u.tool.id, title: u.tool.title || "工具调用", status: u.tool.status || "in_progress" });
+        } else {
+          // 同一次调用结束了：就地更新那一行的状态。
+          useAgentStore.setState((s) => ({
+            items: s.items.map((it, i) =>
+              i === existing && it.kind === "tool" ? { ...it, status: u.tool!.status || it.status } : it,
+            ),
+          }));
+        }
+      }
+    });
+
+    const offTurn = Events.On(EVENT_TURN, (e) => {
+      const t = e.data as TurnPayload;
+      useAgentStore.getState().set({ busy: false, busyMessage: null });
+      if (t?.error) {
+        useAgentStore.getState().push({ kind: "notice", text: t.error, isError: true });
+      }
+    });
+
+    const offPermission = Events.On(EVENT_PERMISSION, (e) => {
+      const p = e.data as PermissionPayload;
+      if (!p) return;
+      useAgentStore.getState().set({ permission: { id: p.id, tool: p.tool || "工具调用", options: p.options ?? [] } });
+    });
+
+    return () => {
+      offUpdate();
+      offTurn();
+      offPermission();
+    };
+  }, [push]);
+
+  return {
+    ...store,
+    refresh,
+    start,
+    send,
+    cancel,
+    stop,
+    setModel,
+    loadSessions,
+    resume,
+    answer,
+  };
+}

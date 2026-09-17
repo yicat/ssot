@@ -30,9 +30,17 @@ export function useVaultBrowser() {
   const [locate, setLocate] = useState<{ path: string; kind: "heading" | "block"; value: string } | null>(null);
 
   const openDoc = useCallback(
-    async (path: string, notice?: string) => {
+    async (path: string, notice?: string, switchMode = true) => {
       const [doc, links] = await Promise.all([Read(path), Backlinks(path)]);
-      useVaultStore.getState().set({ selected: path, doc, links, notice: notice ?? null, noticeIsError: false });
+      // switchMode=false 只给「开机自动打开第一篇」用：那时用户可能已经切到 Agent 了，
+      // 再把 mode 掰回 doc 会把他的切换冲掉（踩过：点 Agent 没反应就是这个竞态）。
+      useVaultStore
+        .getState()
+        .set({
+          selected: path, doc, links,
+          ...(switchMode ? { mode: "doc" as const } : {}),
+          notice: notice ?? null, noticeIsError: false,
+        });
     },
     [],
   );
@@ -64,7 +72,8 @@ export function useVaultBrowser() {
       set({ tableData });
       const first = overview.items?.[0]?.path;
       if (first) {
-        await openDoc(first);
+        // 不切模式：用户可能已经切到别的模式了
+        await openDoc(first, undefined, false);
       } else {
         set({ selected: null, doc: null, links: null });
       }
@@ -128,7 +137,7 @@ export function useVaultBrowser() {
 
   /** 在主体区打开一张数据表（左栏点表就走这里）。 */
   const openTable = useCallback((file: string) => {
-    useVaultStore.getState().set({ selectedTable: file, searchOpen: false, notice: null, noticeIsError: false });
+    useVaultStore.getState().set({ selectedTable: file, mode: "table", searchOpen: false, notice: null, noticeIsError: false });
   }, []);
 
   /** 点左栏的文档。 */
@@ -350,6 +359,8 @@ export function isDraft(doc: { status: string } | null | undefined): boolean {
 }
 
 export type { VaultDoc };
+
+
 
 
 

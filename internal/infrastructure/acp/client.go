@@ -474,6 +474,29 @@ func (c *Client) CloseSession(ctx context.Context, sessionID string) error {
 	return err
 }
 
+// ResumeSession 恢复一个已持久化的会话。
+//
+// 真后端的返回是 **`{configOptions}`——不回 sessionId**（对着 dsh-acp 的 resumeSession 看过），
+// 所以 ID 用调用方给的那个填回去；cwd 必须与当初开会话时一致，否则后端会拒。
+func (c *Client) ResumeSession(ctx context.Context, sessionID, cwd string, mcp []MCPServer) (Session, error) {
+	if mcp == nil {
+		mcp = []MCPServer{}
+	}
+	raw, err := c.call(ctx, "session/resume", map[string]any{
+		"sessionId": sessionID, "cwd": cwd, "mcpServers": mcp,
+	}, 60*time.Second)
+	if err != nil {
+		return Session{}, err
+	}
+	var res struct {
+		ConfigOptions []ConfigOption `json:"configOptions"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return Session{}, err
+	}
+	return Session{ID: sessionID, ConfigOptions: res.ConfigOptions}, nil
+}
+
 // SetConfigOption 改会话级配置（例如模型）。value 用 Options 里给的原值。
 func (c *Client) SetConfigOption(ctx context.Context, sessionID, optionID string, value any) ([]ConfigOption, error) {
 	raw, err := c.call(ctx, "session/set_config_option", map[string]any{

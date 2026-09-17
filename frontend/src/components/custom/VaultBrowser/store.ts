@@ -44,6 +44,15 @@ export type VaultState = {
   selected: string | null;
   /** 当前在看的**数据表**（相对路径）；非空时主体区显示表而不是文档。 */
   selectedTable: string | null;
+  /**
+   * 主体区显示哪个模式：`doc` / `table` / `agent`。
+   *
+   * 显式存一个 mode（而不是靠 selectedTable 推）：切到 Agent 之后再切回来，
+   * 要回到原来那篇文档——靠推导就会丢掉「刚才在看什么」。
+   */
+  mode: "doc" | "table" | "agent";
+  /** 配置弹窗是否打开。 */
+  settingsOpen: boolean;
   /** 右栏：当前文档。 */
   doc: VaultDoc | null;
   /** 右栏：当前文档的反链与问题链接。 */
@@ -69,6 +78,8 @@ export const useVaultStore = create<VaultState>((set) => ({
   hits: null,
   selected: null,
   selectedTable: null,
+  mode: "doc",
+  settingsOpen: false,
   doc: null,
   links: null,
   notice: null,

@@ -8,7 +8,8 @@
 | `ui-dump.mjs` | 把窗口里**渲染出来的东西读成文本**（WebView2 远程调试端口 + CDP） | **零依赖**（Node 内置） |
 | `ui-test.mjs` | **界面测试**：连上真实窗口，填输入框、点按钮、断言文本 | `playwright-core`（`scripts/package.json`） |
 | `measure-group.mjs` | 量分组标题几何：标签多宽、线从哪起、到第一条目多少 px（把「不好看」变成数字） | `playwright-core` |
-| `mcp-smoke.mjs` | 把 MCP 服务端当「DSH 会怎么用它」那样跑一遍：协议、工具清单、读写、门、git 留痕 | 无（Node 内置 + 编译好的 `bin\ssot.exe`） |
+| `mcp-smoke.mjs` | 把 MCP 服务端当「DSH 会怎么用它」那样跑一遍：协议、工具清单、读写、门、git 留痕 | 无（Node 内置 + 编译好的 `bin\ssot-cli.exe`） |
+| `agent-ui-test.mjs` | 验聊天界面与配置页：三个模式的切换、Agent 面板、配置弹窗与逐条后端检查（**不依赖 vault 内容**） | `playwright-core` |
 
 什么时候用哪个：
 
@@ -19,6 +20,9 @@
   → `mcp-smoke.mjs`（它用临时 vault，不会往真 vault 里塞提交）。
 - **配色/间距这类「好不好看」的问题** → `measure-group.mjs`（或 `ui-test.mjs` 里的计算样式断言）：
   我读不了截图，量出来的数字就是眼睛。⚠️ 它**只报数不断言**，别拿它当验收；断言写进 `ui-test.mjs`。
+
+什么时候用哪个（补充）：改 **Agent 面板 / 配置页** → `agent-ui-test.mjs`（它特意不依赖 vault 内容，
+所以换 vault 也不会假红）。
 
 ⚠️ `ui-test.mjs` 断言的是**当前打开的那个 vault 的内容**（示例 doc 名、表里的数、任务行号）。
 vault 一换它就对不上——那是内容依赖，不是界面坏了。遇到「界面测试突然全红」，先确认 app 打开的是哪个 vault。
@@ -52,3 +56,4 @@ node scripts/check/ui-test.mjs                          # 需要先 cd scripts &
    （`search is not a function` 就是这么抓出来的，比读日志快得多）。
 
 每个脚本的详细边界写在各自文件头部（做什么 / 适用范围 / 什么时候不该用）。
+

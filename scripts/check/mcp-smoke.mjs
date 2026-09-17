@@ -25,7 +25,8 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, "..", "..");
-const bin = join(repo, "bin", process.platform === "win32" ? "ssot.exe" : "ssot");
+// ⚠️ 是 **ssot-cli.exe**：`bin\ssot.exe` 是 Wails 那个 GUI 二进制，两者不能同名（会互相覆盖）。
+const bin = join(repo, "bin", process.platform === "win32" ? "ssot-cli.exe" : "ssot-cli");
 
 let passed = 0;
 const failures = [];
@@ -251,3 +252,4 @@ async function main() {
 }
 
 await main();
+

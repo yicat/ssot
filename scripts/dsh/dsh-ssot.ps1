@@ -60,7 +60,7 @@ foreach ($p in @($dshExe, $nodeEntry, $dshBin)) {
 
 # ssot 二进制：MCP 是**长驻进程**，DSH 起它、一直用它，中间还会重连，
 # 所以必须是编译好的可执行文件（`go run` 那种一次性进程会立刻退出）。
-$bin = Join-Path $repo "bin\ssot.exe"
+$bin = Join-Path $repo "bin\ssot-cli.exe"
 $srcNewer = Get-ChildItem (Join-Path $repo "cmd"), (Join-Path $repo "internal") -Recurse -Include *.go -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $needBuild = (-not (Test-Path $bin)) -or ($srcNewer -and $srcNewer.LastWriteTime -gt (Get-Item $bin).LastWriteTime)
@@ -104,3 +104,4 @@ Write-Host ""
 
 & $dshExe @args
 exit $LASTEXITCODE
+

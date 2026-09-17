@@ -37,7 +37,16 @@ tasks:
   dev:
     summary: Runs the application in development mode
     cmds:
+      # 先编 CLI：App 起 MCP 服务器时用的是它（bin\ssot-cli.exe），
+      # 不先编就会用上一次的旧二进制——那种「改了没生效」很难查。
+      # ⚠️ 注意两个二进制**不能同名**：bin\ssot.exe 是 Wails 的 GUI。
+      - go build -o bin/ssot-cli{{exeExt}} ./cmd/ssot
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  build:cli:
+    summary: Builds the CLI (same binary is the MCP server the app spawns)
+    cmds:
+      - go build -o bin/ssot-cli{{exeExt}} ./cmd/ssot
 
   setup:docker:
     summary: Builds Docker image for cross-compilation (~800MB download)

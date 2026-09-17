@@ -16,8 +16,10 @@ import type {
   VaultTableInfo,
 } from "../../../../bindings/github.com/ngnl5/ssot/internal/api/models";
 import { renderMarkdown } from "../../../lib/markdown";
+import { AgentPane } from "../AgentPane";
 import { DocTree } from "../DocTree";
 import { SearchModal } from "../SearchModal";
+import { SettingsModal } from "../SettingsModal";
 import { makeResolver, statusStyle, useVaultBrowser } from "./useVaultBrowser";
 
 export function VaultBrowser() {
@@ -34,6 +36,8 @@ export function VaultBrowser() {
     hits,
     selected,
     selectedTable,
+    mode,
+    settingsOpen,
     doc,
     links,
     notice,
@@ -77,6 +81,25 @@ export function VaultBrowser() {
         <span className="shrink-0">
           {items.length} 篇 · {tableInfos.length} 表
         </span>
+
+        {/* 模式切换：文档 / 数据表 / Agent。点左栏的文档或表也会自动切过去。 */}
+        <div className="ml-2 flex shrink-0 items-center rounded border border-border p-0.5">
+          {[
+            { id: "doc" as const, label: "文档" },
+            { id: "table" as const, label: "数据表" },
+            { id: "agent" as const, label: "Agent" },
+          ].map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => set({ mode: m.id })}
+              aria-pressed={mode === m.id}
+              className={"rounded px-2 py-0.5 " + (mode === m.id ? "bg-secondary text-foreground" : "hover:bg-secondary/60")}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={openSearch}
@@ -125,9 +148,11 @@ export function VaultBrowser() {
           <TableList tableInfos={tableInfos} tables={tables} selected={selectedTable} onOpen={openTable} />
         </aside>
 
-        {/* 主体：数据表 或 文档 */}
+        {/* 主体：三个模式——文档 / 数据表 / Agent（文档是主角，切过去才占屏） */}
         <section className="min-w-0 flex-1 overflow-auto">
-          {selectedTable ? (
+          {mode === "agent" ? (
+            <AgentPane onOpenSettings={() => set({ settingsOpen: true })} />
+          ) : mode === "table" && selectedTable ? (
             <TablePane file={selectedTable} tableInfos={tableInfos} tableData={tableData} />
           ) : doc ? (
             <DocPane
@@ -151,6 +176,8 @@ export function VaultBrowser() {
           )}
         </section>
       </div>
+
+      <SettingsModal open={settingsOpen} onClose={() => set({ settingsOpen: false })} />
 
       <SearchModal
         open={searchOpen}
@@ -472,6 +499,8 @@ function SidePanel({ icon, title, children }: { icon: ReactNode; title: string; 
 function Empty({ children }: { children: ReactNode }) {
   return <div className="px-1 py-1 text-xs text-muted-foreground">{children}</div>;
 }
+
+
 
 
 

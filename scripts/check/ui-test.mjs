@@ -59,6 +59,9 @@ async function main() {
 
   await page.reload();
   await page.waitForSelector("aside", { timeout: 15000 });
+  // ⚠️ 光等 aside 不够：树的数据是异步拉的，reload 之后 aside 很快就有了但**里面还是空的**，
+  // 于是所有基于树文本的断言都会拿到空字符串、集体报红（踩过，看着像「功能全坏了」）。
+  await page.waitForSelector("aside .group-title", { timeout: 20000 });
 
   // ── 文件树（层级、排序、标记）─────────────────────────────
   const aside = page.locator("aside").first();

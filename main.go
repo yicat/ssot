@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -41,15 +42,27 @@ func main() {
 	session := compose.NewSession(*projectsRoot, *projectDir)
 	defer func() { _ = session.Close() }()
 
+	// 聊天服务：起后端、开会话、推流式更新。设置读不动也要能起界面
+	// （配置页正是用来告诉人「哪里不对」的），所以这里错了就把错误带在身上，不 panic。
+	agentSvc, agentErr := api.NewAgentService(session)
+	if agentErr != nil {
+		fmt.Fprintln(os.Stderr, "聊天服务不可用："+agentErr.Error())
+	}
+
+	services := []application.Service{
+		application.NewService(api.NewProjectService(session)),
+		application.NewService(api.NewVaultService(session)),
+	}
+	if agentSvc != nil {
+		services = append(services, application.NewService(agentSvc))
+	}
+
 	app := application.New(application.Options{
 		Name:        "ssot",
 		Description: "单一事实源工具",
 		// 服务按设计逐个加回来——分层不变：api → application → domain ← infrastructure。
 		// 界面与 CLI 走同一套用例层，所以「谁能发布」这类规则只有一份实现。
-		Services: []application.Service{
-			application.NewService(api.NewProjectService(session)),
-			application.NewService(api.NewVaultService(session)),
-		},
+		Services: services,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},

@@ -21,9 +21,16 @@
 
 ## 构建与测试
 
-- 开发运行：`wails3 task dev`
+- 开发运行：`wails3 task dev`（会**先编 CLI**：App 起 MCP 服务器用的就是它）
+- CLI 单独：`wails3 task build:cli` → `bin/ssot-cli.exe`
+  ⚠️ **两个二进制不能同名**：`bin/ssot.exe` 是 Wails 的 GUI（`main.go`），
+  `bin/ssot-cli.exe` 是 CLI（`cmd/ssot`，同时也是 MCP 服务端）。写成同一个路径会互相覆盖——
+  症状是「界面起不来」或「MCP 工具调的是一份老代码」，都很难查（踩过）。
 - 构建：`wails3 task build`；服务模式：`wails3 task build:server` / `wails3 task run:server`
 - 测试：`wails3 task test`（= `go test ./...` + 前端 `npm run test`（vitest））
+- 界面测试（要应用带 `SSOT_WEBVIEW_DEBUG_PORT=9222` 跑着）：
+  - `node scripts/check/ui-test.mjs`：文档渲染、文件树、检索——**内容依赖当前打开的 vault**
+  - `node scripts/check/agent-ui-test.mjs`：聊天界面与配置页——**不依赖 vault 内容**
 - **提交前全量检查**：`wails3 task check`（= `go vet ./...` + 全部测试 + 前端构建）
 - 前端单独：`cd frontend && npm run dev` / `npm run build`
 
