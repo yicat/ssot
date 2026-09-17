@@ -40,3 +40,14 @@ CLAUDE.local.md
 # 编辑器与系统
 .DS_Store
 .idea/
+
+# ── 产物与调试数据：**一律不进仓库**（产物可重建、调试数据是本机的）
+# 这条是给「不小心 git add -A」兜底的：有它就不会把产物和调试输出混进历史。
+# ⚠️ 别在这块里写行尾注释——.gitignore **不认行尾注释**，整行都会变成模式（踩过）。
+*.syso
+*.log
+*.out
+*.test
+coverage.*
+build/bin/
+.tmp*/
