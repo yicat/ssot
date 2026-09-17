@@ -372,6 +372,10 @@ func vaultIndex(svc *vaultapp.Service) error {
 		return err
 	}
 	fmt.Printf("索引已重建：%s\n  文档 %d 篇，数据表 %d 张\n", svc.IndexPath(), len(items), len(tables))
+	if st, err := svc.ChunkStat(); err == nil {
+		fmt.Printf("  派生块：嵌入块 %d 个（512 口径），抽取块 %d 个（2000 口径），待处理文档 %d 篇\n",
+			st.Chunks, st.ExtractChunks, st.Stale)
+	}
 	for _, t := range tables {
 		fmt.Printf("  %-18s ← %s（%s，%d 行；列：%s）\n",
 			t.Name, t.File, t.Format, t.Rows, strings.Join(t.Columns, "、"))

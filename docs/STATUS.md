@@ -3,13 +3,14 @@
 > 这份文件的**唯一职责**是让「进度」不再靠翻对话。规范在 `docs/specs/`，方案在 `docs/plans/`，
 > 决策在 `docs/adr/`，问题在 `docs/OPEN.md`。**每次收尾（见 ADR 0013）都更新这里。**
 
-**上次整理：2026-09-17（建立治理体系：13 条 ADR + STATUS/OPEN/ARCHITECTURE；派生层 P0 起步）**
+**上次整理：2026-09-18（派生层 P0 完成：切块 + 索引落表；切块口径对拍）**
 
 ## 整理台账
 
 | 日期 | 范围 | 结论 | 关联 |
 |---|---|---|---|
 | 2026-09-17 | 建立治理体系；补录已发生的决策 | 决策/进度/问题/反例从「散在各文件边角」改为各自有家 | ADR 0001–0013 |
+| 2026-09-18 | 派生层 P0 收尾 | 切块进索引（`chunk`/`extract_chunk`/`sync` 三表 + 读取口）；发现 spike 的 JS 切块脚本与 Go 实现差 5%，已对拍定位并记账 | `embedding-spike.md` §六.4、plan §3 |
 
 ## 现在在哪
 
@@ -19,18 +20,20 @@
 - Agent 接入：ACP 后端（`ssot-agent` profile）+ 会话级 MCP 挂载 + 四个角色 skill
 - 派生层**方案定稿**：`docs/specs/derived.spec.md` + `docs/plans/derived-layer.md`
 - 实测：嵌入选型（B）、召回基线、抽取成本（关推理 + 收工具集）
-- **P0 第一步**：`internal/domain/vault/chunk.go`（切块 + 行号区间 + token 估算）+ 6 条测试
+- **P0 完成**：切块（`domain/vault/chunk.go`，512/2000 两套 + 行号区间）→
+  索引三表（`chunk` / `extract_chunk` / `sync`，`Rebuild` 时按篇一个事务写入）
+  + 读取口（`ChunkStat` / `ChunksOf` / `ExtractChunksOf` / `SyncOf` / `StaleDocs`）
+  + `ssot vault index` 打印块统计；demo 上 12,512 / 7,147 块，全量重建 127 秒
 
 **进行中**
-- **P0 第二步**：`chunk` / `sync` 表进 `vaultindex` 并在 `Rebuild` 时填充（含增量用 hash）
+- 无（P1 未开工）
 
 **下一步（按 plan 的顺序）**
-1. P0 收尾（上面那条）
-2. **P1**：`internal/infrastructure/vembed` 嵌入 + `embedding` 表 + 向量检索（与 transformers.js 逐位对拍）
-3. **P2**：FTS + 向量混合检索 ← **不花额度，却是分水岭**（纯向量在实体名式查询上 R@1 只有 21.6%）
-4. P3：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项
-5. P4：图检索并入（local/global/hybrid/mix）
-6. P5：增量与索引状态接到界面
+1. **P1**：`internal/infrastructure/vembed` 嵌入 + `embedding` 表 + 向量检索（与 transformers.js 逐位对拍）
+2. **P2**：FTS + 向量混合检索 ← **不花额度，却是分水岭**（纯向量在实体名式查询上 R@1 只有 21.6%）
+3. P3：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项
+4. P4：图检索并入（local/global/hybrid/mix）
+5. P5：增量与索引状态接到界面
 
 ## 卡在哪
 
@@ -41,7 +44,11 @@
 ## 最近一次验证（都是跑出来的）
 
 ```
-go test ./internal/...                 ok（含 chunk 6 条、appconfig 6 条、acp 6 条、mcp、vaultapp）
+go vet ./...                           clean
+go test ./internal/... ./cmd/...        ok（含 chunk 6 条、vaultindex 新增 4 条（块/行号/覆盖/stale）、appconfig、acp、mcp、vaultapp）
+前端 npm run build                      ✓ built（492ms）
+bin/ssot-cli.exe vault index -root projects/demo
+                                        410 篇 / 13 表 / 12,512 嵌入块 / 7,147 抽取块，127 秒
 wails3 task check                      exit 0
 scripts/check/mcp-smoke.mjs            31/31
 scripts/check/agent-ui-test.mjs        22/22

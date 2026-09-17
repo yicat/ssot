@@ -67,6 +67,14 @@ func (s *Service) IndexPath() string { return s.index.Path() }
 // 索引是**全派生**的：删了能重建，也可以随时重建——所以不担心它过期。
 func (s *Service) Reindex() error { return s.index.Rebuild() }
 
+// ChunkStat 是派生层块的统计（文档、嵌入块、抽取块、stale 数）。
+func (s *Service) ChunkStat() (vault.ChunkStat, error) {
+	if err := s.ensureIndex(); err != nil {
+		return vault.ChunkStat{}, err
+	}
+	return s.index.ChunkStat()
+}
+
 // ensureIndex 索引缺失时先建起来。
 //
 // 「搜不到东西」不该是因为忘了建索引——那种误导比慢几十毫秒严重得多。

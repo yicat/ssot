@@ -11,8 +11,10 @@
 package vaultindex
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -20,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 	_ "modernc.org/sqlite" // 纯 Go 驱动：本机没有 gcc，用不了 cgo 的 mattn/go-sqlite3
@@ -55,6 +58,22 @@ CREATE TABLE links(
 );
 CREATE TABLE tables_meta(name TEXT PRIMARY KEY, file TEXT, format TEXT, rows INTEGER, columns TEXT);
 CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);
+-- 派生层的块（见 docs/plans/derived-layer.md §3）：
+--   chunk         嵌入单位（默认 512 token）
+--   extract_chunk 抽取单位（默认 2000 token）
+--   sync          每篇文档的同步状态：「不静默」的落地
+CREATE TABLE chunk(
+  id INTEGER PRIMARY KEY, doc TEXT, ord INTEGER, from_line INTEGER, to_line INTEGER,
+  text TEXT, status TEXT, hash TEXT
+);
+CREATE INDEX chunk_doc ON chunk(doc, ord);
+CREATE TABLE extract_chunk(
+  id INTEGER PRIMARY KEY, doc TEXT, ord INTEGER, from_line INTEGER, to_line INTEGER, text TEXT
+);
+CREATE INDEX extract_chunk_doc ON extract_chunk(doc, ord);
+CREATE TABLE sync(
+  doc TEXT PRIMARY KEY, hash TEXT, mtime INTEGER, built_at INTEGER, stale INTEGER, reason TEXT
+);
 `
 
 // Rebuild 从文件重建整份索引（先删后建，保证不会留下上一次的残渣）。
@@ -97,6 +116,11 @@ func (idx *Index) Rebuild() error {
 		}
 	}
 
+	chunks, extracts, err := idx.writeChunks(db, docs)
+	if err != nil {
+		return err
+	}
+
 	used := map[string]bool{}
 	for _, file := range idx.tableFiles() {
 		if err := idx.loadTable(db, file, used); err != nil {
@@ -105,8 +129,92 @@ func (idx *Index) Rebuild() error {
 		}
 	}
 
-	_, err = db.Exec(`INSERT INTO meta(k,v) VALUES('doc_count',?)`, strconv.Itoa(len(docs)))
-	return err
+	for k, v := range map[string]string{
+		"doc_count":           strconv.Itoa(len(docs)),
+		"chunk_count":         strconv.Itoa(chunks),
+		"extract_chunk_count": strconv.Itoa(extracts),
+	} {
+		if _, err := db.Exec(`INSERT INTO meta(k,v) VALUES(?,?)`, k, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ChunkStatusFresh / ChunkStatusStale 是 chunk.status 的两个取值。
+//
+// 口径（plans/derived-layer.md §3）：**派生条目的新鲜度**，不是文档的 draft/published。
+// 重建出来的块一律 fresh；P1 嵌入失败或后续增量里文件变了，对应行标 stale
+// 并把原因写进 sync.reason——这就是「不静默」。
+const (
+	ChunkStatusFresh = "fresh"
+	ChunkStatusStale = "stale"
+)
+
+// writeChunks 把每篇文档切成两套块写进索引，并写 sync 行。
+//
+// 返回（嵌入块数, 抽取块数, error)。
+// 一篇文档一个事务，写完才提交：切块或写库中途失败时，宁可这篇的块全没有，
+// 也不留半篇的块——半篇的块会静默地污染检索结果。
+func (idx *Index) writeChunks(db *sql.DB, docs []vault.Doc) (int, int, error) {
+	targets := vault.DefaultChunkTargets()
+	now := time.Now().Unix()
+	total, totalExtract := 0, 0
+
+	for _, d := range docs {
+		tx, err := db.Begin()
+		if err != nil {
+			return total, totalExtract, err
+		}
+		chunks := vault.ChunkBody(d.Body, d.BodyOffset, targets.Embed)
+		extracts := vault.ChunkBody(d.Body, d.BodyOffset, targets.Extract)
+		sum := sha256.Sum256([]byte(d.Body))
+
+		n := 0
+		for _, c := range chunks {
+			h := sha256.Sum256([]byte(c.Text))
+			if _, err := tx.Exec(
+				`INSERT INTO chunk(doc,ord,from_line,to_line,text,status,hash) VALUES(?,?,?,?,?,?,?)`,
+				d.Path, c.Ord, c.FromLine, c.ToLine, c.Text, ChunkStatusFresh, hex.EncodeToString(h[:]),
+			); err != nil {
+				tx.Rollback()
+				return total, totalExtract, err
+			}
+			n++
+		}
+		for _, c := range extracts {
+			if _, err := tx.Exec(
+				`INSERT INTO extract_chunk(doc,ord,from_line,to_line,text) VALUES(?,?,?,?,?)`,
+				d.Path, c.Ord, c.FromLine, c.ToLine, c.Text,
+			); err != nil {
+				tx.Rollback()
+				return total, totalExtract, err
+			}
+		}
+		// 刚重建出来就是最新的：stale=0。
+		if _, err := tx.Exec(
+			`INSERT INTO sync(doc,hash,mtime,built_at,stale,reason) VALUES(?,?,?,?,0,'')`,
+			d.Path, hex.EncodeToString(sum[:]), idx.mtime(d.Path), now,
+		); err != nil {
+			tx.Rollback()
+			return total, totalExtract, err
+		}
+		if err := tx.Commit(); err != nil {
+			return total, totalExtract, err
+		}
+		total += n
+		totalExtract += len(extracts)
+	}
+	return total, totalExtract, nil
+}
+
+// mtime 返回文件修改时间（Unix 秒）；取不到就返回 0（不是错误：同步状态里 0 表示未知）。
+func (idx *Index) mtime(rel string) int64 {
+	fi, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(rel)))
+	if err != nil {
+		return 0
+	}
+	return fi.ModTime().Unix()
 }
 
 func (idx *Index) tableFiles() []string {
@@ -513,6 +621,138 @@ func cellToString(v any) string {
 	default:
 		return fmt.Sprintf("%v", t)
 	}
+}
+
+// ChunkStat 读块统计。
+func (idx *Index) ChunkStat() (vault.ChunkStat, error) {
+	db, err := idx.open()
+	if err != nil {
+		return vault.ChunkStat{}, err
+	}
+	defer db.Close()
+	var st vault.ChunkStat
+	for _, q := range []struct {
+		sql string
+		dst *int
+	}{
+		{`SELECT COUNT(*) FROM sync`, &st.Docs},
+		{`SELECT COUNT(*) FROM chunk`, &st.Chunks},
+		{`SELECT COUNT(*) FROM extract_chunk`, &st.ExtractChunks},
+		{`SELECT COUNT(*) FROM sync WHERE stale <> 0`, &st.Stale},
+	} {
+		if err := db.QueryRow(q.sql).Scan(q.dst); err != nil {
+			return vault.ChunkStat{}, err
+		}
+	}
+	return st, nil
+}
+
+// ChunksOf 返回一篇文档的嵌入块（按 ord 升序）。文档没有块时返回空切片。
+func (idx *Index) ChunksOf(doc string) ([]vault.Chunk, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(
+		`SELECT ord, from_line, to_line, text FROM chunk WHERE doc = ? ORDER BY ord`, doc)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []vault.Chunk{}
+	for rows.Next() {
+		var c vault.Chunk
+		if err := rows.Scan(&c.Ord, &c.FromLine, &c.ToLine, &c.Text); err != nil {
+			return nil, err
+		}
+		c.Tokens = vault.EstimateTokens(c.Text)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ExtractChunksOf 返回一篇文档的抽取块（按 ord 升序）。抽取产物靠它定位。
+func (idx *Index) ExtractChunksOf(doc string) ([]vault.Chunk, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(
+		`SELECT ord, from_line, to_line, text FROM extract_chunk WHERE doc = ? ORDER BY ord`, doc)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []vault.Chunk{}
+	for rows.Next() {
+		var c vault.Chunk
+		if err := rows.Scan(&c.Ord, &c.FromLine, &c.ToLine, &c.Text); err != nil {
+			return nil, err
+		}
+		c.Tokens = vault.EstimateTokens(c.Text)
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// SyncInfo 是一篇文档的同步状态。
+type SyncInfo struct {
+	Doc     string
+	Hash    string // 正文（去掉 front matter）的 sha256
+	Mtime   int64  // 文件修改时间（Unix 秒，0 表示未知）
+	BuiltAt int64  // 进索引的时间（Unix 秒）
+	Stale   bool
+	Reason  string // stale 的原因（人话）：失败、半成品、嵌入缺失都写这儿
+}
+
+// SyncOf 读一篇文档的同步状态；没有就返回 false（例如索引比文件旧）。
+func (idx *Index) SyncOf(doc string) (SyncInfo, bool, error) {
+	db, err := idx.open()
+	if err != nil {
+		return SyncInfo{}, false, err
+	}
+	defer db.Close()
+	var si SyncInfo
+	var stale int
+	err = db.QueryRow(
+		`SELECT doc, hash, mtime, built_at, stale, COALESCE(reason,'') FROM sync WHERE doc = ?`, doc,
+	).Scan(&si.Doc, &si.Hash, &si.Mtime, &si.BuiltAt, &stale, &si.Reason)
+	if err == sql.ErrNoRows {
+		return SyncInfo{}, false, nil
+	}
+	if err != nil {
+		return SyncInfo{}, false, err
+	}
+	si.Stale = stale != 0
+	return si, true, nil
+}
+
+// StaleDocs 返回标了 stale 的文档与原因（按路径）。索引状态要能一眼看见。
+func (idx *Index) StaleDocs() ([]SyncInfo, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(
+		`SELECT doc, hash, mtime, built_at, stale, COALESCE(reason,'') FROM sync WHERE stale <> 0 ORDER BY doc`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SyncInfo{}
+	for rows.Next() {
+		var si SyncInfo
+		var stale int
+		if err := rows.Scan(&si.Doc, &si.Hash, &si.Mtime, &si.BuiltAt, &stale, &si.Reason); err != nil {
+			return nil, err
+		}
+		si.Stale = stale != 0
+		out = append(out, si)
+	}
+	return out, rows.Err()
 }
 
 func (idx *Index) open() (*sql.DB, error) {

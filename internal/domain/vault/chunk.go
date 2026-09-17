@@ -33,6 +33,14 @@ func DefaultChunkTargets() ChunkTargets {
 	return ChunkTargets{Extract: DefaultExtractTokens, Embed: DefaultEmbedTokens}
 }
 
+// ChunkStat 是派生层块的统计（索引状态要能被人看见，「不静默」）。
+type ChunkStat struct {
+	Docs          int // 有同步记录的文档数
+	Chunks        int // 嵌入块（chunk）
+	ExtractChunks int // 抽取块（extract_chunk）
+	Stale         int // 标了 stale 的文档数
+}
+
 // Chunk 是一个块。行号是**文件行号**（1 起，闭区间），与 vaultfs 的 BodyOffset 同一套。
 type Chunk struct {
 	// Ord 是块在文档内的序号（0 起，稳定，用于排序与增量比对）。

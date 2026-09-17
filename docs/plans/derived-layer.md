@@ -52,6 +52,15 @@ sync(doc, hash, mtime, built_at, stale, reason)
   **归并只合并条目、不丢来源**：每条来源各占一行（`doc`+`line`），合成描述另存
   （`description_summary`，见 spec §九.2）；`authority: corrected` 优先且不被 `derived` 覆盖。
 - `sync.stale` + `reason` 是「不静默」的落地：失败、半成品、嵌入缺失都写在这儿。
+- `chunk.status` 只有两个值：`fresh` / `stale`——它是**派生条目的新鲜度**，
+  不是文档的 `draft/published/archived`（那是文件层的事，别混）。
+  刚重建出来一律 `fresh`；文件变了或嵌入失败，对应行改 `stale` 并把原因写进 `sync.reason`。
+- `sync.hash` 是**正文（已剥掉 front matter）的 sha256**，`sync.mtime` 是文件修改时间：
+  两者一起用来判「这篇要不要重算」——只看 mtime 会被 `git checkout` 骗，
+  只看 hash 则每次都要读全文。
+- 实现落位（P0 已完成）：三张表在 `infrastructure/vaultindex` 的 schema 里，
+  `Rebuild` 时按「一篇一个事务」写入；读取口是 `ChunkStat/ChunksOf/ExtractChunksOf/SyncOf/StaleDocs`。
+  实测 `projects/demo`（410 篇）：512 口径 12,512 块、2000 口径 7,147 块、全量重建 **127 秒**。
 
 ## 4. 流程
 
