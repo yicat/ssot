@@ -10,6 +10,7 @@
 | `measure-group.mjs` | 量分组标题几何：标签多宽、线从哪起、到第一条目多少 px（把「不好看」变成数字） | `playwright-core` |
 | `mcp-smoke.mjs` | 把 MCP 服务端当「DSH 会怎么用它」那样跑一遍：协议、工具清单、读写、门、git 留痕 | 无（Node 内置 + 编译好的 `bin\ssot-cli.exe`） |
 | `agent-ui-test.mjs` | 验聊天界面与配置页：三个模式的切换、Agent 面板、配置弹窗与逐条后端检查（**不依赖 vault 内容**） | `playwright-core` |
+| `ui-chrome-test.mjs` | 验界面外壳的口径：滚动条（细 / 半透明 / 轨道透明，见 `shell.spec.md` §7，**不依赖 vault 内容**） | `playwright-core` |
 | `agent-e2e.mjs` | 点界面上的「启动后端」，验真后端能起来（握手 + 开会话 + 按会话挂 MCP，**不发提示词、不花额度**）；**默认跳过**，要 `SSOT_E2E_AGENT=1` | `playwright-core` + 本机装了 DSH |
 
 什么时候用哪个：
@@ -57,5 +58,6 @@ node scripts/check/ui-test.mjs                          # 需要先 cd scripts &
    （`search is not a function` 就是这么抓出来的，比读日志快得多）。
 
 每个脚本的详细边界写在各自文件头部（做什么 / 适用范围 / 什么时候不该用）。
+
 
 

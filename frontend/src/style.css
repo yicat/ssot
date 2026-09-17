@@ -203,6 +203,49 @@
   color: var(--muted-foreground);
 }
 
+/* ── 滚动条：细、半透明、悬浮感（对齐 macOS / DSH）─────────────────────────
+   口径见 docs/specs/shell.spec.md §7。三条要点：
+   1) 全应用一套，颜色从 --foreground 派生（深浅色都能用，不写死黑）；
+   2) 标准属性与 ::-webkit-scrollbar 两套都写——只写一套在某些引擎里根本不生效；
+   3) 「细」靠「透明边框 + background-clip」把可见部分收到约 4px，
+      热区仍是 10px（热区太小不好拖），⚠️ 这 10px 依然占布局宽度——
+      这不是真 overlay 滚动条，Chromium 已经删掉 `overflow: overlay` 了。 */
+:root {
+  /* 半透明：太淡看不见，太实就成了一条黑线，不是「浮着」的那种 */
+  --scrollbar-thumb: color-mix(in oklch, var(--foreground) 28%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  /* 太短的滑块不好抓，给个下限 */
+  min-height: 32px;
+}
+/* ⚠️ 这里**故意没有** hover / active 规则：实测这个 WebView2 **不会**因为 hover 状态变化
+   重算 `::-webkit-scrollbar*` 的样式——`aside:hover` 正确翻转了，滑块的 computed 颜色却
+   一动不动（刷新时鼠标恰好停在上面才会显示 hover 色，很容易误判成「生效了」，我就误判过）。
+   所以「鼠标进入变实」这层先不做，也不留一行不生效的死代码。
+   真要做有两条路：① JS 在 mouseenter 时给容器加类；② 给 WebView2 加
+   `--enable-features=FluentOverlayScrollbars`（那是 Windows 的真·覆盖式滚动条）。
+   见 docs/specs/shell.spec.md §7。 */
+
+
 /* 双链 */
 .md-wikilink { color: var(--md-info); border-bottom: 1px solid transparent; cursor: pointer; }
 .md-wikilink:hover { border-bottom-color: currentColor; }
@@ -353,6 +396,7 @@
     cursor: pointer;
     }
 }
+
 
 
 

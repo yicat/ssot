@@ -101,6 +101,30 @@
   ——这是**层序**保证的（theme → base → components → utilities），不靠 CSS 文件里的先后，
   跟前面 `hover:bg-*` 那种「同层同优先级靠顺序」的坑不是一回事。
 
+### 7. 滚动条：细、半透明、轨道透明（对齐 macOS / DSH）
+
+口径（用户提的，照 DSH 的观感来）：**细**、**半透明**、**轨道全透明**——看起来像浮在内容上，
+而不是一条有槽的轨道。
+
+- **全应用一套**：样式集中在 `style.css` 的变量里（`--scrollbar-thumb`），
+  组件里**不要各写一套**。颜色从 `--foreground` 派生，深浅色都能用，不写死黑。
+  已验证：左栏与正文里的 `pre` 两处宿主的滑块颜色/宽度/`scrollbar-width` 完全一致。
+- **两套写法都要写**：标准属性 `scrollbar-width` / `scrollbar-color`（Chromium 121+ 也认）
+  与 `::-webkit-scrollbar*`（WebView2 走这条）。只写一套，在某些引擎里就是完全不生效。
+- **怎么做到「细」**：热区给 10px，用「透明边框 + `background-clip: padding-box`」把可见部分
+  收到 **5px 左右**（Chromium 会把滚动条伪元素的边框按比例缩放：写 `3px` 算出来是 `2.4px`，
+  所以别断言字面值，断言**可见宽度**）。
+  ⚠️ 热区那 10px **仍然占布局宽度**；热区给太小会不好拖，所以不能靠缩热区来变细。
+- ⚠️ **「鼠标进入变实」这层没做**，因为它在这个 WebView2 里**不生效**（实测）：
+  `aside:hover` 会正确翻转，但 `::-webkit-scrollbar-thumb` 的 computed 颜色**一动不动**——
+  刷新时鼠标恰好停在容器上才会显示出 hover 色，很容易误判成「生效了」（我就误判过一次）。
+  没做的就不写进规范，也**不留一行不生效的死代码**；要真做得走这两条路之一：
+  ① JS 在 `mouseenter` 时给容器加类；② 给 WebView2 加 `--enable-features=FluentOverlayScrollbars`。
+- ⚠️ **这不是真正的 overlay 滚动条**：Chromium 已删掉 `overflow: overlay`，
+  Windows 上也不提供 macOS 那种「浮在上面、不占位、自动淡出」的系统行为。
+  这里对齐的是**观感**（细 + 半透明 + 轨道透明），占位这一点没变——写清楚，
+  免得以后有人以为它是真 overlay 而去改布局。
+
 ## 未定
 
 1. **一条 bar 将来放不下时怎么拆**：新方案加了导航之后，可能要拆成「窗口 chrome + 工具栏」
