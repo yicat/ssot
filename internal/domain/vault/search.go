@@ -24,6 +24,25 @@ type Hit struct {
 	Occurrences int
 }
 
+// VectorHit 是向量检索（派生层）的一条命中。
+//
+// 与 Hit 一样只带「哪里命中、命中什么」：**行号区间是我们的块级溯源**（比 chunk 级更细），
+// Status 让「未核验」照样可见。
+type VectorHit struct {
+	// Doc 是命中的文档（相对 vault 根）；FromLine/ToLine 是块在**文件**里的行号区间。
+	Doc      string
+	FromLine int
+	ToLine   int
+	// Ord 是块在文档内的序号（同分时用来稳定排序、也便于回查）。
+	Ord int
+	// Text 是块的内容。
+	Text string
+	// Status 是文档的状态（draft/published/archived）：未核验的要能标出来。
+	Status Status
+	// Score 是余弦相似度（向量已归一，点积即余弦）。
+	Score float32
+}
+
 // CountOccurrences 数 needle 在 text 里出现几次（大小写不敏感，中文无关大小写）。
 func CountOccurrences(text, needle string) int {
 	if needle == "" {

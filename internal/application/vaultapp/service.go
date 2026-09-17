@@ -23,12 +23,21 @@ type Service struct {
 	loader *vaultfs.Loader
 	index  *vaultindex.Index
 	git    *vaultgit.Repo
+	// embedDir 是嵌入模型目录。留空表示「这台机器上还没配模型」——
+	// 那时向量相关的用例会给出人话错误，而不是静默退化（见 docs/OPEN.md #15）。
+	embedDir string
 }
 
 // New 构造 Service。
 func New(root string) *Service {
 	return &Service{loader: vaultfs.New(root), index: vaultindex.New(root), git: vaultgit.New(root)}
 }
+
+// SetEmbedModelDir 指定嵌入模型目录（组合根从配置/环境变量读出来注入）。
+func (s *Service) SetEmbedModelDir(dir string) { s.embedDir = dir }
+
+// EmbedModelDir 返回当前的嵌入模型目录（可能为空）。
+func (s *Service) EmbedModelDir() string { return s.embedDir }
 
 // Root 返回 vault 根目录。
 func (s *Service) Root() string { return s.loader.Root }
@@ -75,11 +84,12 @@ func (s *Service) ChunkStat() (vault.ChunkStat, error) {
 	return s.index.ChunkStat()
 }
 
-// ensureIndex 索引缺失时先建起来。
+// ensureIndex 索引缺失、或**结构版本对不上**时先建起来。
 //
 // 「搜不到东西」不该是因为忘了建索引——那种误导比慢几十毫秒严重得多。
+// 结构变过（加了表/列）也一样：索引是派生的，重建就好，不该让人撞上 no such table。
 func (s *Service) ensureIndex() error {
-	if s.index.Exists() {
+	if s.index.Ready() {
 		return nil
 	}
 	return s.index.Rebuild()

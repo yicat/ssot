@@ -3,7 +3,7 @@
 > 这份文件的**唯一职责**是让「进度」不再靠翻对话。规范在 `docs/specs/`，方案在 `docs/plans/`，
 > 决策在 `docs/adr/`，问题在 `docs/OPEN.md`。**每次收尾（见 ADR 0013）都更新这里。**
 
-**上次整理：2026-09-18（派生层 P0 完成：切块 + 索引落表；切块口径对拍；P1 地基实测）**
+**上次整理：2026-09-18（派生层 P1 完成：分词/推理/向量表/暴力扫 + 逐位对拍）**
 
 ## 整理台账
 
@@ -11,7 +11,8 @@
 |---|---|---|---|
 | 2026-09-17 | 建立治理体系；补录已发生的决策 | 决策/进度/问题/反例从「散在各文件边角」改为各自有家 | ADR 0001–0013 |
 | 2026-09-18 | 派生层 P0 收尾 | 切块进索引（`chunk`/`extract_chunk`/`sync` 三表 + 读取口）；发现 spike 的 JS 切块脚本与 Go 实现差 5%，已对拍定位并记账 | `embedding-spike.md` §六.4、plan §3 |
-| 2026-09-18 | P1 地基验证 | 纯 Go（免 cgo）加载 ONNX Runtime 跑通 bge-small-zh int8；依赖离线可装；新增探针 `scripts/check/onnx-probe/`；冒出两个问题（模型分发、分词器自研） | `embedding-spike.md` §六.5、`OPEN.md` #15/#16 |
+| 2026-09-18 | P1 地基验证 | 纯 Go（免 cgo）加载 ONNX Runtime 跑通 bge-small-zh int8；依赖离线可装；新增探针 `scripts/check/onnx-probe/` | `embedding-spike.md` §六.5 |
+| 2026-09-18 | P1 主体完成 | 自研 WordPiece 分词 + ONNX 推理 + `embedding` 表 + 暴力扫；对拍逐条一致；量出两个坑（落盘放大 2.29×、每查一次读 25MB → P2 必须缓存向量） | `embedding-spike.md` §六.6、`OPEN.md` #17–19 |
 
 ## 现在在哪
 
@@ -24,21 +25,26 @@
 - **P0 完成**：切块（`domain/vault/chunk.go`，512/2000 两套 + 行号区间）→
   索引三表（`chunk` / `extract_chunk` / `sync`，`Rebuild` 时按篇一个事务写入）
   + 读取口（`ChunkStat` / `ChunksOf` / `ExtractChunksOf` / `SyncOf` / `StaleDocs`）
-  + `ssot vault index` 打印块统计；demo 上 12,512 / 7,147 块，全量重建 127 秒
+  + `ssot vault index` 打印块统计；demo 上 12,512 / 7,147 块，全量重建 127～192 秒
+- **P1 完成**：`internal/infrastructure/vembed`（自研 WordPiece 分词 + purego 跑 ORT + CLS 池化 + L2 归一）
+  + `embedding` 表与暴力扫（`PendingChunks`/`PutEmbeddings`/`SearchVector`/`ScanVectors`）
+  + CLI `vault embed` / `vault vector` + `SchemaVersion` 自动重建旧索引
+  + 对拍参照 `scripts/check/embed-ref.mjs` → `vembed/testdata/parity.json`
 
 **进行中**
-- **P1 起步**：地基已实测（`scripts/check/onnx-probe/`：ORT 1.30.0 加载 57ms、建会话 56ms、
-  推理 1ms、输出 `last_hidden_state [1 8 512]`；依赖 `onnxruntime_purego v1.24.0` 从本机缓存装好）。
-  还差三件：**分词器**（照 `tokenizer.json` 自己写）、`embedding` 表 + 向量检索、
-  与 transformers.js 逐位对拍
+- **P1 主体已完成**（`internal/infrastructure/vembed` + `embedding` 表 + 暴力扫 + CLI `embed`/`vector`）：
+  分词自研、token id 与向量都跟 transformers.js **逐条对拍通过**（最小余弦 1.0000000、最大分量差 5.96e-08）；
+  demo 12,512 块全量嵌入 205 秒，索引 43.9 → 99.7 MB。**P1 只剩下「向量进内存缓存 + 是否 int8 量化」，
+  那两条并到 P2 一起定**（`OPEN.md` #18/#19）。
 
 **下一步（按 plan 的顺序）**
-1. **P1 继续**：`internal/infrastructure/vembed`（分词 → 推理 → CLS 池化 + L2 归一）
-   + `embedding` 表 + 暴力扫检索；对拍参照 `embedding-spike.md` §六.5
-2. **P2**：FTS + 向量混合检索 ← **不花额度，却是分水岭**（纯向量在实体名式查询上 R@1 只有 21.6%）
-3. P3：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项
-4. P4：图检索并入（local/global/hybrid/mix）
-5. P5：增量与索引状态接到界面
+1. **P2**：FTS + 向量混合检索 ← **不花额度，却是分水岭**（纯向量在实体名式查询上 R@1 只有 21.6%）
+   - 前置：向量**读进内存**（现在每查一次读 25MB → 222～241 ms；内存点积 2 ms）
+   - 顺便定 int8 量化（落盘 2.29× → 1.15×），**先测召回再决定**
+   - 验收线：≥ 纯向量基线 61.6%/79.8%，且实体名式查询 R@1 明显上升
+2. P3：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项
+3. P4：图检索并入（local/global/hybrid/mix）
+4. P5：增量与索引状态接到界面
 
 ## 卡在哪
 
@@ -52,10 +58,15 @@
 
 ```
 go vet ./...                           clean
-go test ./internal/... ./cmd/...        ok（含 chunk 6 条、vaultindex 新增 4 条（块/行号/覆盖/stale）、appconfig、acp、mcp、vaultapp）
-前端 npm run build                      ✓ built（492ms）
+go test ./...                          ok（vembed：算法 1 条 + 对拍 2 条（分词 12 例、向量 12 条）；vaultindex：块 4 条 + 向量 3 条）
+SSOT_EMBED_DIR=%TEMP%\embed-spike go test ./internal/infrastructure/vembed/
+                                        对拍 12 条：最小余弦 1.0000000，最大分量差 5.96e-08
 bin/ssot-cli.exe vault index -root projects/demo
-                                        410 篇 / 13 表 / 12,512 嵌入块 / 7,147 抽取块，127 秒
+                                        410 篇 / 13 表 / 12,512 嵌入块 / 7,147 抽取块
+bin/ssot-cli.exe vault embed -root <副本>  12,512 块 205 秒（58.8 块/秒）；索引 43.9 → 99.7 MB
+bin/ssot-cli.exe vault vector -root <副本> "暴击伤害怎么算"
+                                        5 次 222～241 ms（含模型加载）；命中带行号区间与状态
+前端 npm run build                      ✓ built（492ms）
 wails3 task check                      exit 0
 scripts/check/mcp-smoke.mjs            31/31
 scripts/check/agent-ui-test.mjs        22/22

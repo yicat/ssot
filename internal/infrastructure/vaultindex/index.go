@@ -48,6 +48,29 @@ func (idx *Index) Exists() bool {
 	return err == nil
 }
 
+// SchemaVersion 是索引**结构**的版本：表加了一列一张、键换了，就 +1。
+//
+// 为什么要它：索引是派生的，所以「结构变了」的正确反应是**自动重建**，
+// 而不是让人撞上 `no such table: embedding` 这种看不懂的错。
+const SchemaVersion = 2
+
+// Ready 报告索引存在**且结构版本对得上**（对不上就该重建）。
+func (idx *Index) Ready() bool {
+	if !idx.Exists() {
+		return false
+	}
+	db, err := idx.open()
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+	var v string
+	if err := db.QueryRow(`SELECT v FROM meta WHERE k = 'schema_version'`).Scan(&v); err != nil {
+		return false
+	}
+	return v == strconv.Itoa(SchemaVersion)
+}
+
 const schema = `
 CREATE TABLE docs(
   path TEXT PRIMARY KEY, layer TEXT, title TEXT, status TEXT,
@@ -74,6 +97,12 @@ CREATE INDEX extract_chunk_doc ON extract_chunk(doc, ord);
 CREATE TABLE sync(
   doc TEXT PRIMARY KEY, hash TEXT, mtime INTEGER, built_at INTEGER, stale INTEGER, reason TEXT
 );
+-- 向量：owner_kind = chunk / entity / relation，owner_id 是该层的键（块用「文档#序号」）。
+-- 向量是 float32 小端裸字节（512 维 = 2048 字节），归一化后点积即余弦。
+CREATE TABLE embedding(
+  owner_kind TEXT, owner_id TEXT, dim INTEGER, vec BLOB,
+  PRIMARY KEY(owner_kind, owner_id)
+) WITHOUT ROWID;
 `
 
 // Rebuild 从文件重建整份索引（先删后建，保证不会留下上一次的残渣）。
@@ -133,6 +162,7 @@ func (idx *Index) Rebuild() error {
 		"doc_count":           strconv.Itoa(len(docs)),
 		"chunk_count":         strconv.Itoa(chunks),
 		"extract_chunk_count": strconv.Itoa(extracts),
+		"schema_version":      strconv.Itoa(SchemaVersion),
 	} {
 		if _, err := db.Exec(`INSERT INTO meta(k,v) VALUES(?,?)`, k, v); err != nil {
 			return err
@@ -764,5 +794,17 @@ func (idx *Index) open() (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
+	return db, nil
+}
+
+// openForWrite 是**唯一**允许改索引的连接：只给派生的向量/状态写入用。
+//
+// 纪律没变（见包注释第 2 条）：事实只在文件里，索引是派生的——
+// 所以写只发生在「把派生结果算出来存下去」这一件事上，而且随时可以被 `Rebuild` 抹掉重来。
+func (idx *Index) openForWrite() (*sql.DB, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
 	return db, nil
 }

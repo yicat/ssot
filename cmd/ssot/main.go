@@ -13,9 +13,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ngnl5/ssot/internal/application/vaultapp"
 	"github.com/ngnl5/ssot/internal/domain/vault"
+	"github.com/ngnl5/ssot/internal/infrastructure/appconfig"
+	"github.com/ngnl5/ssot/internal/infrastructure/vembed"
 	"github.com/ngnl5/ssot/internal/mcp"
 )
 
@@ -88,6 +91,13 @@ func runVault(args []string) error {
 		return fmt.Errorf("必须用 -root 指明 vault 根目录")
 	}
 	svc := vaultapp.New(f.root)
+	// 向量相关的子命令要用嵌入模型：模型目录由环境变量或用户配置指路
+	// （怎么分发还没定，见 docs/OPEN.md #15）。
+	if cfgDir, err := appconfig.Dir(); err == nil {
+		svc.SetEmbedModelDir(vembed.DefaultModelDir(cfgDir))
+	} else {
+		svc.SetEmbedModelDir(vembed.DefaultModelDir(""))
+	}
 
 	switch cmd {
 	case "":
@@ -113,6 +123,10 @@ func runVault(args []string) error {
 		return vaultTables(svc)
 	case "query":
 		return vaultQuery(svc, rest, f.limit)
+	case "embed":
+		return vaultEmbed(svc, f.limit)
+	case "vector":
+		return vaultVector(svc, rest, f.limit)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -383,6 +397,73 @@ func vaultIndex(svc *vaultapp.Service) error {
 	return nil
 }
 
+// vaultEmbed 把还没嵌入的块嵌入（分批、可中断续跑）。
+func vaultEmbed(svc *vaultapp.Service, limit int) error {
+	if svc.EmbedModelDir() == "" {
+		return fmt.Errorf("还没配嵌入模型：设 SSOT_EMBED_DIR 指向模型目录" +
+			"（要 model.onnx、tokenizer.json、onnxruntime.dll）——见 docs/OPEN.md #15")
+	}
+	start := time.Now()
+	res, err := svc.EmbedPending(limit, func(done, total int) {
+		fmt.Printf("\r  已嵌入 %d/%d 块…", done, total)
+	})
+	if res.Embedded > 0 {
+		fmt.Println()
+	}
+	if err != nil {
+		return err
+	}
+	if res.Embedded == 0 {
+		st, err := svc.VectorStat()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("没有待嵌入的块：%d/%d 已有向量（%d 维）\n", st.Embedded, st.Chunks, st.Dim)
+		return nil
+	}
+	rate := float64(res.Embedded) / res.Seconds
+	fmt.Printf("嵌入完成：%d 块，%d 维，耗时 %.1f 秒（%.1f 块/秒）；还剩 %d 块没嵌，总耗时 %.1f 秒\n",
+		res.Embedded, res.Dim, res.Seconds, rate, res.Pending, time.Since(start).Seconds())
+	return nil
+}
+
+// vaultVector 用向量检索。
+func vaultVector(svc *vaultapp.Service, args []string, limit int) error {
+	if len(args) == 0 {
+		return fmt.Errorf("vector 后面要跟查询词")
+	}
+	q := strings.Join(args, " ")
+	hits, err := svc.VectorSearch(q, limit)
+	if err != nil {
+		return err
+	}
+	if len(hits) == 0 {
+		fmt.Println("没有命中（索引里可能还没有向量：先跑 ssot vault embed）")
+		return nil
+	}
+	for _, h := range hits {
+		status := string(h.Status)
+		if status == "" {
+			status = "?"
+		}
+		fmt.Printf("%.4f  %s:%d-%d [%s]\n", h.Score, h.Doc, h.FromLine, h.ToLine, status)
+		fmt.Printf("        %s\n", firstLine(h.Text, 100))
+	}
+	return nil
+}
+
+// firstLine 取一段文本的第一行，按字符截断（给终端看的一行摘要）。
+func firstLine(s string, max int) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	r := []rune(strings.TrimSpace(s))
+	if len(r) > max {
+		return string(r[:max]) + "…"
+	}
+	return string(r)
+}
+
 func vaultSearch(svc *vaultapp.Service, args []string, limit int) error {
 	if len(args) == 0 {
 		return fmt.Errorf("search 后面要跟搜索词")
@@ -545,6 +626,8 @@ vault 子命令（写）：
   status -actor human:名字 <路径> <状态>      改发布态（**只有人能发布**）
   write  -actor <人|agent> <路径>            写正文（从标准输入读；agent 写入回落 draft）
   index                                      重建派生索引（.data/index.db，删了能重建）
+  embed [-limit <n>]                         把还没嵌入的块嵌入（分批写回；中断了能接着跑）
+  vector <词>                                向量检索（需要模型目录；-limit 控制条数）
 
 示例：
   ssot vault -root projects/demo list
@@ -584,6 +667,8 @@ func vaultUsage() {
   status <路径> <状态>     改发布态（只有人能发布；需要 -actor）
   write <路径>             写正文，从标准输入读（需要 -actor）
   index                    重建派生索引
+  embed [-limit <n>]       把还没嵌入的块嵌入（需要模型目录：设 SSOT_EMBED_DIR）
+  vector <词>              向量检索（派生层；返回带文件行号区间的命中）
 
 读操作不需要 -actor；写操作必须给，且分人还是 agent——
 agent 改过的文档一律回落 draft，等人复核（docs/specs/agent.spec.md）。

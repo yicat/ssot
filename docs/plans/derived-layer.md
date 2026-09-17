@@ -60,7 +60,13 @@ sync(doc, hash, mtime, built_at, stale, reason)
   只看 hash 则每次都要读全文。
 - 实现落位（P0 已完成）：三张表在 `infrastructure/vaultindex` 的 schema 里，
   `Rebuild` 时按「一篇一个事务」写入；读取口是 `ChunkStat/ChunksOf/ExtractChunksOf/SyncOf/StaleDocs`。
-  实测 `projects/demo`（410 篇）：512 口径 12,512 块、2000 口径 7,147 块、全量重建 **127 秒**。
+  实测 `projects/demo`（410 篇）：512 口径 12,512 块、2000 口径 7,147 块、全量重建 **127～192 秒**。
+- **向量怎么存（P1 已完成）**：`embedding(owner_kind, owner_id, dim, vec)`，
+  `owner_id` 是 `文档#序号`（块）、实体/关系阶段再定；`vec` 是 float32 小端裸字节
+  （512 维 = 2048 字节）。检索口是 `PendingChunks/PendingCount/PutEmbeddings/SearchVector/ScanVectors`。
+  实测：嵌入 500 块 7.8 秒（**64.4 块/秒**），全库 12,512 块约 3.2 分钟；
+  向量占 **25.6MB**（12,512 × 2048B）。`SchemaVersion` 变了会自动重建旧索引
+  （索引是派生的，不该让人撞上 `no such table`）。
 
 ## 4. 流程
 
