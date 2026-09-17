@@ -151,7 +151,7 @@ async function main() {
 
     const list = await cli.call(2, "tools/list");
     const names = list.result.tools.map((t) => t.name);
-    check("工具数是 8", names.length === 8, names.join(", "));
+    check("工具数是 9（含只读的 file_read）", names.length === 9, names.join(", "));
     check(
       "工具名都是 snake_case（DSH 只接受 [A-Za-z0-9_-]）",
       names.every((n) => /^[a-z0-9_]+$/.test(n)),
@@ -172,7 +172,19 @@ async function main() {
     check("读到正文与状态", doc.data.status === "published" && doc.data.body.includes("整理后的正文"));
     check("读到 front matter 的 tags", (doc.data.tags ?? []).includes("SSR"), JSON.stringify(doc.data.tags));
 
-    const amb = await cli.callTool(5, "doc_read", { path: "茨木童子" });
+    // 只读地读任意文本文件（agent 靠这个读原文/JSON/项目文件；写仍然只有 doc_write）
+    // 分页读：这个文件 7 行，正文从第 6 行开始（第 1–5 行是 front matter）。
+    // ⚠️ 断言要落在**取到的那一段**上：第一版从第 1 行读 3 行却去找正文里的词，自己写错了断言。
+    const raw = await cli.callTool(5, "file_read", { path: "raw/灰机wiki/茨木童子.md", fromLine: 6, maxLines: 2 });
+    check(
+      "file_read 能按行分页读到正文",
+      raw.data.totalLines === 7 && raw.data.fromLine === 6 && raw.data.toLine === 7 && raw.data.text.includes("第一段"),
+      JSON.stringify({ from: raw.data.fromLine, to: raw.data.toLine, total: raw.data.totalLines, text: raw.data.text }),
+    );
+    const outside = await cli.callTool(51, "file_read", { path: "../外面.txt" });
+    check("file_read 拒绝越出 vault", outside.isError, outside.text.slice(0, 40));
+
+    const amb = await cli.callTool(52, "doc_read", { path: "茨木童子" });
     check("同名两篇时不猜、如实报错", amb.isError && amb.text.includes("同名"), amb.text.slice(0, 60));
 
     const res = await cli.callTool(6, "link_resolve", { ref: "[[raw/灰机wiki/茨木童子#^第3段]]" });
@@ -252,4 +264,6 @@ async function main() {
 }
 
 await main();
+
+
 

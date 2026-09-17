@@ -365,12 +365,37 @@ type Caps struct {
 //
 // 这是 App 内置聊天不需要任何全局配置的原因：MCP 条目随 session/new 一起送过去
 // （docs/specs/agent.spec.md §7）。command 必须是**绝对路径**，后端会校验。
+//
+// ⚠️ `args` 与 `env` **都要显式给**（空数组也得给），所以这两个字段**没有** `omitempty`：
+// 实测省略 `env` 时 `session/new` **仍然成功**，但服务器根本不会被拉起——
+// 静默不挂载，agent 手上就一个 ssot 工具都没有（表现是「agent 不好用」，很难查）。
+// 空 slice 会被 marshal 成 `[]`；nil 会被 marshal 成 `null`，所以下面还要兜一层。
 type MCPServer struct {
 	Name    string   `json:"name"`
 	Command string   `json:"command"`
-	Args    []string `json:"args,omitempty"`
-	Env     []string `json:"env,omitempty"`
+	Args    []string `json:"args"`
+	Env     []string `json:"env"`
 	Type    string   `json:"type"` // 只用 "stdio"
+}
+
+// normalize 把 nil 的 args/env 换成空 slice（marshal 成 `[]` 而不是 `null`）。
+func (m MCPServer) normalize() MCPServer {
+	if m.Args == nil {
+		m.Args = []string{}
+	}
+	if m.Env == nil {
+		m.Env = []string{}
+	}
+	return m
+}
+
+// normalizeServers 逐条兜底。
+func normalizeServers(in []MCPServer) []MCPServer {
+	out := make([]MCPServer, 0, len(in))
+	for _, m := range in {
+		out = append(out, m.normalize())
+	}
+	return out
 }
 
 // Session 是一个新开的会话（含后端给的配置选项，如模型）。
@@ -399,10 +424,7 @@ type ConfigOption struct {
 
 // NewSession 开一个新会话：cwd 是工作区（我们用 vault 根），mcp 是随会话挂的 MCP 服务器。
 func (c *Client) NewSession(ctx context.Context, cwd string, mcp []MCPServer) (Session, error) {
-	if mcp == nil {
-		mcp = []MCPServer{}
-	}
-	raw, err := c.call(ctx, "session/new", map[string]any{"cwd": cwd, "mcpServers": mcp}, 60*time.Second)
+	raw, err := c.call(ctx, "session/new", map[string]any{"cwd": cwd, "mcpServers": normalizeServers(mcp)}, 60*time.Second)
 	if err != nil {
 		return Session{}, err
 	}
@@ -479,11 +501,8 @@ func (c *Client) CloseSession(ctx context.Context, sessionID string) error {
 // 真后端的返回是 **`{configOptions}`——不回 sessionId**（对着 dsh-acp 的 resumeSession 看过），
 // 所以 ID 用调用方给的那个填回去；cwd 必须与当初开会话时一致，否则后端会拒。
 func (c *Client) ResumeSession(ctx context.Context, sessionID, cwd string, mcp []MCPServer) (Session, error) {
-	if mcp == nil {
-		mcp = []MCPServer{}
-	}
 	raw, err := c.call(ctx, "session/resume", map[string]any{
-		"sessionId": sessionID, "cwd": cwd, "mcpServers": mcp,
+		"sessionId": sessionID, "cwd": cwd, "mcpServers": normalizeServers(mcp),
 	}, 60*time.Second)
 	if err != nil {
 		return Session{}, err

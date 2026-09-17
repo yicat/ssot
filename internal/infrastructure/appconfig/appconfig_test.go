@@ -145,8 +145,6 @@ func TestGuardsBypassTools(t *testing.T) {
     packageName: '@deepseek-ai/dsh-base'
     version: 0.1.2-rc.1
   disabled: true
-- id: tool-fs-search
-  disabled: true
 - id: tool-str-replace-editor
   disabled: true
 - id: tool-skill
@@ -162,17 +160,17 @@ func TestGuardsBypassTools(t *testing.T) {
 	}
 
 	// 少关一个 → 必须报出来（假绿最危险：以为堵住了其实没堵）
-	weak := strings.Replace(patch, "- id: tool-fs-search\n  disabled: true\n", "", 1)
+	weak := strings.Replace(patch, "- id: tool-str-replace-editor\n  disabled: true\n", "", 1)
 	if err := os.WriteFile(filepath.Join(profile, "cordis.patch.yml"), []byte(weak), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ok, missing = a.guardsBypassTools()
-	if ok || len(missing) != 1 || missing[0] != "tool-fs-search" {
+	if ok || len(missing) != 1 || missing[0] != "tool-str-replace-editor" {
 		t.Errorf("少关一个该被报出来：ok=%v missing=%v", ok, missing)
 	}
 
 	// `!!js` 条件式不算「关掉了」：运行时才知道，配置检查不该假装看得懂。
-	cond := strings.Replace(patch, "- id: tool-fs-search\n  disabled: true\n", "- id: tool-fs-search\n  disabled: !!js process.env.NOPE\n", 1)
+	cond := strings.Replace(patch, "- id: tool-str-replace-editor\n  disabled: true\n", "- id: tool-str-replace-editor\n  disabled: !!js process.env.NOPE\n", 1)
 	if err := os.WriteFile(filepath.Join(profile, "cordis.patch.yml"), []byte(cond), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -186,5 +184,12 @@ func TestGuardsBypassTools(t *testing.T) {
 	}
 	if ok, missing := a.guardsBypassTools(); ok || len(missing) != len(bypassToolIDs) {
 		t.Errorf("没有 patch 文件该报缺全部：ok=%v missing=%v", ok, missing)
+	}
+
+	// 只读工具不该被要求禁用：glob/grep 写不了东西，关掉只会让 agent 瞎找（第一版砍过头）。
+	for _, id := range bypassToolIDs {
+		if id == "tool-fs-search" {
+			t.Error("tool-fs-search 是纯只读，不该进必禁清单")
+		}
 	}
 }

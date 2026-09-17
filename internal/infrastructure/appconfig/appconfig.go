@@ -291,7 +291,9 @@ func (s Settings) Check() []Check {
 // 留着它们，agent 就能绕过能力层：pwsh/bash 能跑任意命令（包括 git commit），
 // fs / str-replace-editor 能直接读写文件（包括改 front matter 里的 status）。
 // 见 docs/specs/dsh.spec.md「后端工具集必须收紧」。
-var bypassToolIDs = []string{"tool-pwsh", "tool-bash", "tool-fs", "tool-fs-search", "tool-str-replace-editor"}
+// ⚠️ `tool-fs-search`（glob/grep）**不在**这份清单里：它只有发现能力、写不了东西，
+// 是纯只读。第一版把它一起关了，结果 agent 连找文件都不会——那是砍过头（见 dsh.spec.md）。
+var bypassToolIDs = []string{"tool-pwsh", "tool-bash", "tool-fs", "tool-str-replace-editor"}
 
 // guardsBypassTools 检查 profile 的 patch 有没有把那些工具关掉。
 //

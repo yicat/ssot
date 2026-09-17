@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ type AgentService struct {
 	svcKey string // 这个 Service 是按哪份配置 + 哪个 vault 建的（配置或项目变了就重建）
 	notes  []string
 
+	logMu   sync.Mutex
 	permMu  sync.Mutex
 	permSeq int
 	pending map[string]chan string
@@ -165,7 +167,11 @@ type AppSettingsView struct {
 	Theme   string `json:"theme"`
 	// SettingsPath 是设置文件在哪（要能告诉人去哪改）。
 	SettingsPath string `json:"settingsPath"`
-	ProfileDir   string `json:"profileDir"`
+	// HarnessLog / MCPLog 是两份诊断日志：后端 stderr 与 MCP 服务端的留痕。
+	// 出问题时（比如「agent 手上有没有工具」）只能靠它们。
+	HarnessLog string `json:"harnessLog"`
+	MCPLog     string `json:"mcpLog"`
+	ProfileDir string `json:"profileDir"`
 	// Checks 是逐条后端检查；AllOK 是它们的汇总。
 	Checks []AgentCheckItem `json:"checks"`
 	AllOK  bool             `json:"allOk"`
@@ -193,6 +199,8 @@ func (s *AgentService) view(cfg appconfig.Settings, notes []string) AppSettingsV
 		Theme:        cfg.Appearance.Theme,
 		SettingsPath: s.store.Path(),
 		ProfileDir:   cfg.Agent.ProfileDir(),
+		HarnessLog:   s.HarnessLogPath(),
+		MCPLog:       filepath.Join(filepath.Dir(s.store.Path()), "mcp.log"),
 		Checks:       items,
 		AllOK:        cfg.AllOK(),
 		Notes:        notes,
@@ -281,7 +289,10 @@ func (s *AgentService) service() (*agentapp.Service, error) {
 		},
 		OnUpdate:      s.emitUpdate,
 		AskPermission: s.askPermission,
-		OnLog:         func(string) {}, // 后端诊断行先丢掉（要查问题时再开）
+		// ⚠️ 后端日志**不能丢**：MCP 有没有挂上、注册了哪些工具，只有它说得清。
+		// 第一版我写成 `func(string){}` 把日志扔了，结果「agent 手上到底有几个工具」
+		// 这个问题无从回答（只能靠猜）。现在落到文件里，出问题有据可查。
+		OnLog: s.logHarness,
 	})
 	s.svcKey = key
 	return s.svc, nil
@@ -466,6 +477,44 @@ func (s *AgentService) Stop() error {
 		return nil
 	}
 	return svc.Stop()
+}
+
+// logHarness 把后端的 stdout/stderr 诊断行落到文件里。
+//
+// 为什么要留：这些行里会有 MCP 客户端的连接结果与工具注册情况——
+// 「agent 手上有没有 ssot 的工具」这个问题只能从这里看出，界面与 ACP 协议都不暴露工具清单。
+// 落文件而不是内存：出问题往往是在事后，事后还能翻。
+//
+// 上限 2MB 之后截断重来（只是诊断，不做轮转）。
+func (s *AgentService) logHarness(line string) {
+	s.logMu.Lock()
+	defer s.logMu.Unlock()
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	path := filepath.Join(dir, "ssot", "harness.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	if fi, err := os.Stat(path); err == nil && fi.Size() > 2<<20 {
+		_ = os.Remove(path)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), line)
+}
+
+// HarnessLogPath 是后端日志的位置（配置页要能告诉人去哪看）。
+func (s *AgentService) HarnessLogPath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "ssot", "harness.log")
 }
 
 // emitUpdate 把 ACP 更新转成界面好用的形状并推过去。

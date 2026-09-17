@@ -86,6 +86,8 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 | 会话**持久化且全机器共享**：`session/list` 能看到用户自己在别处写的会话；它支持按绝对 `cwd` 过滤 | 探针的输出里出现了 cwd = 仓库根的会话，那是用户自己的 |
 | `DSH_HOME` 是 `%APPDATA%\dsh-desktop\harness`，**不是** `~/.dsh` | harness 启动时打在 stdout 上的那行 |
 | ⚠️ 真后端的 **stdout 上混着 `[harness-node] …` 诊断行**，而且夹在协议消息之间 | 探针把这些行判成了「非 JSON」 |
+| ⚠️ `mcpServers[]` 里的 **`args` 与 `env` 必须显式给**（空数组也要给）。省略 `env` 时 `session/new` **仍然成功**，但服务器**根本不会被拉起**——静默不挂载 | 实测对比：带 `env: []` → 子进程 0→1；不带 → 0→0。表现是「agent 手上一个 ssot 工具都没有」 |
+| 挂载失败本身**不是静默的**：命令路径不存在时 `session/new` 直接失败（`mcp-client(x): initial connection or tool synchronization failed`） | 故意给错命令验过 |
 | `acp` profile 本机原本不存在，已新建 `~/.dsh/profiles/acp/package.json`（bundles：`dsh-base` + `dsh-acp-app`）；**不用装东西**——`~/.dsh/profiles/node_modules/@deepseek-ai/` 下这些包本来就有 | 建完 `--dump-config` 无错误、`--help` 能起来、真连一次成功 |
 
 ### 由此定下的三条实现要求
@@ -115,14 +117,36 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 
 **约定**（我们的 profile = `dsh-base` + `dsh-acp-app` + 一份禁用 patch）：
 
+**原则：读放开、写收口。** 只有「能写」的能力才必须走能力层——
+砍掉读只会让 agent 变瞎，而它瞎了照样改不了文件，纯粹是白损失能力（第一版就是一刀切砍过头了）。
+
 | 处理 | 行 id | 为什么 |
 |---|---|---|
 | **禁用** | `tool-pwsh`、`tool-bash` | 能跑任意命令 → 能改文件、能 commit |
-| **禁用** | `tool-fs`、`tool-fs-search`、`tool-str-replace-editor` | 直接读写文件 → 绕过 `doc_write` 与留痕 |
-| 保留 | MCP（`mcp__ssot__*` 八个工具） | **这就是能力层**，vault 的读/写/查都在里面 |
+| **禁用** | `tool-fs` | 它把 `read` 与 `write`/`edit` 绑在同一个插件里，没法只要读；整块关掉，**读用我们自己的 `file_read` 补** |
+| **禁用** | `tool-str-replace-editor` | 同上（`view` 是读，但 `create`/`str_replace`/`insert` 是写） |
+| **保留** | `tool-fs-search`（`glob` / `grep`） | **纯只读**（走打包的 ripgrep，一个字节都写不了）。关掉它 agent 连找文件都不会 |
+| 保留 | MCP（`mcp__ssot__*` 九个工具） | **这就是能力层**，vault 的读/写/查都在里面 |
 | 保留 | `tool-skill`、`dsh-skill-filesystem` | 四个角色靠它分发（`agent.spec.md` §6） |
 | 保留 | `tool-subagent`、`tool-todo` | 主 Agent 的调度用，**不碰文件** |
 | 保留 | `tool-web` | 只读外部；要落进 vault 仍得走 `doc_write`，绕不过门 |
+
+**能力层因此要提供只读的文件读取**：`file_read`（带行号分页、限定在 vault 内、拒绝绝对路径与
+`..`、非 UTF-8 明确报错）。这样 agent 能读原文/JSON 导出/`project.yml`/表说明，
+但**写**仍然只有 `doc_write` 那条路——「写入回落 draft + 留痕」「agent 不能发布」两条规则都还在。
+
+**怎么验「工具真的到 agent 手上了」**：ACP 协议不暴露工具清单，harness 日志里也没有 MCP 客户端的
+注册记录。所以**服务端自己留痕**：`ssot-cli mcp` 在 `initialize` 与 `tools/list` 时写一行到
+stderr 与 `<用户配置目录>/ssot/mcp.log`。看到
+
+```
+initialize 客户端=dsh-mcp-client 0.0.1 协议=2025-11-25
+tools/list 被调用，返回 9 个工具
+```
+
+就说明客户端连上了并取走了工具清单。⚠️ 这**证明到「工具被取走」为止**；
+模型最终看到的那份清单只有真跑一轮才看得见（界面里的工具调用行会显示工具名——
+出现 `pwsh`/`read`/`write` 就说明没堵住或工具集变了）。
 
 **落地形态**：专属 profile `ssot-agent`（不是通用的 `acp`）——名字就说明它是给谁用的。
 App 默认指向它；配置页的「后端检查」要能看出**这个 profile 到底堵没堵住**，

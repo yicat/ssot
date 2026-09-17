@@ -139,8 +139,8 @@ func TestToolsListIsSnakeCaseAndHidesStatusSet(t *testing.T) {
 	s := start(t, newVault(t))
 	resp := s.call("tools/list", nil)
 	list := resp["result"].(map[string]any)["tools"].([]any)
-	if len(list) != 8 {
-		t.Fatalf("第一批该有 8 个工具，实际 %d", len(list))
+	if len(list) != 9 {
+		t.Fatalf("工具该有 9 个（含只读的 file_read），实际 %d", len(list))
 	}
 	names := map[string]bool{}
 	for _, raw := range list {
@@ -157,7 +157,7 @@ func TestToolsListIsSnakeCaseAndHidesStatusSet(t *testing.T) {
 			t.Errorf("%s 缺 description 或 inputSchema", name)
 		}
 	}
-	for _, want := range []string{"vault_list", "doc_read", "doc_write", "vault_search", "link_backlinks", "link_resolve", "table_infos", "table_query"} {
+	for _, want := range []string{"vault_list", "doc_read", "doc_write", "vault_search", "link_backlinks", "link_resolve", "file_read", "table_infos", "table_query"} {
 		if !names[want] {
 			t.Errorf("少了工具 %s", want)
 		}

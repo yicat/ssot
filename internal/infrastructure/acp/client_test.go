@@ -246,6 +246,19 @@ func TestHandshakeAndSession(t *testing.T) {
 	if first["name"] != "ssot" || first["command"] != "C:\\bin\\ssot.exe" {
 		t.Errorf("MCP 条目不对：%v", first)
 	}
+	// ⚠️ 这两条是回归断言：`args` 与 `env` **必须显式在**（空数组也要给）。
+	// 实测省略 `env` 时 session/new 仍然成功，但服务器**根本不会被拉起**——静默不挂载，
+	// agent 手上就一个 ssot 工具都没有（踩过；表现是「agent 不好用」，极难查）。
+	if _, ok := first["args"]; !ok {
+		t.Error("mcpServers 条目缺 args（后端要求显式给，空数组也算）")
+	}
+	env, ok := first["env"]
+	if !ok {
+		t.Fatal("mcpServers 条目缺 env——省略它会让 MCP 服务器静默不挂载")
+	}
+	if _, isArr := env.([]any); !isArr {
+		t.Errorf("env 该是数组（哪怕是空的），实际 %T=%v", env, env)
+	}
 
 	list, err := c.ListSessions(ctx, "C:\\vault")
 	if err != nil {

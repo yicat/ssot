@@ -19,7 +19,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ngnl5/ssot/internal/application/vaultapp"
 	"github.com/ngnl5/ssot/internal/domain/vault"
@@ -155,8 +158,13 @@ func (s *Server) handle(req request) (response, bool) {
 	case "initialize":
 		var p struct {
 			ProtocolVersion string `json:"protocolVersion"`
+			ClientInfo      struct {
+				Name    string `json:"name"`
+				Version string `json:"version"`
+			} `json:"clientInfo"`
 		}
 		_ = json.Unmarshal(req.Params, &p)
+		s.logf("initialize 客户端=%s %s 协议=%s", p.ClientInfo.Name, p.ClientInfo.Version, p.ProtocolVersion)
 		v := ProtocolVersion
 		if supportedProtocols[p.ProtocolVersion] {
 			v = p.ProtocolVersion // 客户端要的版本我们认，就照它来
@@ -172,12 +180,45 @@ func (s *Server) handle(req request) (response, bool) {
 	case "ping":
 		return reply(map[string]any{})
 	case "tools/list":
+		// 留痕：客户端来取工具清单，说明它真的把我们挂上了——
+		// 「agent 手上到底有没有这些工具」只能从这里看出来（ACP 不暴露工具清单）。
+		s.logf("tools/list 被调用，返回 %d 个工具", len(tools))
 		return reply(map[string]any{"tools": toolList()})
 	case "tools/call":
 		return s.callTool(req, notification)
 	default:
 		return fail(codeMethodNotFound, fmt.Sprintf("不认识的方法 %q（本服务只提供 tools/list 与 tools/call）", req.Method))
 	}
+}
+
+// logf 记一行诊断。
+//
+// 为什么要有：MCP 这条链上没有别的地方能看出「客户端到底连上了没、取没取工具清单」——
+// ACP 协议不暴露工具清单，harness 的日志里也没有 MCP 客户端的注册记录。
+// 所以服务端自己留痕：写 stderr（能进 harness 日志），同时落到
+// `<用户配置目录>/ssot/mcp.log`（事后也能翻）。**stdout 绝不能碰**——那是协议流。
+//
+// 诊断而已，任何失败都不影响服务本身。
+func (s *Server) logf(format string, args ...any) {
+	line := fmt.Sprintf(format, args...)
+	fmt.Fprintf(os.Stderr, "[ssot-mcp] %s\n", line)
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return
+	}
+	path := filepath.Join(dir, "ssot", "mcp.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	if fi, err := os.Stat(path); err == nil && fi.Size() > 1<<20 {
+		_ = os.Remove(path)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05"), line)
 }
 
 // instructions 是给模型的短说明。

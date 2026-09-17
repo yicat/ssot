@@ -22,11 +22,15 @@ type Props = {
 export function AgentPane({ onOpenSettings }: Props) {
   const a = useAgent();
 
-  // 打开面板就把状态拉一次：可能后端早就起着（切走再切回来不该显示成「没起」）。
+  // 打开面板就把状态拉一次：后端可能早就起着，切走再切回来不该显示成「没起」。
+  //
+  // ⚠️ 这里**不能**加 `if (a.vault)` 这类条件：`vault` 本身就是从 Status 拿的，
+  // 首次挂载时它还是空字符串，条件不成立 → 根本不查 → 界面一直显示「后端未启动」，
+  // 而后端其实在跑（踩过：切走再切回来、或页面 reload 之后就是这样）。
   useEffect(() => {
-    if (a.vault && !a.running) void a.refresh();
+    void a.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [a.vault]);
+  }, []);
 
   const canSend = a.running && !a.busy && a.draft.trim().length > 0;
 

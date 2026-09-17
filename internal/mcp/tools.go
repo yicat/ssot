@@ -207,6 +207,37 @@ var tools = []tool{
 		},
 	},
 	{
+		name: "file_read", title: "只读地读 vault 里的文本文件", readOnly: true,
+		description: "读 vault 里任意**文本**文件（原文、JSON 导出、project.yml、数据表说明…），可按行分页。只读：写文件不在这里——写文档走 doc_write，写表走专门的数据表工具。",
+		schema: obj(map[string]any{
+			"path":     str2("vault 内的相对路径，如 raw/_原始导出/Data_Character.json"),
+			"fromLine": int2("从第几行开始（默认 1）"),
+			"maxLines": int2("最多读几行（默认 400，上限 2000）"),
+		}, "path"),
+		run: func(s *Server, a args) (any, error) {
+			p, err := a.str("path")
+			if err != nil {
+				return nil, err
+			}
+			from, err := a.num("fromLine", 1)
+			if err != nil {
+				return nil, err
+			}
+			max, err := a.num("maxLines", 400)
+			if err != nil {
+				return nil, err
+			}
+			fs, err := s.svc.ReadFile(p, from, max)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"path": fs.Path, "text": fs.Text,
+				"fromLine": fs.FromLine, "toLine": fs.ToLine, "totalLines": fs.TotalLines,
+				"truncated": fs.Truncated,
+			}, nil
+		},
+	}, {
 		name: "table_infos", title: "有哪些数据表", readOnly: true,
 		description: "列出数据表：查询用的表名、文件路径、格式、行数与列名。要写 SQL 之前先看它。",
 		schema:      obj(map[string]any{}),

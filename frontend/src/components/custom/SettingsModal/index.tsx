@@ -169,6 +169,8 @@ export function SettingsModal({ open, onClose }: Props) {
           <div className="flex items-center gap-3 border-t border-border pt-3 text-[11px] text-muted-foreground">
             <span className="min-w-0 truncate" title={view?.settingsPath}>
               设置文件：<code>{view?.settingsPath}</code>
+              {" · "}日志：<code title={view?.harnessLog}>harness.log</code>
+              {" / "}<code title={view?.mcpLog}>mcp.log</code>
             </span>
             <button
               type="button"
@@ -192,4 +194,5 @@ export function SettingsModal({ open, onClose }: Props) {
     </div>
   );
 }
+
 

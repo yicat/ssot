@@ -10,7 +10,7 @@ export {
     VaultService
 };
 
-export type {
+export {
     AgentCheckItem,
     AgentModelOption,
     AgentSessionRef,
