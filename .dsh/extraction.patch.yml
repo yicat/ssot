@@ -1,0 +1,14 @@
+# 抽取任务用：**关掉推理**（省 token 的那一档）。
+#
+# 依据：DeepSeek 适配器只接受 reasoningEffort ∈ {off, low, high, max}，而 `off` 在协议上
+# 落成 `thinking: disabled`（见 dsh-llm-deepseek 的 reasoningEffort() 与 resolve 处）。
+# 实测（docs/notes/extraction-spike.md）：开着推理做 3 篇抽取，输出 13,327 token，
+# 其中大头是 reasoning；关掉之后要重测一遍，看 token 与质量的取舍。
+#
+# 用法（可与 .dsh/mcp.patch.yml 一起叠加，--patch 可重复）：
+#   dsh --profile headless --patch .dsh\mcp.patch.yml --patch .dsh\extraction.patch.yml "<任务>"
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-flash
+    reasoningEffort: off
