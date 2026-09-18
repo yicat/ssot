@@ -3,7 +3,7 @@
 > 这份文件的**唯一职责**是让「进度」不再靠翻对话。规范在 `docs/specs/`，方案在 `docs/plans/`，
 > 决策在 `docs/adr/`，问题在 `docs/OPEN.md`。**每次收尾（见 ADR 0013）都更新这里。**
 
-**上次整理：2026-09-18（P2 完成：**打包顺序**是 17.6pp 的元凶，修完基线复现、验收达标）**
+**上次整理：2026-09-18（P2 完成；P3 开工：抽取内核落地并测过，接线待做）**
 
 ## 整理台账
 
@@ -15,6 +15,7 @@
 | 2026-09-18 | P1 主体完成 | 自研 WordPiece 分词 + ONNX 推理 + `embedding` 表 + 暴力扫；对拍逐条一致；量出两个坑（落盘放大 2.29×、每查一次读 25MB → P2 必须缓存向量） | `embedding-spike.md` §六.6、`OPEN.md` #17–19 |
 | 2026-09-18 | P2 第一轮 | 混合检索（内存 Searcher + 标题项融合）落地；**验收未达标**：Go 纯向量 48.3% 低于 JS 65.9%（嵌入已排除，嫌疑在块边界） | `embedding-spike.md` §六.7、`OPEN.md` #19–22 |
 | 2026-09-18 | P2 第二轮（收口） | **找到并修掉元凶：切块的打包顺序**（长段的句子被摊平后与相邻段拼块）。改「段内先打包」后纯向量 **61.6%/80.1%**，head/mid/tail 与 spike 表逐字相同 → 基线复现、验收达标（实体名式 R@1 +3.0pp） | `embedding-spike.md` §六.8、`chunk.go`、`derived.spec.md` |
+| 2026-09-18 | P3 第一轮 | 抽取**内核**落地：提示词（LightRAG 结构 + doc/行号要求）+ 回包解析（能从噪声/围栏里挑 JSON）+ 块级溯源校验（越界丢、缺行号退回区间并记说明、悬空关系丢）+ 补抽轮；7 条测试**不花钱**跑通。接线（谁跑调用）撞上 Windows 命令行长度上限 → 计划走 ACP | `vextract/`、`extraction-spike.md`「命令行长度」、`OPEN.md` #23/#24 |
 
 ## 现在在哪
 
@@ -39,13 +40,23 @@
   + 顺带修掉切块打包顺序（`chunk.go`）——它让 R@1 少了 13.3pp（`OPEN.md` #20）
 
 **进行中**
-- 无（P2 已收口；P3 未开工）
+- **P3 第一轮：抽取内核已落地并测过，接线与跑批未做**
+  - ✅ `internal/infrastructure/vextract`：多块合一次调用的提示词（LightRAG 结构 + 我们的
+    doc/行号要求 + 9 类词表）+ 回包解析（能从推理痕迹/围栏里挑出 JSON）+ **块级溯源校验**
+    （行号越界或 doc 不在这批 → 丢掉并记原因；缺行号 → 退回块区间并留说明；悬空关系丢掉）
+    + 补抽轮（LightRAG 的 gleaning，默认 1 轮、可关）+ 7 条测试（**不花钱**，用假 Completer）
+  - ❌ 未做：**谁跑这次调用**（`Completer` 的实现）+ entity/relation 表与写入口 + CLI + 3 篇小批验证
+  - 🧱 撞上的墙：`dsh` headless 把任务文本当**命令行参数**，Windows 上限 32,767 字符 →
+    一次只放得下 5～6 块，与「必须多块合一次」冲突 → **计划改走 ACP**（`OPEN.md` #23）
 
 **下一步**
-1. **P3**：抽取（`vextract`）→ 需先解 `docs/OPEN.md` 的 3 个阻塞项（纠正块语法、抽取触发方式、`agent.spec` 工具清单）
-2. P2 尾巴（不挡 P3）：实体名式查询只 +3.0pp（n=102），要更硬得靠 P4 图检索；真人问法的查询集（正文项才有意义，`OPEN.md` #22）
-3. P4：图检索并入（local/global/hybrid/mix）
-4. P5：增量与索引状态接到界面
+1. **P3 第二**：给 `Completer` 写 ACP 实现（协议传提示词，没有命令行长度问题）→ 灌块跑 3 篇小批，
+   复现 run3 的量级并**重测固定开销**（headless 的数不能直接当 ACP 的）
+2. **P3 第三**：`entity` / `relation` 表 + 写入口（按 (name,type) / (src,dst,keywords) 归并、
+   每条来源各占一行、不丢出处）→ 再跑 20 篇看质量（`OPEN.md` #24）
+3. **P3 尾巴**：触发方式等三个阻塞项（`OPEN.md` #1–3）拍板后，再把抽取接到界面/后台
+4. P4：图检索并入（local/global/hybrid/mix）
+5. P5：增量与索引状态接到界面
 
 ## 卡在哪
 
@@ -61,6 +72,7 @@
 
 ```
 go vet ./...                           clean
+go test ./...                          ok（vembed 对拍 3 条、vaultindex 7 条、domain 规则 2 条、vextract 7 条）
 go test ./...                          ok（vembed：算法 1 条 + 对拍 2 条（分词 12 例、向量 12 条）；vaultindex：块 4 条 + 向量 3 条）
 SSOT_EMBED_DIR=%TEMP%\embed-spike go test ./internal/infrastructure/vembed/
                                         对拍 12 条：最小余弦 1.0000000，最大分量差 5.96e-08
