@@ -121,6 +121,14 @@ func extractionACP(vaultRoot string) (vextract.ACPOptions, error) {
 	}
 
 	args := agent.Args()
+	// 允许用环境变量换 profile（成本排查用：ssot-agent 与 headless 的固定开销不一样）。
+	if prof := os.Getenv("SSOT_EXTRACT_PROFILE"); prof != "" {
+		for i, a := range args {
+			if a == "--profile" && i+1 < len(args) {
+				args[i+1] = prof
+			}
+		}
+	}
 	patch, ok := findExtractionPatch()
 	if ok {
 		// 放在 launcher 旗标那一段（`--profile X` 之后都还算 launcher 的旗标）。

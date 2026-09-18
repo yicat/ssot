@@ -44,6 +44,13 @@ func TestBuildPromptCarriesDocAndLineRange(t *testing.T) {
 			t.Errorf("提示词里该有 %q", want)
 		}
 	}
+	// 实测踩过的坏例必须写进提示词（否则模型还会把文件名/命令示例当实体）。
+	for _, want := range []string{"文件名、表名、路径", "命令与用法示例", "增益减益.csv", "ssot vault",
+		"Other 太多等于没分类"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("提示词里该有防坏例的一条：%q", want)
+		}
+	}
 	if strings.Count(p, "--- 块 ") != 2 {
 		t.Errorf("两块该有两个块头：\n%s", p)
 	}

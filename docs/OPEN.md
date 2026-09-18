@@ -28,7 +28,7 @@
 | 22 | 正文项（β_body）在「原文整句」查询上是**评测假象**（98.3% 只是「句子在不在块里」）；真人问法下它变差。要用它必须先有一组**真人问法**的查询集 | 待定 | P2/P4 评测 | `embedding-spike.md` §六.7 |
 | 23 | ~~抽取的模型调用走哪条路~~ → **已解决（P3 实测）**：走 ACP 已跑通（`ssot vault extract`，后端 `deepseek-harness-acp`，0 权限提示，提示词走协议、不受命令行长度限制）。为什么不能走 headless one-shot：任务文本是命令行参数，撞 Windows 32,767 字符上限，一次只放得下 5～6 块 | 已解决 | — | `extraction-spike.md`「命令行长度」 |
 | 24 | 抽取的**提示词与实体类型词表没定稿**（spec §六.4）：现在有一版起点（LightRAG 结构 + 我们的 doc/行号要求 + 9 类词表），要用跑批产出与坏例来调。**已有证据（3 篇真跑）**：`Other` 最多（26/92 行），还有把表名（`增益减益.csv`）当实体、把命令示例（`ssot vault`）当关系端点的——提示词要明确「不要文件名/命令示例」 | 待定 | P3 质量 | `internal/infrastructure/vextract/prompt.go`、`extraction-spike.md`「P3 第三轮」 |
-| 25 | **抽取每次调用的固定开销 ≈13k token**（实测：2 块一次就用 13～15k，8 块一次 21.2k），比 spike 里 headless 的（工具 5,220 + system 1,174）高一倍多，原因未查。**先别拿 spike 的 3.2M 外推当承诺**；下一步试 `headless` profile / 关掉多余插件对比 | 待定 | P3 成本 | `extraction-spike.md`「P3 生产实测」 |
+| 25 | **抽取每次调用的固定开销 ≈13k token**（实测：2 块一次就用 13～15k，8 块一次 21.2k），比 spike 里 headless 的（工具 5,220 + system 1,174）高一倍多，原因未查。**先别拿 spike 的 3.2M 外推当承诺**；下一步：试**另一个能挂 ACP 的 profile**（`headless` 不行——它是一次性任务 profile，握手就关）或直接数配置里的工具定义 | 待定 | P3 成本 | `extraction-spike.md`「P3 生产实测」 |
 
 ## 怎么用这份清单
 
