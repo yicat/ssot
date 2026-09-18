@@ -1,0 +1,71 @@
+// 抽取的用例编排：取块 → 分批 → 调模型 → 拿回带块级溯源的产物。
+//
+// 现在这一版**只取块与分批**，把「调用」留给调用方（CLI 先验，入库下一步做）：
+//   - 入库要等 entity/relation 表与合并规则落地（plan §3、spec §九.2）；
+//   - 触发方式还没拍板（OPEN.md #2），所以这里不排队、不后台，只按显式参数取一批。
+package vaultapp
+
+import (
+	"fmt"
+
+	"github.com/ngnl5/ssot/internal/infrastructure/vaultindex"
+	"github.com/ngnl5/ssot/internal/infrastructure/vextract"
+)
+
+// ExtractBatch 是默认每批多少块（**多块合一次调用**，spec §三.1）。
+//
+// 为什么是 8：ACP 这条路上没有命令行长度限制，所以上限由**一次调用的输出**决定
+// （一批太大，模型漏项与 JSON 截断的风险都上升）。8 块 ≈ 16k token 上下文，
+// 先拿这个数跑批，用实测的漏项/坏行号再调——别把它当定稿。
+const ExtractBatch = 8
+
+// ExtractChunksForDocs 取前 docs 篇（按路径排序）的**抽取块**（2000 口径），并按 batch 分批。
+//
+// batch<=0 用 ExtractBatch；docs<=0 表示全部。
+func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, error) {
+	if err := s.ensureIndex(); err != nil {
+		return nil, err
+	}
+	all, err := s.index.AllChunks(vaultindex.KindExtract)
+	if err != nil {
+		return nil, err
+	}
+	if len(all) == 0 {
+		return nil, fmt.Errorf("索引里没有抽取块：先跑 `ssot vault index`")
+	}
+
+	// 按顺序取前 docs 篇（AllChunks 已按 doc, ord 排序）。
+	limitDocs := docs
+	if limitDocs <= 0 {
+		limitDocs = 1 << 30
+	}
+	seen := map[string]bool{}
+	var picked []vextract.Chunk
+	for _, c := range all {
+		if !seen[c.Doc] {
+			if len(seen) >= limitDocs {
+				continue
+			}
+			seen[c.Doc] = true
+		}
+		picked = append(picked, vextract.Chunk{
+			Doc: c.Doc, Ord: c.Ord, FromLine: c.FromLine, ToLine: c.ToLine, Text: c.Text,
+		})
+	}
+	if len(picked) == 0 {
+		return nil, fmt.Errorf("没取到块")
+	}
+
+	if batch <= 0 {
+		batch = ExtractBatch
+	}
+	var out [][]vextract.Chunk
+	for i := 0; i < len(picked); i += batch {
+		end := i + batch
+		if end > len(picked) {
+			end = len(picked)
+		}
+		out = append(out, picked[i:end])
+	}
+	return out, nil
+}

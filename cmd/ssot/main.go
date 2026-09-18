@@ -129,6 +129,8 @@ func runVault(args []string) error {
 		return vaultVector(svc, rest, f.limit)
 	case "find":
 		return vaultFind(svc, rest, f.limit, f.beta, f.betaSet)
+	case "extract":
+		return vaultExtract(svc, f)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -143,6 +145,11 @@ type vaultFlags struct {
 	// beta 是混合检索里字面项的权重（-beta 0 就是纯向量）。负数表示「用默认值」。
 	beta    float64
 	betaSet bool
+	// 抽取（vault extract）用的三个：取几篇、每批几块、补抽几轮；out 是结果落盘的位置。
+	docs     int
+	batch    int
+	gleaning int
+	out      string
 }
 
 // splitCommand 手写解析：选项放在子命令**前后都行**。
@@ -206,8 +213,36 @@ func splitCommand(args []string) (cmd string, positional []string, f vaultFlags,
 				return "", nil, f, err
 			}
 			f.betaSet = true
+		case a == "-docs" || a == "--docs":
+			v, verr := takeValue(a)
+			if verr != nil {
+				return "", nil, f, verr
+			}
+			if f.docs, err = strconv.Atoi(v); err != nil || f.docs < 0 {
+				return "", nil, f, fmt.Errorf("-docs 要一个非负整数，收到 %q", v)
+			}
+		case a == "-batch" || a == "--batch":
+			v, verr := takeValue(a)
+			if verr != nil {
+				return "", nil, f, verr
+			}
+			if f.batch, err = strconv.Atoi(v); err != nil || f.batch <= 0 {
+				return "", nil, f, fmt.Errorf("-batch 要一个正整数，收到 %q", v)
+			}
+		case a == "-gleaning" || a == "--gleaning":
+			v, verr := takeValue(a)
+			if verr != nil {
+				return "", nil, f, verr
+			}
+			if f.gleaning, err = strconv.Atoi(v); err != nil || f.gleaning < 0 {
+				return "", nil, f, fmt.Errorf("-gleaning 要一个非负整数（0 = 不补抽），收到 %q", v)
+			}
+		case a == "-out" || a == "--out":
+			if f.out, err = takeValue(a); err != nil {
+				return "", nil, f, err
+			}
 		case strings.HasPrefix(a, "-"):
-			return "", nil, f, fmt.Errorf("不认识的选项 %q（只认 -root / -actor / -limit / -beta）", a)
+			return "", nil, f, fmt.Errorf("不认识的选项 %q（只认 -root / -actor / -limit / -beta / -docs / -batch / -gleaning / -out）", a)
 		default:
 			if cmd == "" {
 				cmd = a
@@ -699,6 +734,9 @@ vault 子命令（写）：
   index                                      重建派生索引（.data/index.db，删了能重建）
   embed [-limit <n>]                         把还没嵌入的块嵌入（分批写回；中断了能接着跑）
   vector <词>                                向量检索（需要模型目录；-limit 控制条数）
+  find <词>                                  混合检索（向量 + 标题/标签字面项；-beta 调权重）
+  extract [-docs <n>] [-batch <n>]           抽取实体/关系（多块合一次调用；-gleaning 补抽轮数，默认 1）
+          [-gleaning <n>] [-out <文件>]        ⚠️ 现在只验证不入库，产物打到屏幕或 JSON
 
 示例：
   ssot vault -root projects/demo list
