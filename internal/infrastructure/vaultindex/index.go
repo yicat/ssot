@@ -52,7 +52,7 @@ func (idx *Index) Exists() bool {
 //
 // 为什么要它：索引是派生的，所以「结构变了」的正确反应是**自动重建**，
 // 而不是让人撞上 `no such table: embedding` 这种看不懂的错。
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // Ready 报告索引存在**且结构版本对得上**（对不上就该重建）。
 func (idx *Index) Ready() bool {
@@ -103,6 +103,20 @@ CREATE TABLE embedding(
   owner_kind TEXT, owner_id TEXT, dim INTEGER, vec BLOB,
   PRIMARY KEY(owner_kind, owner_id)
 ) WITHOUT ROWID;
+-- 抽取产物（见 docs/plans/derived-layer.md §3）：**每条来源各占一行**，归并只合条目、不丢出处。
+-- 主键就是「来源」，所以重复跑抽取不会把图越写越肿（幂等）。
+CREATE TABLE entity(
+  name TEXT, type TEXT, description TEXT, authority TEXT,
+  doc TEXT, from_line INTEGER, to_line INTEGER, line INTEGER,
+  PRIMARY KEY(name, type, doc, from_line, to_line, line)
+) WITHOUT ROWID;
+CREATE INDEX entity_name ON entity(name, type);
+CREATE TABLE relation(
+  src TEXT, dst TEXT, keywords TEXT, description TEXT, authority TEXT,
+  doc TEXT, from_line INTEGER, to_line INTEGER, line INTEGER,
+  PRIMARY KEY(src, dst, keywords, doc, from_line, to_line, line)
+) WITHOUT ROWID;
+CREATE INDEX relation_endpoints ON relation(src, dst);
 `
 
 // Rebuild 从文件重建整份索引（先删后建，保证不会留下上一次的残渣）。

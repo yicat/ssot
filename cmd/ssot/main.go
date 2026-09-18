@@ -150,6 +150,7 @@ type vaultFlags struct {
 	batch    int
 	gleaning int
 	out      string
+	store    bool
 }
 
 // splitCommand 手写解析：选项放在子命令**前后都行**。
@@ -237,6 +238,8 @@ func splitCommand(args []string) (cmd string, positional []string, f vaultFlags,
 			if f.gleaning, err = strconv.Atoi(v); err != nil || f.gleaning < 0 {
 				return "", nil, f, fmt.Errorf("-gleaning 要一个非负整数（0 = 不补抽），收到 %q", v)
 			}
+		case a == "-store" || a == "--store":
+			f.store = true
 		case a == "-out" || a == "--out":
 			if f.out, err = takeValue(a); err != nil {
 				return "", nil, f, err
