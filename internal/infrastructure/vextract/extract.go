@@ -158,6 +158,11 @@ func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, seenEnt, seenRel 
 			out.Dropped = append(out.Dropped, Drop{Kind: "entity", Name: name, Reason: fmt.Sprintf("doc=%q 不在这批块里", e.Doc)})
 			continue
 		}
+		// 确定性过滤：文件名/路径/占位符/命令名/纯数字一律丢掉（理由见 filter.go 的包注释）。
+		if noise, why := LooksLikeNoise(name); noise {
+			out.Dropped = append(out.Dropped, Drop{Kind: "entity", Name: name, Reason: why})
+			continue
+		}
 		key := name + "\x00" + strings.TrimSpace(e.Type)
 		known[name] = true
 		if seenEnt[key] {
@@ -290,8 +295,10 @@ type rawRelation struct {
 // ParseResponse 从模型回包里挑出 JSON 并解析。
 //
 // 为什么不能直接 Unmarshal：回包可能夹着推理痕迹、```json 围栏、解释性文字（实测见过
-// `dsh: reasoning:` 那种）。所以先找**第一个 `{` 到最后一个 `}`**，再解析；
-// 围栏 ```json 也一并剥掉。解析失败的报错要带**回包开头**，否则排查时只能干瞪眼。
+// `dsh: reasoning:` 那种），**而且模型可能把答案拆成两个 JSON 对象连着吐出来**——
+// 20 篇跑批第 34 批就是这么挂的：`invalid character '{' after top-level value`。
+// 所以这里扫出**所有括号配平的 JSON 对象**，逐个解析后合并。
+// 解析失败的报错要带**回包开头**，否则排查时只能干瞪眼。
 func ParseResponse(text string) (rawExtraction, error) {
 	var out rawExtraction
 	s := strings.TrimSpace(text)
@@ -305,17 +312,62 @@ func ParseResponse(text string) (rawExtraction, error) {
 		}
 		s = strings.TrimPrefix(strings.TrimSpace(s), "json")
 	}
-	start := strings.Index(s, "{")
-	end := strings.LastIndex(s, "}")
-	if start < 0 || end <= start {
+	objs := balancedObjects(s)
+	if len(objs) == 0 {
 		return out, fmt.Errorf("回包里找不到 JSON 对象（开头 %q）", head(text, 120))
 	}
-	if err := json.Unmarshal([]byte(s[start:end+1]), &out); err != nil {
-		return out, fmt.Errorf("JSON 解析失败：%w（开头 %q）", err, head(text, 120))
+	var firstErr error
+	parsed := 0
+	for _, o := range objs {
+		var one rawExtraction
+		if err := json.Unmarshal([]byte(o), &one); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		out.Entities = append(out.Entities, one.Entities...)
+		out.Relations = append(out.Relations, one.Relations...)
+		parsed++
+	}
+	if parsed == 0 {
+		return rawExtraction{}, fmt.Errorf("JSON 解析失败：%w（开头 %q）", firstErr, head(text, 120))
 	}
 	return out, nil
 }
 
+// balancedObjects 扫出所有「大括号配平」的 JSON 对象（照顾字符串里的括号与转义）。
+func balancedObjects(s string) []string {
+	var out []string
+	depth, start := 0, -1
+	inStr, esc := false, false
+	for i, r := range s {
+		switch {
+		case esc:
+			esc = false
+		case r == '\\' && inStr:
+			esc = true
+		case r == '"':
+			inStr = !inStr
+		case inStr:
+			// 字符串里的括号不算结构
+		case r == '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case r == '}':
+			if depth > 0 {
+				depth--
+				if depth == 0 && start >= 0 {
+					out = append(out, s[start:i+1])
+					start = -1
+				}
+			}
+		}
+	}
+	return out
+}
 func head(s string, n int) string {
 	r := []rune(strings.TrimSpace(s))
 	if len(r) <= n {

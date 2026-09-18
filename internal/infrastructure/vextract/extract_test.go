@@ -76,6 +76,16 @@ func TestParseResponseToleratesNoiseAndFences(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "开头") {
 		t.Errorf("报错要带回包开头，便于排查：%v", err)
 	}
+	// 实测踩过：模型把答案拆成两个 JSON 对象连着吐（20 篇跑批第 34 批挂在这）。
+	two := `{"entities":[{"name":"甲","type":"式神","doc":"d","line":1}]}` +
+		`{"entities":[{"name":"乙","type":"技能","doc":"d","line":1}],"relations":[]}`
+	merged, err := ParseResponse(two)
+	if err != nil {
+		t.Fatalf("连着两个 JSON 对象该能解析：%v", err)
+	}
+	if len(merged.Entities) != 2 {
+		t.Errorf("两个对象该合并成 2 个实体：%+v", merged.Entities)
+	}
 	if _, err := ParseResponse("   "); err == nil {
 		t.Error("空回包该报错")
 	}
@@ -192,6 +202,52 @@ func TestExtractErrors(t *testing.T) {
 		t.Error("调用失败该往上抛")
 	} else if !strings.Contains(err.Error(), "模型挂了") {
 		t.Errorf("错误里该保留底层原因：%v", err)
+	}
+}
+
+func TestLooksLikeNoise(t *testing.T) {
+	noise := []string{
+		"增益减益.csv", "docs/式神/<名字>.md", "raw/式神/茨木.md", "tables/式神技能.csv",
+		"ssot vault", "dsh --profile headless", "mcp__ssot__file_read",
+		"2026", "1.2", "无", "待定", "N/A", "https://yys.huijiwiki.com/wiki/x", "",
+	}
+	for _, n := range noise {
+		if ok, why := LooksLikeNoise(n); !ok {
+			t.Errorf("%q 该被判成噪声（原因：%s）", n, why)
+		}
+	}
+	// 真正的实体名一个都不能误伤。
+	keep := []string{"茨木童子", "罗生门", "伤害计算", "狐影戏法", "平安京", "SR", "263%"}
+	for _, n := range keep {
+		if ok, why := LooksLikeNoise(n); ok {
+			t.Errorf("%q 不该被判成噪声：%s", n, why)
+		}
+	}
+}
+
+// TestExtractDropsNoisyNames 是这一轮的验收：坏例在**代码里**被拦住并记下原因。
+func TestExtractDropsNoisyNames(t *testing.T) {
+	f := &fakeCompleter{replies: []string{`{"entities":[
+	  {"name":"茨木童子","type":"式神","description":"正常实体","doc":"raw/式神/茨木.md","line":11},
+	  {"name":"docs/式神/<名字>.md","type":"物品","description":"文件路径","doc":"raw/式神/茨木.md","line":11},
+	  {"name":"ssot vault","type":"Other","description":"命令示例","doc":"raw/式神/茨木.md","line":11},
+	  {"name":"2026","type":"数值","description":"年份","doc":"raw/式神/茨木.md","line":11},
+	  {"name":"无","type":"Other","description":"空占位","doc":"raw/式神/茨木.md","line":11}
+	],"relations":[]}`}}
+	res, err := Extract(context.Background(), f, testChunks(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Entities) != 1 || res.Entities[0].Name != "茨木童子" {
+		t.Fatalf("只该留下真实体：%+v", res.Entities)
+	}
+	if len(res.Dropped) != 4 {
+		t.Fatalf("4 条噪声该被丢掉并记原因：%+v", res.Dropped)
+	}
+	for _, d := range res.Dropped {
+		if d.Reason == "" || d.Kind != "entity" {
+			t.Errorf("丢掉的原因要写清楚：%+v", d)
+		}
 	}
 }
 
