@@ -49,6 +49,19 @@ func (a args) num(name string, def int) (int, error) {
 	return n, nil
 }
 
+// strs 取可选的字符串数组参数（缺省为空）。
+func (a args) strs(name string) ([]string, error) {
+	raw, ok := a[name]
+	if !ok {
+		return nil, nil
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("参数 %q 要是字符串数组：%v", name, err)
+	}
+	return out, nil
+}
+
 // ── 入参 schema 的小工具：手写 JSON Schema 字面量太吵，包一层 ──────────────
 
 func obj(props map[string]any, required ...string) map[string]any {
@@ -57,6 +70,10 @@ func obj(props map[string]any, required ...string) map[string]any {
 		m["required"] = required
 	}
 	return m
+}
+
+func strArr2(desc string) map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": desc}
 }
 
 func str2(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
@@ -127,6 +144,99 @@ var tools = []tool{
 		},
 	},
 	{
+		name: "scope_show", title: "看收录范围与派生层一致性", readOnly: true,
+		description: "读当前项目的收录范围声明（哪些内容不进派生层、实体类型词表、要忽略的名字形状），" +
+			"并报告派生层与它的一致性（越界的、该收没收的各有多少）。想建议改范围先用它看现状。",
+		schema: obj(map[string]any{}),
+		run: func(s *Server, a args) (any, error) {
+			view, err := s.svc.Scope()
+			if err != nil {
+				return nil, err
+			}
+			chk, err := s.svc.ScopeCheck()
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"summary":              view.Summary(),
+				"declaration":          string(view.Effective.Raw),
+				"path":                 view.Effective.Path,
+				"exists":               view.Effective.Exists,
+				"entity_types":         view.Effective.Extract.EntityTypes,
+				"ignore_name_patterns": view.Effective.Extract.IgnoreNamePatterns,
+				"has_proposal":         view.Proposal.Exists,
+				"docs_total":           chk.Total,
+				"docs_in_scope":        chk.InScope,
+				"out_of_scope":         len(chk.OutOfScope),
+				"missing":              len(chk.Missing),
+			}, nil
+		},
+	},
+	{
+		name: "scope_propose", title: "建议收录范围（不生效）",
+		description: "写一份**建议**的收录范围（哪些路径/标签不进派生层、实体类型词表、要忽略的名字形状），" +
+			"带一句理由。**建议不生效**——只有人用 `ssot vault scope set` 确认后才生效。" +
+			"先跑 vault stat 拿到可统计的事实（各目录的篇数/体量/被引用），再据此提建议，别凭目录名猜。",
+		schema: obj(map[string]any{
+			"reason":               str2("为什么这么建议（一句话，会写进建议文件）"),
+			"exclude_paths":        strArr2("不进派生层的路径 glob（如 raw/子目录/**）"),
+			"exclude_tags":         strArr2("不进派生层的 front matter 标签"),
+			"include_paths":        strArr2("例外：命中就收回（覆盖 exclude）"),
+			"entity_types":         strArr2("实体类型词表（这个项目的术语）"),
+			"ignore_name_patterns": strArr2("抽取时要忽略的名字形状 glob（如 *.* 、*/*）"),
+			"empty_words":          strArr2("空占位词（如 无、待定）"),
+			"examples":             strArr2("提示词里的反例（可选）"),
+		}, "reason"),
+		run: func(s *Server, a args) (any, error) {
+			reason, err := a.str("reason")
+			if err != nil {
+				return nil, err
+			}
+			exPaths, err := a.strs("exclude_paths")
+			if err != nil {
+				return nil, err
+			}
+			exTags, err := a.strs("exclude_tags")
+			if err != nil {
+				return nil, err
+			}
+			inPaths, err := a.strs("include_paths")
+			if err != nil {
+				return nil, err
+			}
+			types, err := a.strs("entity_types")
+			if err != nil {
+				return nil, err
+			}
+			pats, err := a.strs("ignore_name_patterns")
+			if err != nil {
+				return nil, err
+			}
+			words, err := a.strs("empty_words")
+			if err != nil {
+				return nil, err
+			}
+			examples, err := a.strs("examples")
+			if err != nil {
+				return nil, err
+			}
+			sc := vault.DerivedScope{
+				Exclude: vault.ScopeRule{Paths: exPaths, Tags: exTags},
+				Include: vault.ScopeRule{Paths: inPaths},
+			}
+			ex := vault.ExtractConfig{
+				EntityTypes: types, IgnoreNamePatterns: pats, EmptyWords: words, Examples: examples,
+			}
+			path, err := s.svc.ProposeScope(sc, ex, reason)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"proposal_path": path, "effective": false,
+				"note": "建议已写下但**不生效**；人确认：ssot vault scope set -actor human:名字",
+			}, nil
+		},
+	}, {
 		name: "doc_delete", title: "删除文档（连带清派生层）",
 		description: "删除一篇文档，并清掉派生层里属于它的块/向量/实体/关系。" +
 			"path 支持 glob（例如 raw/子目录/**）用于批量删除；先给 dry=1 只报影响（删几篇、清几行、会造成几条断链），" +
