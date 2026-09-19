@@ -584,6 +584,18 @@ func firstLine(s string, max int) string {
 	return string(r)
 }
 
+// searchSummary 是检索结果给人看的那两行：命中多少篇、返回多少条、还差多少。
+//
+// 抽成函数是为了**能测**——人看到的那句话不该靠手跑一次来确认（#33 就是这么翻的车：
+// 拿一次手动输出当结论）。返回的字符串自带换行，调用方直接 Print。
+func searchSummary(total, returned int) string {
+	if total <= returned {
+		return fmt.Sprintf("命中 %d 篇，返回 %d 条\n", total, returned)
+	}
+	return fmt.Sprintf("命中 %d 篇，返回 %d 条\n（还有 %d 篇没显示：用 -limit 调大）\n",
+		total, returned, total-returned)
+}
+
 func vaultSearch(svc *vaultapp.Service, args []string, limit int) error {
 	if len(args) == 0 {
 		return fmt.Errorf("search 后面要跟搜索词")
@@ -602,10 +614,7 @@ func vaultSearch(svc *vaultapp.Service, args []string, limit int) error {
 		fmt.Printf("没有命中「%s」\n", q)
 		return nil
 	}
-	fmt.Printf("命中 %d 篇，返回 %d 条\n", total, len(hits))
-	if total > len(hits) {
-		fmt.Printf("（还有 %d 篇没显示：用 -limit 调大）\n", total-len(hits))
-	}
+	fmt.Print(searchSummary(total, len(hits)))
 	for _, h := range hits {
 		mark := "·"
 		if h.Status == vault.StatusDraft {

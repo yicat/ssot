@@ -419,6 +419,58 @@ func TestSearchReportsTotalAndTruncation(t *testing.T) {
 	}
 }
 
+// 没给 limit 时的默认值（工具说明里写的是 10）也要钉住：
+// 默认值是最容易被「悄悄改掉、谁也没发现」的东西，而它直接影响模型看到几条。
+func TestSearchDefaultLimitIsTen(t *testing.T) {
+	root := newVault(t)
+	const matching = 12
+	for i := 0; i < matching; i++ {
+		p := filepath.Join(root, "docs", fmt.Sprintf("甲%02d.md", i))
+		if err := os.WriteFile(p, []byte("---\ntitle: 甲\n---\n\n增益 相关正文。\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := start(t, root)
+
+	// 不给 limit：按默认 10 条算，并且说清「一共 12 篇、被截断了」。
+	res, isErr := s.callTool("vault_search", map[string]any{"query": "增益"})
+	if isErr {
+		t.Fatalf("检索失败了：%+v", res)
+	}
+	if got := numOf(res["total"]); got != matching {
+		t.Errorf("total 该是 %d，拿到 %v", matching, res["total"])
+	}
+	if got := numOf(res["returned"]); got != 10 {
+		t.Errorf("不给 limit 该按默认 10 条算，拿到 %v", res["returned"])
+	}
+	if res["truncated"] != true {
+		t.Errorf("12 篇只给 10 条，truncated 该是 true：%+v", res)
+	}
+
+	// limit=0 与负数：也走默认 10（不是「返回全部」）。
+	for _, v := range []any{0, -5} {
+		res, isErr := s.callTool("vault_search", map[string]any{"query": "增益", "limit": v})
+		if isErr {
+			t.Fatalf("limit=%v 失败了：%+v", v, res)
+		}
+		if got := numOf(res["returned"]); got != 10 {
+			t.Errorf("limit=%v 该按默认 10 条算，拿到 %v", v, res["returned"])
+		}
+	}
+
+	// 给够：全给，且不再说被截断。
+	res, isErr = s.callTool("vault_search", map[string]any{"query": "增益", "limit": matching})
+	if isErr {
+		t.Fatalf("检索失败了：%+v", res)
+	}
+	if got := numOf(res["returned"]); got != matching {
+		t.Errorf("limit=%d 该返回 %d 条，拿到 %v", matching, matching, res["returned"])
+	}
+	if res["truncated"] != false {
+		t.Errorf("拿全了不该说被截断：%+v", res)
+	}
+}
+
 // numOf 把 JSON 解出来的数字（float64）读成 int。
 func numOf(v any) int {
 	if f, ok := v.(float64); ok {

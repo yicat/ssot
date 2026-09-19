@@ -186,30 +186,76 @@ func TestQueryRefusesUnderwaterTables(t *testing.T) {
 	}
 }
 
-// CountMatches 数的是**一共命中多少篇**，与 limit 无关（截断时要说得出「还有几篇」）。
-func TestCountMatchesIgnoresLimit(t *testing.T) {
+// 索引层的 limit 语义与总数：**逐个 case 钉死**，不靠手跑一次看输出。
+//
+// 两层约定：
+//   - `limit <= 0` 落到这一层的默认值 **50**（上层 MCP 另有自己的默认 10，见 mcp 的测试）；
+//   - 返回条数 = min(limit, total)，而 `CountMatches` **不受 limit 影响**。
+func TestSearchLimitAndCount(t *testing.T) {
 	root := t.TempDir()
-	for i := 0; i < 4; i++ {
+	const matching = 4
+	for i := 0; i < matching; i++ {
 		write(t, root, fmt.Sprintf("docs/甲%d.md", i), "---\ntitle: 甲\n---\n\n增益 正文。\n")
+	}
+	for i := 0; i < 3; i++ {
+		write(t, root, fmt.Sprintf("docs/乙%d.md", i), "---\ntitle: 乙\n---\n\n无关。\n")
 	}
 	idx := New(root)
 	if err := idx.Rebuild(); err != nil {
 		t.Fatal(err)
 	}
-	hits, err := idx.Search("增益", 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(hits) != 2 {
-		t.Fatalf("limit 该生效：拿到 %d 条", len(hits))
-	}
+
 	total, err := idx.CountMatches("增益")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 4 {
-		t.Errorf("总数该是 4（不受 limit 影响），拿到 %d", total)
+	if total != matching {
+		t.Fatalf("总数该是 %d，拿到 %d", matching, total)
 	}
+
+	cases := []struct {
+		name  string
+		limit int
+		want  int
+	}{
+		{"0 落到默认（50，够装下 4 篇）", 0, matching},
+		{"负数同样落到默认", -1, matching},
+		{"1 条", 1, 1},
+		{"3 条", 3, 3},
+		{"正好等于总数", matching, matching},
+		{"超过总数就给全部", 999, matching},
+	}
+	for _, c := range cases {
+		hits, err := idx.Search("增益", c.limit)
+		if err != nil {
+			t.Errorf("%s：报错 %v", c.name, err)
+			continue
+		}
+		if len(hits) != c.want {
+			t.Errorf("%s（limit=%d）：该返回 %d 条，拿到 %d 条", c.name, c.limit, c.want, len(hits))
+		}
+	}
+
+	// 默认值真的是 50 吗？用 60 篇命中的语料把它量出来（别只信注释）。
+	big := t.TempDir()
+	for i := 0; i < 60; i++ {
+		write(t, big, fmt.Sprintf("docs/甲%d.md", i), "---\ntitle: 甲\n---\n\n增益 正文。\n")
+	}
+	bidx := New(big)
+	if err := bidx.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := bidx.CountMatches("增益"); err != nil || n != 60 {
+		t.Fatalf("语料该有 60 篇命中：n=%d err=%v", n, err)
+	}
+	hits, err := bidx.Search("增益", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 50 {
+		t.Errorf("limit=0 时这一层的默认该是 50，拿到 %d", len(hits))
+	}
+
 	if _, err := idx.CountMatches("  "); err == nil {
 		t.Error("空搜索词该报错")
 	}

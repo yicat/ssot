@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -53,8 +54,12 @@ func (a args) num(name string, def int) (int, error) {
 	}
 	var n int
 	if err := json.Unmarshal(raw, &n); err != nil {
-		// 模型有时把数字写成字符串（`"limit": "50"`）。认它——
-		// 为一个引号让它白撞一次错误、再重试一次，不值得（实测见过这种回包）。
+		// 模型发来的数字不一定是整数：`50.0` 这种也见过，`"50"` 这种更常见。
+		// 认它们——为一个引号或一个小数点让它白撞一次错误、再重试一次，不值得。
+		var f float64
+		if err2 := json.Unmarshal(raw, &f); err2 == nil && f == math.Trunc(f) {
+			return int(f), nil
+		}
 		var s string
 		if err2 := json.Unmarshal(raw, &s); err2 == nil {
 			if v, cerr := strconv.Atoi(strings.TrimSpace(s)); cerr == nil {
