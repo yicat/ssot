@@ -170,6 +170,18 @@ export function useAgent() {
     [set, store.sessions, store.vault],
   );
 
+  /**
+   * 当前会话的标题（本地记的：第一句话，或 agent 生成的）。
+   *
+   * 为什么要露出来：标题原来只在下拉里能看到，等于藏着——顶栏写着短 id，人根本不知道自己
+   * 在哪个会话里。这里给一个取值口子，界面在顶栏显示它。
+   * 读 localStorage 是刻意的：发第一句时写进去，紧接着的那次重渲染就能读到（不用再加一层 state）。
+   */
+  const currentTitle = useCallback(
+    () => storedTitle(store.vault, store.sessionId),
+    [store.sessionId, store.vault],
+  );
+
   /** 发一句。 */
   const send = useCallback(async () => {
     const text = store.draft.trim();
@@ -316,6 +328,7 @@ export function useAgent() {
     boot,
     newSession,
     renameSession,
+    currentTitle,
     refresh,
     start,
     send,

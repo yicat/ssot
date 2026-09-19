@@ -132,7 +132,13 @@ export function AgentPane({ onOpenSettings }: Props) {
         <span className="text-muted-foreground">
           {a.running ? `${a.agent || "后端"}${a.version ? " " + a.version : ""}` : "后端未启动"}
         </span>
-        {a.sessionId && <span className="truncate text-[11px] text-muted-foreground/70">会话 {a.sessionId.slice(0, 8)}</span>}
+        {a.sessionId && (
+          <span className="max-w-72 truncate text-[11px] text-muted-foreground/70" title={a.sessionId}>
+            {/* 有标题就显示标题（第一句话 / agent 起的），没有才退回短 id——
+                不然人在顶栏只看得到一串 hex，不知道自己在这个会话里干过什么。 */}
+            {a.currentTitle() || `会话 ${a.sessionId.slice(0, 8)}`}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {a.running && (
