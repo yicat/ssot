@@ -30,6 +30,50 @@ type PermissionPayload = {
   options: { optionId: string; name: string; kind: string }[];
 };
 
+/**
+ * 会话标题的存储。
+ *
+ * 后端（DSH 的 `session/list`）只回 sessionId 与 cwd，**不给标题**，所以标题只能我们自己记：
+ *   - 初始值：**第一句用户消息**（截 24 字）——它通常就说明了这次会话在干什么；
+ *   - 以后：**由 agent 生成**更好的标题，走同一个 `renameSession`（谁写的都一样存）。
+ *
+ * 存本地（按 vault 分组）：这是**界面层的便利信息**，不是事实——丢了只是名字变回时间戳，
+ * 不影响会话内容（内容在后端那边）。
+ */
+const titleKey = (vault: string) => `ssot:session-titles:${vault || "(未打开项目)"}`;
+
+function loadTitles(vault: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(titleKey(vault));
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveTitles(vault: string, titles: Record<string, string>) {
+  try {
+    localStorage.setItem(titleKey(vault), JSON.stringify(titles));
+  } catch {
+    // 存不下（隐私模式 / 配额满）就算了：标题是便利信息，不该影响聊天。
+  }
+}
+
+function storedTitle(vault: string, id: string): string {
+  return loadTitles(vault)[id] ?? "";
+}
+
+/** 记下初始描述：**只记第一次**——后面那句话不该把名字改掉。 */
+function rememberTitle(vault: string, id: string, firstMessage: string) {
+  if (!vault || !id) return;
+  const titles = loadTitles(vault);
+  if (titles[id]) return;
+  const one = firstMessage.replace(/\s+/g, " ").trim();
+  if (!one) return;
+  titles[id] = one.length > 24 ? one.slice(0, 24) + "…" : one;
+  saveTitles(vault, titles);
+}
+
 export function useAgent() {
   const store = useAgentStore();
   const { set, push } = store;
@@ -106,11 +150,34 @@ export function useAgent() {
     await stop();
     await start();
   }
+  /**
+   * 给会话改名 / 设标题。
+   *
+   * **这是留给 agent 生成标题的口子**：将来由 agent 读第一轮对话、生成一句更准的标题，
+   * 通过这条（或能力层的一条工具）写进来——存的格式与「第一句话」那套完全一样，
+   * 所以界面不用区分是谁写的。
+   */
+  const renameSession = useCallback(
+    async (id: string, title: string) => {
+      if (!store.vault || !id) return;
+      const clean = title.replace(/\s+/g, " ").trim();
+      if (!clean) return;
+      const titles = loadTitles(store.vault);
+      titles[id] = clean.length > 40 ? clean.slice(0, 40) + "…" : clean;
+      saveTitles(store.vault, titles);
+      set({ sessions: store.sessions.map((s) => (s.id === id ? { ...s, title: titles[id] } : s)) });
+    },
+    [set, store.sessions, store.vault],
+  );
+
   /** 发一句。 */
   const send = useCallback(async () => {
     const text = store.draft.trim();
     if (!text) return;
     push({ kind: "user", text });
+    // 会话的**初始描述**：第一句话就是这次会话在干什么——先拿它当标题（机械截断，不调模型）。
+    // 之后可以由 agent 生成更好的标题，走同一个存储（见 renameSession 与 docs/OPEN.md）。
+    rememberTitle(store.vault, store.sessionId, text);
     set({ draft: "", busy: true, busyMessage: null });
     try {
       await AgentService.Send(text);
@@ -156,7 +223,9 @@ export function useAgent() {
   const loadSessions = useCallback(async () => {
     try {
       const list = await AgentService.Sessions();
-      set({ sessions: list ?? [], sessionsOpen: true });
+      // 后端不给 title（只有 id/cwd），所以把本地记的（第一句话 / agent 生成）合并进来。
+      const merged = (list ?? []).map((s) => ({ ...s, title: s.title || storedTitle(store.vault, s.id) }));
+      set({ sessions: merged, sessionsOpen: true });
     } catch (err) {
       push({ kind: "notice", text: String(err), isError: true });
     }
@@ -246,6 +315,7 @@ export function useAgent() {
     ...store,
     boot,
     newSession,
+    renameSession,
     refresh,
     start,
     send,

@@ -31,6 +31,7 @@
 | 25 | **抽取每次调用的固定开销 ≈13k token**（实测：2 块一次就用 13～15k，8 块一次 21.2k），比 spike 里 headless 的（工具 5,220 + system 1,174）高一倍多，原因未查。**先别拿 spike 的 3.2M 外推当承诺**；下一步：试**另一个能挂 ACP 的 profile**（`headless` 不行——它是一次性任务 profile，握手就关）或直接数配置里的工具定义 | 待定 | P3 成本 | `extraction-spike.md`「P3 生产实测」 |
 | 26 | ~~关系的端点校验是按批做的~~ → **已解决**：端点校验改成「本批 + 图里已有」（`Options.Known`，由 `vaultindex.EntityNames` 提供）；测试钉住「图里已知的端点不该被丢」 | 已解决 | — | `vextract/extract.go`、`OPEN.md` 本条 |
 | 27 | ~~同一份 vault 的索引没有互斥~~ → **已解决**：`.data/index.lock` 抢创建，抢不到给**人话**（「另一道进程正在重建索引…」），老锁（>10 分钟）当死锁清掉 | 已解决 | — | `vaultindex/lock.go` |
+| 28 | **会话标题**：后端 `session/list` 不回 title → 现在用**第一句用户消息**（截 24 字）当初始描述，存本地（按 vault 分组）；**将来由 agent 生成**更好的一句（读第一轮对话 → 走 `renameSession` / 能力层 `set_session_title`），存法与现在一致，界面不区分谁写的 | 待定 | 会话体验 | `useAgent.ts` 的 titleKey/rememberTitle/renameSession |
 
 ## 怎么用这份清单
 
