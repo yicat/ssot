@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -358,6 +359,74 @@ func TestServeViaRealBinary(t *testing.T) {
 }
 
 // TestRejectsHumanActor：MCP 这条路上没有 human——发布只能走界面或 CLI
+// 检索结果必须**自己说清「一共几篇、返回了几条、有没有被截断」**。
+//
+// 为什么值得钉死：上限本身没错，错的是「撞到上限却看不出来」。实测里模型就是因此
+// 换了条路——去 `table_query` 翻派生层的 `chunk` 凑清单（`OPEN.md` #31/#33）。
+// 所以 truncated / total / hint 是检索契约的一部分。
+func TestSearchReportsTotalAndTruncation(t *testing.T) {
+	root := newVault(t)
+	// 多写几篇都含「增益」的文档，保证命中数 > 1。
+	for i := 0; i < 3; i++ {
+		p := filepath.Join(root, "docs", fmt.Sprintf("甲%d.md", i))
+		if err := os.WriteFile(p, []byte("---\ntitle: 甲\n---\n\n增益 相关正文。\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := start(t, root)
+
+	res, isErr := s.callTool("vault_search", map[string]any{"query": "增益", "limit": 1})
+	if isErr {
+		t.Fatalf("检索失败了：%+v", res)
+	}
+	if got := numOf(res["total"]); got != 3 {
+		t.Errorf("total 该是 3（一共命中几篇），拿到 %v", res["total"])
+	}
+	if got := numOf(res["returned"]); got != 1 {
+		t.Errorf("returned 该是 1，拿到 %v", res["returned"])
+	}
+	if res["truncated"] != true {
+		t.Errorf("只返回 1 条而总共 3 条，truncated 该是 true：%+v", res)
+	}
+	if hint, _ := res["hint"].(string); !strings.Contains(hint, "调大") {
+		t.Errorf("被截断时要给出「怎么办」的提示：%+v", res["hint"])
+	}
+
+	// limit 够大：没被截断，也不该有 hint。
+	res, isErr = s.callTool("vault_search", map[string]any{"query": "增益", "limit": 50})
+	if isErr {
+		t.Fatalf("检索失败了：%+v", res)
+	}
+	if res["truncated"] != false {
+		t.Errorf("拿全了就不该说被截断：%+v", res)
+	}
+	if _, ok := res["hint"]; ok {
+		t.Errorf("拿全了不该有 hint：%+v", res)
+	}
+
+	// limit 写成字符串也认（模型有时这么发）——别为个引号让它白撞一次错误。
+	if _, isErr := s.callTool("vault_search", map[string]any{"query": "增益", "limit": "2"}); isErr {
+		t.Error("limit 传字符串该也能认")
+	}
+
+	// 超过上限：按上限算，并且**说明白**。
+	res, isErr = s.callTool("vault_search", map[string]any{"query": "增益", "limit": 99999})
+	if isErr {
+		t.Fatalf("超上限的 limit 不该报错：%+v", res)
+	}
+	if note, _ := res["note"].(string); !strings.Contains(note, "上限") {
+		t.Errorf("超上限要说清「按上限算」：%+v", res["note"])
+	}
+}
+
+// numOf 把 JSON 解出来的数字（float64）读成 int。
+func numOf(v any) int {
+	if f, ok := v.(float64); ok {
+		return int(f)
+	}
+	return -1
+}
+
 // （docs/specs/dsh.spec.md §4）。这是编译真二进制跑一遍 CLI 的拒绝路径。
 func TestRejectsHumanActor(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {

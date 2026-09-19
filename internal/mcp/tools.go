@@ -3,10 +3,19 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/ngnl5/ssot/internal/application/vaultapp"
 	"github.com/ngnl5/ssot/internal/domain/vault"
 )
+
+// maxSearchLimit 是 `vault_search` 一次能返回的条数上限。
+//
+// 为什么要有个上限：返回的每一条都要进模型的上下文，几千条会把这一轮撑爆；
+// 但**上限必须写在工具说明里、也要在结果里说清**——不能悄悄截断
+// （实测里模型看不出被截断了，就换了条路去翻派生层的表，见 OPEN #33）。
+const maxSearchLimit = 200
 
 // tool 是一个 MCP 工具：名字、说明、入参 schema，以及真正干活的那一下。
 //
@@ -44,6 +53,14 @@ func (a args) num(name string, def int) (int, error) {
 	}
 	var n int
 	if err := json.Unmarshal(raw, &n); err != nil {
+		// 模型有时把数字写成字符串（`"limit": "50"`）。认它——
+		// 为一个引号让它白撞一次错误、再重试一次，不值得（实测见过这种回包）。
+		var s string
+		if err2 := json.Unmarshal(raw, &s); err2 == nil {
+			if v, cerr := strconv.Atoi(strings.TrimSpace(s)); cerr == nil {
+				return v, nil
+			}
+		}
 		return 0, fmt.Errorf("参数 %q 要是整数：%v", name, err)
 	}
 	return n, nil
@@ -300,10 +317,10 @@ var tools = []tool{
 		},
 	}, {
 		name: "vault_search", title: "全文检索", readOnly: true,
-		description: "在文档标题与正文里检索，返回命中的文档与附近原文。找东西先用它，再 doc_read 看全篇。",
+		description: "在文档标题与正文里检索，返回命中的文档与附近原文。结果里带 total（一共命中多少篇）、returned（返回了几条）与 truncated（有没有被 limit 截断）——**truncated 为真时别把返回的当成全部**：要么把 limit 调大（上限 " + fmt.Sprint(maxSearchLimit) + "），要么换更具体的词。找东西先用它，再 doc_read 看全篇。",
 		schema: obj(map[string]any{
 			"query": str2("检索词"),
-			"limit": int2("最多返回几条，默认 10"),
+			"limit": int2(fmt.Sprintf("最多返回几条，默认 10，上限 %d", maxSearchLimit)),
 		}, "query"),
 		run: func(s *Server, a args) (any, error) {
 			q, err := a.str("query")
@@ -314,7 +331,20 @@ var tools = []tool{
 			if err != nil {
 				return nil, err
 			}
+			if limit <= 0 {
+				limit = 10
+			}
+			capped := false
+			if limit > maxSearchLimit {
+				limit, capped = maxSearchLimit, true
+			}
 			hits, err := s.svc.Search(q, limit)
+			if err != nil {
+				return nil, err
+			}
+			// 总数单独数一遍：**「被截断了」这件事必须由结果自己说出来**，
+			// 不然模型只能猜自己拿全了没有（实测里它因此去翻派生层的表）。
+			total, err := s.svc.CountMatches(q)
 			if err != nil {
 				return nil, err
 			}
@@ -325,7 +355,18 @@ var tools = []tool{
 					"snippet": h.Snippet, "titleMatch": h.TitleMatch, "occurrences": h.Occurrences,
 				})
 			}
-			return map[string]any{"query": q, "hits": out}, nil
+			res := map[string]any{
+				"query": q, "hits": out,
+				"returned": len(out), "total": total,
+				"truncated": total > len(out),
+			}
+			if capped {
+				res["note"] = fmt.Sprintf("limit 超过上限，按 %d 条算", maxSearchLimit)
+			}
+			if missing := total - len(out); missing > 0 {
+				res["hint"] = fmt.Sprintf("还有 %d 篇没返回：把 limit 调大（上限 %d）或换更具体的词", missing, maxSearchLimit)
+			}
+			return res, nil
 		},
 	},
 	{

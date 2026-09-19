@@ -1,6 +1,7 @@
 package vaultindex
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,6 +183,35 @@ func TestQueryRefusesUnderwaterTables(t *testing.T) {
 		if !strings.Contains(err.Error(), "水下") {
 			t.Errorf("拒绝的理由要说清「沉在水下」：%v", err)
 		}
+	}
+}
+
+// CountMatches 数的是**一共命中多少篇**，与 limit 无关（截断时要说得出「还有几篇」）。
+func TestCountMatchesIgnoresLimit(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 4; i++ {
+		write(t, root, fmt.Sprintf("docs/甲%d.md", i), "---\ntitle: 甲\n---\n\n增益 正文。\n")
+	}
+	idx := New(root)
+	if err := idx.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+	hits, err := idx.Search("增益", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) != 2 {
+		t.Fatalf("limit 该生效：拿到 %d 条", len(hits))
+	}
+	total, err := idx.CountMatches("增益")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 {
+		t.Errorf("总数该是 4（不受 limit 影响），拿到 %d", total)
+	}
+	if _, err := idx.CountMatches("  "); err == nil {
+		t.Error("空搜索词该报错")
 	}
 }
 

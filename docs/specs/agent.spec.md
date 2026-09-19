@@ -67,7 +67,7 @@ App **不做 agent 框架**。它提供两样东西：
 | `vault_list` | 列文档 / raw / 表 | 只读 |
 | `doc_read` | 读一篇文档（正文、状态、front matter、链接） | 只读 |
 | `doc_write` | 写文档正文（带 `actor`，**回落 draft**） | 写 |
-| `vault_search` | 全文检索（标题 + 正文） | 只读 |
+| `vault_search` | 全文检索（标题 + 正文）；结果带 `total` / `returned` / `truncated`，**被截断时给一句怎么办**（`limit` 默认 10、上限 200） | 只读 |
 | `doc_delete` | **删除文档**（连带清派生层里的块/向量/实体/关系）；`path` 支持 glob 批量；`dry=1` 只报影响；删完列出断链 | 写（**不可逆，但有 git 留痕**） |
 | `link_backlinks` | 某文档的反链 + 它链出去的问题链接 | 只读 |
 | `link_resolve` | 解析 `[[...]]`（含块级锚点）到文档与段落 | 只读 |

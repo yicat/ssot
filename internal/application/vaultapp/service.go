@@ -103,6 +103,14 @@ func (s *Service) Search(q string, limit int) ([]vault.Hit, error) {
 	return s.index.Search(q, limit)
 }
 
+// CountMatches 数命中多少篇（不受 limit 影响）——给调用方报「一共几条、返回了几条」。
+func (s *Service) CountMatches(q string) (int, error) {
+	if err := s.ensureIndex(); err != nil {
+		return 0, err
+	}
+	return s.index.CountMatches(q)
+}
+
 // TableInfos 列出数据表（含推断出来的列与行数）。
 func (s *Service) TableInfos() ([]vault.TableInfo, error) {
 	if err := s.ensureIndex(); err != nil {

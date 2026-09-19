@@ -593,9 +593,18 @@ func vaultSearch(svc *vaultapp.Service, args []string, limit int) error {
 	if err != nil {
 		return err
 	}
+	// 人也要看得出「是不是只给了前几条」——别让人以为这就是全部。
+	total, err := svc.CountMatches(q)
+	if err != nil {
+		return err
+	}
 	if len(hits) == 0 {
 		fmt.Printf("没有命中「%s」\n", q)
 		return nil
+	}
+	fmt.Printf("命中 %d 篇，返回 %d 条\n", total, len(hits))
+	if total > len(hits) {
+		fmt.Printf("（还有 %d 篇没显示：用 -limit 调大）\n", total-len(hits))
 	}
 	for _, h := range hits {
 		mark := "·"

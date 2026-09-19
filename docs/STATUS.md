@@ -26,6 +26,8 @@
 
 | 2026-09-20 | 收住派生层的查询口 | #31 落地：`table_query` 改**白名单**（数据表 + `docs`），纯规则在 `domain/vault/querygate.go`（fail closed），门在 `vaultindex.Query`，CLI/界面/agent 一致；子查询 / CTE / 表值函数 / `sqlite_master` 四种绕法都有测试 | `querygate.go`、`vaultindex/index.go`、`derived.spec.md` §一、`OPEN.md` #31 |
 
+| 2026-09-20 | 检索结果说清「截断」 | #33：实测 `limit` 本来就生效（10/50/70 条），真正的缺口是**结果里看不出被截断** → `vault_search` 加 `total`/`returned`/`truncated` + `hint`，上限明确 200 并写进说明，`limit` 传字符串也认；CLI 打印「命中 N 篇，返回 M 条」 | `mcp/tools.go`、`vaultindex.CountMatches`、`cmd/ssot/main.go`、`OPEN.md` #33 |
+
 ## 现在在哪
 
 **已完成**

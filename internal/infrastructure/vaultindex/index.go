@@ -571,6 +571,30 @@ func (idx *Index) Search(query string, limit int) ([]vault.Hit, error) {
 	return hits, nil
 }
 
+// CountMatches 数「一共命中多少篇」（**不受 limit 影响**）。
+//
+// 为什么要它：检索撞到上限时，调用方必须说得出「一共多少条、返回了多少条」。
+// 不说的后果实测过——模型只能自己猜拿全了没有，猜不出来就换个口子（翻派生层的表）
+// 去凑清单。所以「有没有被截断」是检索结果的一部分，不是调用方自己算的事。
+func (idx *Index) CountMatches(query string) (int, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return 0, fmt.Errorf("搜索词是空的")
+	}
+	db, err := idx.open()
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	like := "%" + q + "%"
+	var n int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM docs WHERE title LIKE ? OR body LIKE ?`, like, like).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // Tables 列出索引里的数据表。
 func (idx *Index) Tables() ([]vault.TableInfo, error) {
 	db, err := idx.open()
