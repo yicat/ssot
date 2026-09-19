@@ -62,13 +62,13 @@ function thoughtPreview(text: string): string {
  * 又长又不认人。所以：
  *   1. 有 title 就用（将来后端给了就自动生效）；
  *   2. 有 updatedAt 就显示成「07-22 14:03」这种时间戳（人认「什么时候那次」比认 id 强）；
- *   3. 都没有就退成短 id（前 8 位）+ 时间都没有时也只到这一步。
+ *   3. 都没有就写「未命名会话」——**绝不显示 id**（一串 hex 人读不懂，等于没有信息）。
  */
 function sessionLabel(s: { id: string; title?: string; updatedAt?: string }): string {
   if (s.title && s.title.trim()) return s.title;
   const when = formatWhen(s.updatedAt);
   if (when) return `会话 · ${when}`;
-  return `会话 ${s.id.slice(0, 8)}`;
+  return "未命名会话";
 }
 
 /** 把后端给的时间戳压成「07-22 14:03」；解析不了就返回空（不显示假的）。 */
@@ -134,9 +134,10 @@ export function AgentPane({ onOpenSettings }: Props) {
         </span>
         {a.sessionId && (
           <span className="max-w-72 truncate text-[11px] text-muted-foreground/70" title={a.sessionId}>
-            {/* 有标题就显示标题（第一句话 / agent 起的），没有才退回短 id——
-                不然人在顶栏只看得到一串 hex，不知道自己在这个会话里干过什么。 */}
-            {a.currentTitle() || `会话 ${a.sessionId.slice(0, 8)}`}
+            {/* **界面不显示 id**：一串 hex 人看不懂，等于没有信息。
+                有标题显示标题（第一句话 / agent 起的），没有就老实说「未命名会话」——
+                id 只留在 tooltip 里，要查的时候能看到。 */}
+            {a.currentTitle() || "未命名会话"}
           </span>
         )}
 

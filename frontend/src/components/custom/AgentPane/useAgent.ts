@@ -74,6 +74,14 @@ function rememberTitle(vault: string, id: string, firstMessage: string) {
   saveTitles(vault, titles);
 }
 
+/**
+ * 第一次发送时可能还没拿到 sessionId（后端状态还没回来）——那就先把这句话存着，
+ * 等 sessionId 到位再写标题。**不这样做标题会被静默丢掉**：`rememberTitle` 在 id 为空时直接返回，
+ * 人发了话却怎么也没有标题。
+ */
+let pendingTitle = "";
+let pendingVault = "";
+
 export function useAgent() {
   const store = useAgentStore();
   const { set, push } = store;
@@ -83,6 +91,11 @@ export function useAgent() {
 
   const applyStatus = useCallback(
     (st: AgentStatus) => {
+      // 待写的标题：等 sessionId 出现就落地（见 pendingTitle 的说明）。
+      if (pendingTitle && st.sessionId) {
+        rememberTitle(st.vault || pendingVault, st.sessionId, pendingTitle);
+        pendingTitle = "";
+      }
       set({
         running: st.running,
         busy: st.busy,
@@ -189,7 +202,13 @@ export function useAgent() {
     push({ kind: "user", text });
     // 会话的**初始描述**：第一句话就是这次会话在干什么——先拿它当标题（机械截断，不调模型）。
     // 之后可以由 agent 生成更好的标题，走同一个存储（见 renameSession 与 docs/OPEN.md）。
-    rememberTitle(store.vault, store.sessionId, text);
+    if (store.sessionId) {
+      rememberTitle(store.vault, store.sessionId, text);
+    } else {
+      // id 还没到：挂起来，等 applyStatus 拿到 sessionId 再写。
+      pendingTitle = text;
+      pendingVault = store.vault;
+    }
     set({ draft: "", busy: true, busyMessage: null });
     try {
       await AgentService.Send(text);
