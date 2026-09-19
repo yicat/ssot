@@ -132,6 +132,20 @@ export function AgentPane({ onOpenSettings }: Props) {
         <span className="text-muted-foreground">
           {a.running ? `${a.agent || "后端"}${a.version ? " " + a.version : ""}` : "后端未启动"}
         </span>
+        {/* 后端没起时的入口放在**状态旁边**（不是输入框底下）：开关后端是会话级动作，
+            跟状态一起看才说得通。正常情况打开应用就自己起了，这里是手动兜底。 */}
+        {!a.running && (
+          <button
+            type="button"
+            onClick={() => void a.start()}
+            disabled={a.busy}
+            className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 hover:bg-secondary disabled:opacity-40"
+            title="起 Agent 后端（正常打开应用时会自动起；这是手动兜底）"
+          >
+            <Play className="size-3" />
+            启动后端
+          </button>
+        )}
         {a.sessionId && (
           <span className="max-w-72 truncate text-[11px] text-muted-foreground/70" title={a.sessionId}>
             {/* **界面不显示 id**：一串 hex 人看不懂，等于没有信息。
@@ -210,17 +224,7 @@ export function AgentPane({ onOpenSettings }: Props) {
         {a.items.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <Bot className="size-5" />
-            <div>{a.running ? "说点什么吧。" : "还没有起后端。"}</div>
-            {!a.running && (
-              <button
-                type="button"
-                onClick={() => void a.start()}
-                className="mt-1 inline-flex items-center gap-1.5 rounded border border-border px-3 py-1 hover:bg-secondary"
-              >
-                <Play className="size-3.5" />
-                启动后端
-              </button>
-            )}
+            <div>{a.running ? "说点什么吧。" : "正在起后端…起不来就去顶栏点「启动后端」。"}</div>
           </div>
         )}
 

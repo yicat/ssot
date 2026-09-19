@@ -110,7 +110,26 @@ export async function resumeLastSession(vault: string): Promise<void> {
   } catch {
     return;
   }
-  if (!id) return;
+  if (!id) {
+    // 没有「上次的会话」：退化成 Start（起后端；它会顺带建一个会话）。
+    // 这样**打开应用后端一定是备好的**——不能等用户点一下（他要的就是这个）。
+    try {
+      const st = await AgentService.Start();
+      useAgentStore.getState().set({
+        running: st.running,
+        busy: st.busy,
+        agent: st.agent,
+        version: st.version,
+        sessionId: st.sessionId,
+        vault: st.vault,
+        model: st.model,
+        models: st.models ?? [],
+      });
+    } catch {
+      // 起不来就算了：界面会显示「后端未启动」，用户真要说第一句时 send 里还会再试一次。
+    }
+    return;
+  }
   try {
     const st = await AgentService.Resume(id);
     useAgentStore.getState().set({
@@ -124,7 +143,23 @@ export async function resumeLastSession(vault: string): Promise<void> {
       models: st.models ?? [],
     });
   } catch {
-    // 安静放弃（见函数注释）。
+    // 切不过去（会话可能已经被删了）：**退化成 Start**——不然后端就一直不启动，
+    // 用户又要手动点一次（这个抱怨已经出现过）。
+    try {
+      const st = await AgentService.Start();
+      useAgentStore.getState().set({
+        running: st.running,
+        busy: st.busy,
+        agent: st.agent,
+        version: st.version,
+        sessionId: st.sessionId,
+        vault: st.vault,
+        model: st.model,
+        models: st.models ?? [],
+      });
+    } catch {
+      // 起不来就算了：界面会显示「后端未启动」，顶栏有手动入口。
+    }
   }
 }
 
