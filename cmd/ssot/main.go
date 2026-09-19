@@ -131,6 +131,8 @@ func runVault(args []string) error {
 		return vaultFind(svc, rest, f.limit, f.beta, f.betaSet)
 	case "extract":
 		return vaultExtract(svc, f)
+	case "rm":
+		return vaultRemove(svc, rest, f.actor, f.dry)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -151,6 +153,7 @@ type vaultFlags struct {
 	gleaning int
 	out      string
 	store    bool
+	dry      bool
 }
 
 // splitCommand 手写解析：选项放在子命令**前后都行**。
@@ -240,6 +243,8 @@ func splitCommand(args []string) (cmd string, positional []string, f vaultFlags,
 			}
 		case a == "-store" || a == "--store":
 			f.store = true
+		case a == "-dry" || a == "--dry" || a == "-n":
+			f.dry = true
 		case a == "-out" || a == "--out":
 			if f.out, err = takeValue(a); err != nil {
 				return "", nil, f, err
@@ -738,6 +743,7 @@ vault 子命令（写）：
   embed [-limit <n>]                         把还没嵌入的块嵌入（分批写回；中断了能接着跑）
   vector <词>                                向量检索（需要模型目录；-limit 控制条数）
   find <词>                                  混合检索（向量 + 标题/标签字面项；-beta 调权重）
+  rm [-dry] <路径...>                       删除文档（连带清派生层；-actor 必填，-dry 只看影响）
   extract [-docs <n>] [-batch <n>]           抽取实体/关系（多块合一次调用；-gleaning 补抽轮数，默认 1）
           [-gleaning <n>] [-out <文件>]        ⚠️ 现在只验证不入库，产物打到屏幕或 JSON
 
