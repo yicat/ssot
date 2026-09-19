@@ -13,7 +13,7 @@
  *    双链（`[[…]]`）在聊天里没有目标状态可依，所以按普通文字显示，**不标成断链**。
  */
 import { Bot, CircleStop, ListTree, Play, Power, Send, Settings2, ShieldAlert, Wrench } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { renderMarkdown } from "../../../lib/markdown";
 
@@ -56,6 +56,34 @@ function thoughtPreview(text: string): string {
 
 export function AgentPane({ onOpenSettings }: Props) {
   const a = useAgent();
+
+  /** 消息区：自动跟随到底部，**但人往上滚了就不跟随**（聊天里的常规约定）。
+   *
+   * 用 ref 而不是 state 记「是否跟随」：它只是给滚动用的一个开关，
+   * 放进 state 会让每次滚动都触发一次整面板重渲染（没必要）。
+   */
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+
+  /** 距底部 24px 以内算「在底部」——留点余量，免得小数像素把人判成「滚上去了」。 */
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
+  // 每次渲染都对一次底部：流式追加时不改数组身份，靠 deps 是抓不住的（踩过这种）。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !stick.current) return;
+    el.scrollTop = el.scrollHeight;
+  });
+
+  /** 发送：人刚发完一句，一定是想看着下方的回答，所以强制恢复跟随。 */
+  const submit = () => {
+    stick.current = true;
+    void a.send();
+  };
 
   // 打开面板就拉状态；**没起后端就自动起**。
   //
@@ -156,7 +184,7 @@ export function AgentPane({ onOpenSettings }: Props) {
       )}
 
       {/* 消息流 */}
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto px-4 py-3">
         {a.items.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <Bot className="size-5" />
@@ -251,7 +279,7 @@ export function AgentPane({ onOpenSettings }: Props) {
               // 回车发送、Shift+回车换行（聊天里的常规约定）。
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (canSend) void a.send();
+                if (canSend) submit();
               }
             }}
             rows={2}
@@ -270,7 +298,7 @@ export function AgentPane({ onOpenSettings }: Props) {
           ) : (
             <button
               type="button"
-              onClick={() => void a.send()}
+              onClick={submit}
               disabled={!canSend}
               className="inline-flex shrink-0 items-center gap-1.5 rounded border border-border px-3 py-1.5 text-sm hover:bg-secondary disabled:opacity-40"
             >

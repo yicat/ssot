@@ -98,7 +98,7 @@ export function useAgent() {
     const text = store.draft.trim();
     if (!text) return;
     push({ kind: "user", text });
-    set({ draft: "", busy: true, busyMessage: "正在跑…" });
+    set({ draft: "", busy: true, busyMessage: null });
     try {
       await AgentService.Send(text);
     } catch (err) {
