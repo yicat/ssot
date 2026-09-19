@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/ngnl5/ssot/internal/domain/vault"
 )
 
 // Chunk 是喂给模型的一块（只要抽取要用到的东西：身份、行号、正文）。
@@ -63,11 +65,6 @@ type Relation struct {
 	ChunkOrd int
 }
 
-// EntityTypes 是我们认的实体类型词表（LightRAG 不合用就退 Other）。
-//
-// ⚠️ 词表**没定稿**（derived.spec.md §六.4）：先按这个跑一批，用产出与坏例再调。
-var EntityTypes = []string{"式神", "技能", "机制", "数值", "物品", "地点", "组织", "人物", "Other"}
-
 // Drop 是被丢掉的条目与原因。「不静默」：丢什么、为什么丢，都要能查。
 type Drop struct {
 	Kind   string // entity / relation
@@ -96,6 +93,9 @@ type Completer interface {
 type Options struct {
 	// Gleaning 是补抽轮数（LightRAG 的 DEFAULT_MAX_GLEANING = 1）。0 = 只抽一轮。
 	Gleaning int
+	// Config 是**项目声明**来的抽取配置（类型词表 / 忽略的名字形状 / 空占位词 / 反例）。
+	// 零值 = 只有兜底 Other、不忽略任何形状——即「代码里没有默认数据知识」。
+	Config vault.ExtractConfig
 }
 
 // DefaultOptions 是已定的默认值：照 LightRAG 做一轮补抽。
@@ -119,9 +119,9 @@ func Extract(ctx context.Context, c Completer, chunks []Chunk, opt Options) (Res
 	rounds := 1 + max(opt.Gleaning, 0)
 	prev := ""
 	for round := 0; round < rounds; round++ {
-		prompt := BuildPrompt(chunks)
+		prompt := BuildPrompt(chunks, opt.Config)
 		if round > 0 {
-			prompt = BuildGleaningPrompt(chunks, prev)
+			prompt = BuildGleaningPrompt(chunks, prev, opt.Config)
 		}
 		text, err := c.Complete(ctx, prompt)
 		if err != nil {
@@ -132,7 +132,7 @@ func Extract(ctx context.Context, c Completer, chunks []Chunk, opt Options) (Res
 		if err != nil {
 			return out, fmt.Errorf("第 %d 轮回包解析失败：%w", round+1, err)
 		}
-		mergeInto(&out, raw, chunks, seenEnt, seenRel)
+		mergeInto(&out, raw, chunks, opt.Config, seenEnt, seenRel)
 		out.Rounds = round + 1
 	}
 	sortResult(&out)
@@ -140,7 +140,7 @@ func Extract(ctx context.Context, c Completer, chunks []Chunk, opt Options) (Res
 }
 
 // mergeInto 把一轮的原始产物校验后并进结果（去重、丢坏条目并记原因）。
-func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, seenEnt, seenRel map[string]bool) {
+func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, cfg vault.ExtractConfig, seenEnt, seenRel map[string]bool) {
 	byDoc := map[string][]Chunk{}
 	for _, c := range chunks {
 		byDoc[c.Doc] = append(byDoc[c.Doc], c)
@@ -158,8 +158,12 @@ func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, seenEnt, seenRel 
 			out.Dropped = append(out.Dropped, Drop{Kind: "entity", Name: name, Reason: fmt.Sprintf("doc=%q 不在这批块里", e.Doc)})
 			continue
 		}
-		// 确定性过滤：文件名/路径/占位符/命令名/纯数字一律丢掉（理由见 filter.go 的包注释）。
-		if noise, why := LooksLikeNoise(name); noise {
+		// 过滤分两层：**通用形状**（纯数字，见 filter.go）与**项目声明的形状**（name_patterns）。
+		if isPlainNumber(name) {
+			out.Dropped = append(out.Dropped, Drop{Kind: "entity", Name: name, Reason: "只有数字，不是实体名"})
+			continue
+		}
+		if noise, why := cfg.ShouldIgnoreName(name); noise {
 			out.Dropped = append(out.Dropped, Drop{Kind: "entity", Name: name, Reason: why})
 			continue
 		}
@@ -170,7 +174,7 @@ func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, seenEnt, seenRel 
 		}
 		seenEnt[key] = true
 		ent := Entity{
-			Name: name, Type: entityType(e.Type), Description: strings.TrimSpace(e.Description),
+			Name: name, Type: cfg.NormalizeType(e.Type), Description: strings.TrimSpace(e.Description),
 			Provenance: prov(ch, e.Line),
 		}
 		out.Entities = append(out.Entities, ent)
@@ -235,20 +239,6 @@ func prov(c Chunk, line int) Provenance {
 		p.Note = "模型没给行号，只有块区间"
 	}
 	return p
-}
-
-// entityType 把类型收敛到我们的词表（不合用退 Other）。
-func entityType(t string) string {
-	t = strings.TrimSpace(t)
-	for _, k := range EntityTypes {
-		if strings.EqualFold(t, k) {
-			return k
-		}
-	}
-	if t == "" {
-		return "Other"
-	}
-	return "Other"
 }
 
 func sortResult(out *Result) {

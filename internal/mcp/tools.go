@@ -90,7 +90,7 @@ var tools = []tool{
 	{
 		name: "doc_read", title: "读一篇文档", readOnly: true,
 		description: "读一篇文档：正文、front matter 解析出来的字段、以及正文里的双链。path 可以只写文件名（[[茨木童子]] 那种写法也认）。",
-		schema:      obj(map[string]any{"path": str2("文档路径，如 docs/式神/茨木童子.md，或只写 茨木童子")}, "path"),
+		schema:      obj(map[string]any{"path": str2("文档路径（相对 vault 根，如 docs/子目录/标题.md），或只写标题/文件名")}, "path"),
 		run: func(s *Server, a args) (any, error) {
 			p, err := a.str("path")
 			if err != nil {
@@ -107,7 +107,7 @@ var tools = []tool{
 		name: "doc_write", title: "写文档正文",
 		description: "写入文档正文（front matter 原样保留）。文档不存在时落在 docs/<名字>.md。写完全部回落为 draft，并在 vault 的 git 里留痕（无变化则不产生提交）。",
 		schema: obj(map[string]any{
-			"path": str2("文档路径，如 docs/式神/茨木童子.md"),
+			"path": str2("文档路径（相对 vault 根，如 docs/子目录/标题.md）"),
 			"body": str2("完整正文（不含 front matter）"),
 		}, "path", "body"),
 		run: func(s *Server, a args) (any, error) {
