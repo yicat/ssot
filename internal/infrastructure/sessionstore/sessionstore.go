@@ -118,6 +118,23 @@ func SetTitle(vaultRoot, id, title, from string, force bool) error {
 	return Save(vaultRoot, all)
 }
 
+// Delete 删掉**一个**会话的条目（会话文件被删了，条目别留着）。
+//
+// 与 Prune 的分工：Prune 是「按一份名单批量清」，Delete 是「就删这一个」——
+// 测试留下的会话、用户手删的会话都走这条，不必先拼一份 keep 名单再绕一圈
+// （keep 为空又表示「什么都不删」，凑起来容易写错）。
+func Delete(vaultRoot, id string) error {
+	if id == "" {
+		return nil
+	}
+	all := Load(vaultRoot)
+	if _, ok := all[id]; !ok {
+		return nil
+	}
+	delete(all, id)
+	return Save(vaultRoot, all)
+}
+
 // Prune 把**不在 keep 里**的会话条目删掉（会话被删了，条目别留着）。
 // keep 为空表示不删任何东西（免得手滑把整份清空）。
 func Prune(vaultRoot string, keep map[string]bool) error {

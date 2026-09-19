@@ -131,7 +131,7 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 | 保留 | `tool-subagent`、`tool-todo` | 主 Agent 的调度用，**不碰文件** |
 | 保留 | `tool-web` | 只读外部；要落进 vault 仍得走 `doc_write`，绕不过门 |
 
-**为什么连只读的 `tool-fs-search` 也关掉**（2025-01 定的，推翻了第一版「读放开」里的例外）：
+**为什么连只读的 `tool-fs-search` 也关掉**（2026-09-20 定的，推翻了第一版「读放开」里的例外）：
 它的只读是事实，但**只读不等于受约束**——
 
 1. **没有 vault 边界**。插件 `@deepseek-ai/dsh-tool-fs-search` 的 `toWorkdirRelative` 只做一件事：
@@ -184,7 +184,7 @@ $env:ELECTRON_RUN_AS_NODE="1"
   --profile ssot-agent --dump-config 2>&1 | Out-String
 ```
 
-2026-09-19 实测（本机，892 行 dump）：**被禁的只有这 5 个 + bundle 自带的 `skill-badge`**
+2026-09-20 实测（本机，892 行 dump）：**被禁的只有这 5 个 + bundle 自带的 `skill-badge`**
 
 ```
 tool-bash  tool-pwsh  tool-fs  tool-fs-search  tool-str-replace-editor   （+ skill-badge）
@@ -203,9 +203,30 @@ tool-bash  tool-pwsh  tool-fs  tool-fs-search  tool-str-replace-editor   （+ sk
 2. **别读输出文件**。GUI 子系统进程不往文件句柄写，`> dump.yml` 得到的是 0 字节——
    我当时读到空文件，误判成「patch 静默失效」，还据此怀疑了半天配置文件。
 
-⚠️ 另一半要人看一眼：**模型最终看到的工具清单**只有真跑一轮才看得见——
-界面里的工具调用行会显示工具名，如果那一行出现 `pwsh`/`read`/`write`/`grep`，
-就说明没堵住（这条我不假装能自动验）。
+**「模型手上真有什么工具」也能自动验了**（2026-09-20 起，不用再靠人看界面）：
+`scripts/check/agent-probe` 加了 `-ask`——起后端 → 建会话 → **真发一句话**（花额度）→
+把这一轮模型**实际调用的工具名**逐条打出来。工具名取自 ACP `tool_call` 的 `title`，
+与界面显示的是同一个字符串（`internal/api/agent.go` 的 emitUpdate），两边不会各说各话。
+
+实测（demo vault，问法「在库里找出提到「增益」的文档，只列路径、不要改文件」）：
+
+```
+  [工具] in_progress  mcp__ssot__vault_search
+  [工具] in_progress  mcp__ssot__table_infos
+  [工具] in_progress  mcp__ssot__vault_list
+  [工具] in_progress  mcp__ssot__table_query      ← 后面还有 9 次
+  …
+这一轮结束：stop="end_turn"（23.0 秒）
+  ✓ 没出现 DSH 自带的写/搜索工具：13 次调用里 13 次走的是我们自己的工具
+```
+
+**结论：`grep`/`glob` 确实没到模型手上**（这个问法有 grep 的话多半会去 grep）。
+⚠️ 一条限制：**这一轮没调工具就什么都证明不了**，探针会把这种情况如实打出来
+（「换个非用工具不可的问法再跑一次」）——别把「没出现 grep」当成「grep 没有了」。
+
+顺带：这次真跑还暴露了两个与工具集无关、但更要紧的问题——
+`table_query` 能直接查派生层的表、以及 agent 手上的 `vault_search` 还是关键词检索
+（见 `OPEN.md` #31 / #32）。**验证工具的副产品就是这种**，所以它值得常跑。
 
 ## 不做
 

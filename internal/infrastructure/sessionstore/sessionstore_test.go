@@ -115,6 +115,35 @@ func TestPruneKeepsOnlyGiven(t *testing.T) {
 	}
 }
 
+func TestDeleteOneEntry(t *testing.T) {
+	root := t.TempDir()
+	for _, id := range []string{"a", "b"} {
+		if err := SetTitle(root, id, "标题-"+id, "first-message", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Delete(root, "a"); err != nil {
+		t.Fatal(err)
+	}
+	all := Load(root)
+	if len(all) != 1 {
+		t.Fatalf("该只剩 b：%+v", all)
+	}
+	if _, ok := all["a"]; ok {
+		t.Error("a 该被删掉")
+	}
+	// 删不存在的、或空 id：安静返回，不改动别的条目（列表不能被它拖垮）。
+	if err := Delete(root, "不存在"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Delete(root, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(Load(root)) != 1 {
+		t.Errorf("删不存在的不该动到别人：%+v", Load(root))
+	}
+}
+
 func TestSortIDsByLastUsed(t *testing.T) {
 	entries := map[string]Entry{
 		"b": {LastUsedAt: "2026-09-19T23:00:00Z"},
