@@ -233,7 +233,13 @@ export function AgentPane({ onOpenSettings }: Props) {
         {a.items.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <Bot className="size-5" />
-            <div>{a.running ? "说点什么吧。" : "正在起后端…起不来就去顶栏点「启动后端」。"}</div>
+            <div>
+              {a.running
+                ? a.sessionId
+                  ? "说点什么吧。"
+                  : "还没有会话：点顶栏「＋ 新会话」开一个。"
+                : "正在起后端…起不来就去顶栏点「启动后端」。"}
+            </div>
           </div>
         )}
 

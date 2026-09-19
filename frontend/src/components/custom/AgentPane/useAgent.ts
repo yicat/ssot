@@ -315,15 +315,14 @@ export function useAgent() {
         return;
       }
     }
+    // **只有「＋ 新会话」能创建会话**：这里没会话就把话说清楚，绝不偷偷建一个
+    // （不然又是一堆空会话——用户的明确要求：「除非我点击新建会话，否则一概都不能创建新的」）。
     if (!useAgentStore.getState().sessionId) {
-      try {
-        applyStatus(await AgentService.NewSession());
-        logLine("开会话 " + useAgentStore.getState().sessionId.slice(0, 8));
-      } catch (err) {
-        push({ kind: "notice", text: String(err), isError: true });
-        logLine("开会话失败：" + String(err));
-        return;
-      }
+      const msg = "还没有会话：点顶栏的「＋ 新会话」开一个，再说话。";
+      set({ busy: false, busyMessage: null });
+      push({ kind: "notice", text: msg, isError: true });
+      logLine(msg);
+      return;
     }
     push({ kind: "user", text });
     // 会话的**初始描述**：第一句话就是这次会话在干什么——先拿它当标题（机械截断，不调模型）。
