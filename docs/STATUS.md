@@ -32,6 +32,8 @@
 
 | 2026-09-20 | **文档与代码对齐（收尾）** | 把「骨架 / 已全部清除」那批旧描述清掉，并按代码核准每一处数字：**README 重写**（原来还写着"当前是骨架、业务代码与规格集都已删掉"）、`AGENTS.md` 目录树按真实结构重画、`internal/AGENTS.md` 去掉「`domain/` 与 `application/` 都还不存在」；spec 侧——`agent.spec.md` §5 补齐 `scope_show`/`scope_propose`（**12 个工具**）、§7 会话改成「日志在后端、元数据在我们（`<vault>/.ssot/sessions.json`）」、`derived.spec.md` §一 索引表清单按 `SchemaVersion = 3` 重写、`dsh.spec.md`「八个工具 / mcp-smoke 29/29」改成十二个 / **31/31**、`shell.spec.md` 与 `workspace.spec.md` 的「空目录 git 不提交」改成「`projects/` 整段 gitignore」、`plans/derived-layer.md` §5 标上 P0–P3 已完成；`scripts/ingest/` 提交（`OPEN.md` #13 消项） | `README.md`、`AGENTS.md`、`internal/AGENTS.md`、`docs/specs/*`、`docs/plans/derived-layer.md`、`docs/OPEN.md` |
 
+| 2026-09-20 | **纠正块落地（`OPEN.md` #1 消项）** | 语法定案：`> [!correction] 名字：更正后的说法` + **必填**的 `> 类型：…`；**front matter 里不登记**（谁改的、什么时候靠 git 的 `Edited-By` trailer，不搞第二份真相）。两个「为什么」都是实测/推出来的：关键字只能用**英文**——前端 callout 正则 `[!(\w+)]` 不认汉字，`[!纠正]` 实测会退回普通引用块；`类型` **必填**——派生层按 (名字,类型) 归并，靠猜会让纠正变成**另一个实体**。落地：`domain/vault/correction.go`（纯规则：解析 + `BlankCorrections`）→ 重建时写成 `authority: corrected` 的来源行（`vaultindex.writeCorrections`）——**这是「纠错活过重建」的落地**，因为 `TestRebuildDropsGraph` 钉着「重建会丢抽取产物」，纠正不重读文件就真没了；抽取块（2000）先抹掉纠正块再喂模型（嵌入块保留原文，检索要搜得到更正后的说法）；归并读描述**纠错优先**；写错的逐条打 stderr 并把条数写进 `meta`，`ssot vault index` 报出来 | `document.spec.md`「纠正块的写法」、`derived.spec.md` §九.2、`domain/vault/correction.go`、`vaultindex/corrections.go` |
+
 ## 现在在哪
 
 **已完成**
@@ -109,13 +111,31 @@
 
 ## 卡在哪
 
-- **3 个阻塞项挡着 P3**（抽取）：纠正块语法、抽取触发方式、`agent.spec` 工具清单更新 —— 见 `docs/OPEN.md`。
-  **不挡 P0–P2**。
+- **1 个阻塞项挡着 P3**（抽取）：**抽取的触发方式**（`OPEN.md` #2——写入即排队 / 空闲批量 / 显式重建）。
+  原来列的三条里另两条都已解决：纠正块的书写语法（#1，2026-09-20 定案并落地）、`agent.spec` 工具清单
+  （#3，清单已对齐，只剩「后台抽取任务怎么暴露」——它跟 #2 是同一个决定）。**不挡 P0–P2**。
 - **1 个阻塞项挡着 P1 定稿**（不是挡开发）：模型与 ONNX 运行时怎么分发（`OPEN.md` #15）——
   现在只在本机临时目录里。
 - 待用户决策：ADR 0013（定期整理）状态还是「提议」。
 
 ## 最近一次验证（都是跑出来的）
+
+**2026-09-20（纠正块这一轮，本机实测）**
+
+```
+go vet ./...                              exit 0
+go test ./... -count=1                    全绿（新增：domain/vault 纠正块 7 条、vaultindex 4 条、
+                                          归并描述纠错优先 1 条）
+bin/ssot-cli.exe vault -root .tmp/correction-demo index
+                                          纠正块：生效 1 条，未生效 1 条（原因逐条打在 stderr）
+bin/ssot-cli.exe vault -root .tmp/correction-demo stat
+                                          docs/式神：实体行 1（就是那条纠正；没跑抽取，图里只有它）
+bin/ssot-cli.exe vault -root projects/demo index
+                                          285 篇 / 13 表 / 6,014 嵌入块 / 4,914 抽取块，127.7 秒
+```
+
+⚠️ demo 那次是 **285 篇**，不是台账里那个 410（`raw/剧情` 那批被删了，是 vault 自己的改动）——
+所以别拿「12,512 / 7,147」当当前读数，它是**当时**的。
 
 **2026-09-20（文档对齐这一轮，本机实测）**
 

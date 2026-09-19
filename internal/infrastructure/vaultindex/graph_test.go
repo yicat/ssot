@@ -165,6 +165,46 @@ func TestRebuildDropsGraph(t *testing.T) {
 	}
 }
 
+// 归并读法里**描述要纠错优先**：只把 authority 标成 corrected 而描述还是模型那份，等于没生效。
+func TestEntitiesMergedPrefersCorrectedDescription(t *testing.T) {
+	idx := newVectorVault(t)
+	// 两条来源：一条模型抽的、一条人纠正的（来源不同，所以都会留着）。
+	if _, err := idx.PutEntities([]EntityRow{
+		{Name: "茨木童子", Type: "式神", Description: "模型写的：靠鬼手输出",
+			Authority: AuthorityDerived, Doc: "docs/机制/伤害.md", FromLine: 1, ToLine: 5, Line: 3},
+		{Name: "茨木童子", Type: "式神", Description: "人改过的：鬼手是右手",
+			Authority: AuthorityCorrected, Doc: "docs/式神/茨木.md", FromLine: 8, ToLine: 10, Line: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := idx.EntitiesMerged(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got EntityRow
+	for _, m := range merged {
+		if m.Name == "茨木童子" {
+			got = m
+		}
+	}
+	if got.Authority != AuthorityCorrected {
+		t.Errorf("该标 corrected：%+v", got)
+	}
+	if got.Description != "人改过的：鬼手是右手" {
+		t.Errorf("描述该取纠正那份（`MIN(description)` 会挑到模型那份）：%+v", got)
+	}
+
+	top, err := idx.TopEntities(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range top {
+		if m.Name == "茨木童子" && m.Description != "人改过的：鬼手是右手" {
+			t.Errorf("TopEntities 也该纠错优先：%+v", m)
+		}
+	}
+}
+
 func contains(hay, needle string) bool {
 	return len(hay) >= len(needle) && (hay == needle || indexOf(hay, needle) >= 0)
 }

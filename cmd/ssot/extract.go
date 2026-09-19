@@ -73,8 +73,8 @@ func vaultExtract(svc *vaultapp.Service, f vaultFlags) error {
 			if err != nil {
 				return fmt.Errorf("入库失败：%w", err)
 			}
-			fmt.Printf("    入库后家底：实体来源 %d 行 / %d 个，关系来源 %d 行 / %d 条，覆盖 %d 篇\n",
-				st.Entities, st.EntityNames, st.Relations, st.RelationKeys, st.Docs)
+			fmt.Printf("    入库后家底：实体来源 %d 行 / %d 个（其中纠正 %d 行），关系来源 %d 行 / %d 条，覆盖 %d 篇\n",
+				st.Entities, st.EntityNames, st.Corrected, st.Relations, st.RelationKeys, st.Docs)
 		}
 		fmt.Printf("批 %d/%d：%d 块（正文 %d 字）→ 实体 %d / 关系 %d / 丢弃 %d，用时 %.1f 秒\n",
 			i+1, len(batches), len(b), chars, len(res.Entities), len(res.Relations), len(res.Dropped),

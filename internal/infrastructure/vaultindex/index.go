@@ -170,6 +170,13 @@ func (idx *Index) Rebuild() error {
 		return err
 	}
 
+	// 纠正块：**不是抽出来的**，是文件里的内容——所以重建时重读一遍。
+	// （重建会把抽取产物全丢掉，见 TestRebuildDropsGraph；纠正必须活过重建，ADR 0009。）
+	corrected, ignoredCorrections, err := idx.writeCorrections(db, docs)
+	if err != nil {
+		return err
+	}
+
 	used := map[string]bool{}
 	for _, file := range idx.tableFiles() {
 		if err := idx.loadTable(db, file, used); err != nil {
@@ -182,6 +189,8 @@ func (idx *Index) Rebuild() error {
 		"doc_count":           strconv.Itoa(len(docs)),
 		"chunk_count":         strconv.Itoa(chunks),
 		"extract_chunk_count": strconv.Itoa(extracts),
+		"correction_count":    strconv.Itoa(corrected),
+		"correction_ignored":  strconv.Itoa(ignoredCorrections),
 		"schema_version":      strconv.Itoa(SchemaVersion),
 	} {
 		if _, err := db.Exec(`INSERT INTO meta(k,v) VALUES(?,?)`, k, v); err != nil {
@@ -217,7 +226,10 @@ func (idx *Index) writeChunks(db *sql.DB, docs []vault.Doc) (int, int, error) {
 			return total, totalExtract, err
 		}
 		chunks := vault.ChunkBody(d.Body, d.BodyOffset, targets.Embed)
-		extracts := vault.ChunkBody(d.Body, d.BodyOffset, targets.Extract)
+		// 抽取块**不含纠正块**：它是给派生层的更正指令，不是原文事实，不抹就会被再抽一遍
+		// （抽出来的还是错的那条）。BlankCorrections 只抹文本、不动行号。
+		// 嵌入块（上面那行）保留原文——检索要能搜到更正后的说法。
+		extracts := vault.ChunkBody(vault.BlankCorrections(d.Body), d.BodyOffset, targets.Extract)
 		sum := sha256.Sum256([]byte(d.Body))
 
 		n := 0
@@ -233,6 +245,10 @@ func (idx *Index) writeChunks(db *sql.DB, docs []vault.Doc) (int, int, error) {
 			n++
 		}
 		for _, c := range extracts {
+			// 整块都是纠正块时会被抹空：空的抽取块没有意义，不写进去。
+			if strings.TrimSpace(c.Text) == "" {
+				continue
+			}
 			if _, err := tx.Exec(
 				`INSERT INTO extract_chunk(doc,ord,from_line,to_line,text) VALUES(?,?,?,?,?)`,
 				d.Path, c.Ord, c.FromLine, c.ToLine, c.Text,
@@ -240,6 +256,7 @@ func (idx *Index) writeChunks(db *sql.DB, docs []vault.Doc) (int, int, error) {
 				tx.Rollback()
 				return total, totalExtract, err
 			}
+			totalExtract++
 		}
 		// 刚重建出来就是最新的：stale=0。
 		if _, err := tx.Exec(
@@ -253,7 +270,6 @@ func (idx *Index) writeChunks(db *sql.DB, docs []vault.Doc) (int, int, error) {
 			return total, totalExtract, err
 		}
 		total += n
-		totalExtract += len(extracts)
 	}
 	return total, totalExtract, nil
 }

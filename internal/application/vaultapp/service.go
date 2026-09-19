@@ -84,6 +84,14 @@ func (s *Service) ChunkStat() (vault.ChunkStat, error) {
 	return s.index.ChunkStat()
 }
 
+// CorrectionStat 读上次重建认出来的纠正块：生效几条、没写对几条（写对没写对都要能被看见）。
+func (s *Service) CorrectionStat() (int, int, error) {
+	if err := s.ensureIndex(); err != nil {
+		return 0, 0, err
+	}
+	return s.index.CorrectionStat()
+}
+
 // ensureIndex 索引缺失、或**结构版本对不上**时先建起来。
 //
 // 「搜不到东西」不该是因为忘了建索引——那种误导比慢几十毫秒严重得多。

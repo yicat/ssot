@@ -467,6 +467,11 @@ func vaultIndex(svc *vaultapp.Service) error {
 		fmt.Printf("  派生块：嵌入块 %d 个（512 口径），抽取块 %d 个（2000 口径），待处理文档 %d 篇\n",
 			st.Chunks, st.ExtractChunks, st.Stale)
 	}
+	// 纠正块是手写的，有没有生效必须看得见（没有的就不占屏）。
+	if found, ignored, err := svc.CorrectionStat(); err == nil && (found > 0 || ignored > 0) {
+		fmt.Printf("  纠正块：生效 %d 条（读成 authority=corrected 的来源行），未生效 %d 条（原因逐条见 stderr）\n",
+			found, ignored)
+	}
 	for _, t := range tables {
 		fmt.Printf("  %-18s ← %s（%s，%d 行；列：%s）\n",
 			t.Name, t.File, t.Format, t.Rows, strings.Join(t.Columns, "、"))

@@ -175,8 +175,10 @@ func (idx *Index) EntitiesMerged(limit int) ([]EntityRow, error) {
 	if limit <= 0 {
 		limit = 100
 	}
+	// 描述**纠错优先**：有人纠过（authority='corrected'）就取那一份；
+	// 没有才退回 derived 里最小的那条。只标 corrected 却不改描述 = 纠正等于没生效。
 	q := `SELECT name,type,
-	    MIN(description) AS description,
+	    COALESCE(MIN(CASE WHEN authority='corrected' THEN description END), MIN(description)) AS description,
 	    CASE WHEN SUM(authority='corrected')>0 THEN 'corrected' ELSE 'derived' END AS authority,
 	    COUNT(*) AS sources,
 	    GROUP_CONCAT(DISTINCT doc || ':' || COALESCE(line, from_line)) AS srcs
@@ -407,7 +409,8 @@ func (idx *Index) TopEntities(limit int) ([]EntityRow, error) {
 		return nil, err
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT name, type, MIN(description),
+	rows, err := db.Query(`SELECT name, type,
+	    COALESCE(MIN(CASE WHEN authority='corrected' THEN description END), MIN(description)),
 	    CASE WHEN SUM(authority='corrected')>0 THEN 'corrected' ELSE 'derived' END,
 	    COUNT(*) AS sources
 	  FROM entity GROUP BY name, type

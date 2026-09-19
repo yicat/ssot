@@ -65,7 +65,10 @@ sync(doc, hash, mtime, built_at, stale, reason)
   只看 hash 则每次都要读全文。
 - 实现落位（P0 已完成）：三张表在 `infrastructure/vaultindex` 的 schema 里，
   `Rebuild` 时按「一篇一个事务」写入；读取口是 `ChunkStat/ChunksOf/ExtractChunksOf/SyncOf/StaleDocs`。
-  实测 `projects/demo`（410 篇）：512 口径 12,512 块、2000 口径 7,147 块、全量重建 **127～192 秒**。
+  实测 `projects/demo`（**当时** 410 篇）：512 口径 12,512 块、2000 口径 7,147 块、
+  全量重建 **127～192 秒**。
+  ⚠️ **这些数字随 vault 内容走，别当常数**：2026-09-20 复核时 demo 只剩 **285 篇**
+  （`raw/剧情` 那批被删了，是 vault 自己的改动），同一条命令量到 **6,014 / 4,914 块、127.7 秒**。
 - **向量怎么存（P1 已完成）**：`embedding(owner_kind, owner_id, dim, vec)`，
   `owner_id` 是 `文档#序号`（块）、实体/关系阶段再定；`vec` 是 float32 小端裸字节
   （512 维 = 2048 字节）。检索口是 `PendingChunks/PendingCount/PutEmbeddings/SearchVector/ScanVectors`。

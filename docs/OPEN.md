@@ -4,7 +4,7 @@
 
 | # | 问题 | 状态 | 挡着谁 | 关联 |
 |---|---|---|---|---|
-| 1 | **纠正块的书写语法**：文档里怎么标记「这条被人和 agent 纠正过」（callout 关键字 + front matter 字段名） | **阻塞** | P3 抽取（人机纠错要能活过重建） | ADR 0009、`docs/specs/derived.spec.md` §十 |
+| 1 | ~~**纠正块的书写语法**~~ → **已解决（2026-09-20）**：`> [!correction] 名字：更正后的说法` + **必填**的 `> 类型：…` 一行；**front matter 不登记**（谁改的、什么时候靠 git 的 `Edited-By` trailer）。两个为什么：关键字用英文是因为前端 callout 正则 `[!(\w+)]` **不认汉字**（实测 `[!纠正]` 会退回普通引用块）；`类型` 必填是因为派生层按 **(名字,类型)** 归并，猜类型会让纠正变成**另一个实体**——比报错更难查。写法在 `document.spec.md`「纠正块的写法」，落地在 `derived.spec.md` §九.2 | 已解决 | — | `internal/domain/vault/correction.go`、`vaultindex.writeCorrections` |
 | 2 | **抽取的触发方式**：写入即排队 / 空闲批量 / 显式「重建索引」 | **阻塞** | P3（决定任务模型与界面进度语义） | `derived.spec.md` §六.1、ADR 0013 |
 | 3 | **`agent.spec.md` 工具清单要更新** → **清单已对齐（2026-09-20）**：§5 补齐 `scope_show`/`scope_propose`（12 个工具）、`vault_search` 的 `total`/`returned`/`truncated` 已写进去；§7 会话持久化那段也按实测改了（日志在后端、元数据在我们）。**剩下没定的**只有「后台抽取任务怎么暴露」——它与 #2（触发方式）是同一个决定 | **阻塞（只剩后半）** | P3 触发方式定了一起做 | `agent.spec.md` §5/§7 |
 | 4 | `ui-test.mjs` 内容依赖：套件吃旧示例 vault 的内容，vault 一换就红 | 待定 | 无（但影响回归可信度） | `docs/STATUS.md`、`scripts/check/README.md` |
@@ -12,7 +12,7 @@
 | 6 | 界面上「索引状态」给多少信息（一行 / 可展开） | 待定 | P5 | `derived.spec.md` §六.6 |
 | 7 | 抽取**质量**没测：512 上下文会不会把实体/关系抽碎 | 待定 | P3 的口径 | `docs/notes/extraction-spike.md` |
 | 8 | 「关推理是否真生效」没证实：关掉后仍有 2 段 `dsh: reasoning` | 待定 | P3（要 wire 层才说得清） | ADR 0011 |
-| 9 | 实体 identity 细节：同名不同类型算不算两个（现按 (name,type)） | 待定 | P3 | `docs/plans/derived-layer.md` §3 |
+| 9 | 实体 identity 细节：同名不同类型算不算两个（现按 (name,type)）。⚠️ 2026-09-20 起**纠正块的 `类型：` 是必填**、直接挂在这个键上——真要把 identity 改成「同名算一个」，纠正语法得跟着一起改 | 待定 | P3 | `docs/plans/derived-layer.md` §3、`document.spec.md`「纠正块的写法」 |
 | 10 | 抓取管线口径（HTTP 先行→403 退 Chromium、钉 IP、readability）只在笔记里，`raw.refresh` 未做 | 待定 | 抓取相关需求 | `docs/notes/oss-comparison.md` §二 |
 | 11 | WeKnora 那几条怎么落：`superseded_by`/有效期（拟长成图上的边）、改动来源四分类、lint 六类 | 待定 | — | `derived.spec.md` §六.5 |
 | 12 | 仓库是 **public**，32 个文件含本机绝对路径（`C:\Users\ngnl5\…`）；build/darwin 的 5.2MB 仍在历史里 | 观察 | — | 用户已知，暂不处理 |

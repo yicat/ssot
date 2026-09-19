@@ -19,7 +19,7 @@ node scripts/ingest/huiji-to-vault.mjs --vault projects/其他 --raw .huiji/raw
 写完要重建派生索引才能检索、查询：
 
 ```powershell
-ssot vault -root projects/demo index      # 406 篇 + 13 张表，本机实测 135 秒
+ssot vault -root projects/demo index      # 本机实测 135 秒（篇数看你的数据：那次是 406 篇 + 13 张表）
 ```
 
 ## 边界（写在 `AGENTS.md` 的那种「什么时候不该用」）
