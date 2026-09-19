@@ -31,27 +31,26 @@ func Titles(dshHome string) map[string]string {
 	if dshHome == "" {
 		return out
 	}
+	// ⚠️ 会话文件在**子目录**里（实测：`storages/session_projcache/sessions/<id>.json`），
+	// 所以必须递归走——只看一层会一条也读不到（踩过：以为结构不对，其实是没往下走）。
 	for _, dir := range []string{
 		filepath.Join(dshHome, "storages", "session_projcache"),
 		filepath.Join(dshHome, "storages"),
 	} {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
-				continue
+		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d == nil || d.IsDir() || !strings.HasSuffix(d.Name(), ".json") {
+				return nil
 			}
-			id := strings.TrimSuffix(e.Name(), ".json")
+			id := strings.TrimSuffix(d.Name(), ".json")
 			id = strings.TrimPrefix(id, "session-")
 			if _, ok := out[id]; ok && out[id] != "" {
-				continue // 已经有了（projcache 那份更全）
+				return nil // 已经有了（projcache 那份更全）
 			}
-			if t := titleOf(filepath.Join(dir, e.Name())); t != "" {
+			if t := titleOf(path); t != "" {
 				out[id] = t
 			}
-		}
+			return nil
+		})
 	}
 	return out
 }
