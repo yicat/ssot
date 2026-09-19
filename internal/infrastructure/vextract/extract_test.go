@@ -300,3 +300,41 @@ func TestNormalizeTypeFollowsDeclaration(t *testing.T) {
 		}
 	}
 }
+
+// TestRelationEndpointsCheckWholeGraph：端点**在图里已知**（上一批抽出来的）不该被丢，
+// 只有「谁也不认识」的端点才丢（docs/OPEN.md #26）。
+func TestRelationEndpointsCheckWholeGraph(t *testing.T) {
+	f := &fakeCompleter{replies: []string{`{"entities":[
+	  {"name":"NAME_X","type":"TYPE_X","description":"本批抽到的","doc":"raw/DIR_X/夹具.md","line":11}
+	],"relations":[
+	  {"source":"NAME_X","target":"NAME_OLD","keywords":"K","description":"引用上一批抽到的实体","doc":"raw/DIR_X/夹具.md","line":11},
+	  {"source":"NAME_X","target":"NAME_GHOST","keywords":"K","description":"谁也不认识","doc":"raw/DIR_X/夹具.md","line":11}
+	]}`}}
+	chunks := []Chunk{{Doc: "raw/DIR_X/夹具.md", Ord: 0, FromLine: 10, ToLine: 30, Text: "正文。"}}
+	// 不带上 Known：两条都该被丢（端点不在本批）。
+	res, err := Extract(context.Background(), f, chunks, Options{Config: testConfig()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Relations) != 0 {
+		t.Fatalf("不带 Known 时两条都该丢：%+v", res.Relations)
+	}
+	// 带上 Known（图里已有 NAME_OLD）：只丢「谁也不认识」的那条。
+	f2 := &fakeCompleter{replies: f.replies}
+	f2.replies = []string{`{"entities":[
+	  {"name":"NAME_X","type":"TYPE_X","description":"本批抽到的","doc":"raw/DIR_X/夹具.md","line":11}
+	],"relations":[
+	  {"source":"NAME_X","target":"NAME_OLD","keywords":"K","description":"引用上一批抽到的实体","doc":"raw/DIR_X/夹具.md","line":11},
+	  {"source":"NAME_X","target":"NAME_GHOST","keywords":"K","description":"谁也不认识","doc":"raw/DIR_X/夹具.md","line":11}
+	]}`}
+	res2, err := Extract(context.Background(), f2, chunks, Options{Config: testConfig(), Known: map[string]bool{"NAME_OLD": true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res2.Relations) != 1 || res2.Relations[0].Target != "NAME_OLD" {
+		t.Fatalf("图里已知的端点不该被丢：%+v", res2.Relations)
+	}
+	if len(res2.Dropped) != 1 {
+		t.Errorf("只该丢 1 条（端点谁也不认识）：%+v", res2.Dropped)
+	}
+}

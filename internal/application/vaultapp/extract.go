@@ -46,6 +46,14 @@ func (s *Service) StoreExtraction(res vextract.Result) (vault.ExtractStat, error
 	return s.index.ExtractStat()
 }
 
+// KnownEntityNames 返回图里已经有的实体名（关系端点校验要连它一起看）。
+func (s *Service) KnownEntityNames() (map[string]bool, error) {
+	if err := s.ensureIndex(); err != nil {
+		return nil, err
+	}
+	return s.index.EntityNames()
+}
+
 // ExtractStat 读派生图的家底（给状态显示与验证）。
 func (s *Service) ExtractStat() (vault.ExtractStat, error) {
 	if err := s.ensureIndex(); err != nil {

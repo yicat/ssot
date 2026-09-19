@@ -96,6 +96,10 @@ type Options struct {
 	// Config 是**项目声明**来的抽取配置（类型词表 / 忽略的名字形状 / 空占位词 / 反例）。
 	// 零值 = 只有兜底 Other、不忽略任何形状——即「代码里没有默认数据知识」。
 	Config vault.ExtractConfig
+	// Known 是**图里已经有的实体名**（不在本批、但已经抽出来过的那些）。
+	// 关系的端点校验要连它一起看：只按本批校验会把「实体在上一批抽出、这一批引用它」的关系丢掉
+	// （实测：20 篇丢了 3 条，全库会放大 —— docs/OPEN.md #26）。
+	Known map[string]bool
 }
 
 // DefaultOptions 是已定的默认值：照 LightRAG 做一轮补抽。
@@ -132,7 +136,7 @@ func Extract(ctx context.Context, c Completer, chunks []Chunk, opt Options) (Res
 		if err != nil {
 			return out, fmt.Errorf("第 %d 轮回包解析失败：%w", round+1, err)
 		}
-		mergeInto(&out, raw, chunks, opt.Config, seenEnt, seenRel)
+		mergeInto(&out, raw, chunks, opt, seenEnt, seenRel)
 		out.Rounds = round + 1
 	}
 	sortResult(&out)
@@ -140,7 +144,8 @@ func Extract(ctx context.Context, c Completer, chunks []Chunk, opt Options) (Res
 }
 
 // mergeInto 把一轮的原始产物校验后并进结果（去重、丢坏条目并记原因）。
-func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, cfg vault.ExtractConfig, seenEnt, seenRel map[string]bool) {
+func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, opt Options, seenEnt, seenRel map[string]bool) {
+	cfg := opt.Config
 	byDoc := map[string][]Chunk{}
 	for _, c := range chunks {
 		byDoc[c.Doc] = append(byDoc[c.Doc], c)
@@ -185,10 +190,10 @@ func mergeInto(out *Result, raw rawExtraction, chunks []Chunk, cfg vault.Extract
 			out.Dropped = append(out.Dropped, Drop{Kind: "relation", Reason: "source/target 有一个是空的"})
 			continue
 		}
-		if !known[src] || !known[dst] {
-			// 端点不在这一批的实体里：丢掉并说明（宁可不建图，也不凭空造实体）。
+		if !known[src] && !opt.Known[src] || !known[dst] && !opt.Known[dst] {
+			// 端点既不在本批、也不在图里已有的实体里：丢掉并说明（宁可不建图，也不凭空造实体）。
 			out.Dropped = append(out.Dropped, Drop{Kind: "relation", Name: src + "→" + dst,
-				Reason: "端点不是这一批抽到的实体"})
+				Reason: "端点既不在本批抽到、也不在图里已有（可能是模型编的）"})
 			continue
 		}
 		ch, ok := locate(byDoc, r.Doc, r.Line)

@@ -277,3 +277,26 @@ func (idx *Index) ExtractedDocs() ([]string, error) {
 	sort.Strings(out)
 	return out, rows.Err()
 }
+
+// EntityNames 返回图里已有实体名的集合（关系端点校验用）。
+func (idx *Index) EntityNames() (map[string]bool, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT DISTINCT name FROM entity`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out[n] = true
+	}
+	return out, rows.Err()
+}

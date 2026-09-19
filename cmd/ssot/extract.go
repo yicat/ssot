@@ -42,6 +42,13 @@ func vaultExtract(svc *vaultapp.Service, f vaultFlags) error {
 	if err != nil {
 		return err
 	}
+	known, err := svc.KnownEntityNames()
+	if err != nil {
+		return err
+	}
+	if len(known) > 0 {
+		fmt.Printf("图里已有 %d 个实体名（关系端点校验会连它们一起看）\n", len(known))
+	}
 	comp := vextract.NewACPCompleter(opt)
 	defer comp.Close()
 
@@ -53,7 +60,7 @@ func vaultExtract(svc *vaultapp.Service, f vaultFlags) error {
 			chars += len([]rune(c.Text))
 		}
 		t0 := time.Now()
-		res, err := vextract.Extract(context.Background(), comp, b, vextract.Options{Gleaning: f.gleaning, Config: cfg})
+		res, err := vextract.Extract(context.Background(), comp, b, vextract.Options{Gleaning: f.gleaning, Config: cfg, Known: known})
 		if err != nil {
 			return fmt.Errorf("第 %d/%d 批失败：%w", i+1, len(batches), err)
 		}
