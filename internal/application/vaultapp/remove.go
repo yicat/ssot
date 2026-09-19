@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ngnl5/ssot/internal/domain/vault"
@@ -146,4 +147,49 @@ func (s *Service) LinkSources(rel string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// MatchDocs 按路径 glob 找出匹配的**文档**（批量删除用；`raw/x/**` 这种）。
+//
+// glob 的语义与收录范围共用一份实现（`vault.MatchPathGlob`），避免出现两种方言。
+// 返回按路径排序，所以同样的模式、同样的 vault，结果顺序永远一样。
+func (s *Service) MatchDocs(pattern string) ([]string, error) {
+	pat := vault.NormalizeSlash(pattern)
+	if pat == "" {
+		return nil, nil
+	}
+	docs, err := s.loader.Load()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, d := range docs {
+		if vault.MatchPathGlob(pat, d.Path) {
+			out = append(out, d.Path)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ExpandArgs 把命令行参数展开成文档路径列表：带 glob 元字符的按 glob 展开，
+// 其余的按原样（留着让 Remove 去校验存在性）。
+func (s *Service) ExpandArgs(args []string) (docs []string, patterns int, err error) {
+	var out []string
+	for _, a := range args {
+		if strings.ContainsAny(a, "*?[") {
+			patterns++
+			matched, err := s.MatchDocs(a)
+			if err != nil {
+				return nil, patterns, err
+			}
+			if len(matched) == 0 {
+				return nil, patterns, fmt.Errorf("没有文档匹配 %q", a)
+			}
+			out = append(out, matched...)
+			continue
+		}
+		out = append(out, vault.NormalizeSlash(a))
+	}
+	return out, patterns, nil
 }

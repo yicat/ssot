@@ -111,7 +111,7 @@ func matchRule(r ScopeRule, p string, tags []string) (string, bool) {
 		if pat == "" {
 			continue
 		}
-		if matchPathGlob(pat, p) {
+		if MatchPathGlob(pat, p) {
 			return "路径 " + pat, true
 		}
 	}
@@ -129,12 +129,12 @@ func matchRule(r ScopeRule, p string, tags []string) (string, bool) {
 	return "", false
 }
 
-// matchPathGlob 匹配一个路径 glob。
+// MatchPathGlob 匹配一个路径 glob（收录范围与批量删除共用这一份实现）。
 //
 // 约定：`dir/**` 表示「dir 下的全部」；其余交给 `path.Match`（它的 `*` 不跨 `/`，
 // 正合我们想要的「一层」语义）。⚠️ 不支持把 `**` 放在中间——需要就说清楚再加，
 // 别让语义变成猜的。
-func matchPathGlob(pattern, p string) bool {
+func MatchPathGlob(pattern, p string) bool {
 	pat := NormalizeSlash(pattern)
 	if strings.HasSuffix(pat, "/**") {
 		prefix := strings.TrimSuffix(pat, "/**")

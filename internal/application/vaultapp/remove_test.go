@@ -87,3 +87,36 @@ func TestRemoveRefusesNonDoc(t *testing.T) {
 		t.Error("不存在的路径该报错")
 	}
 }
+
+// TestMatchDocsGlob：批量删靠 glob 找文档，语义与收录范围共用一份实现。
+func TestMatchDocsGlob(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "docs/甲.md", "---\ntitle: 甲\n---\n\n甲。\n")
+	write(t, root, "raw/DIR_X/一.md", "---\ntitle: 一\n---\n\n一。\n")
+	write(t, root, "raw/DIR_X/二.md", "---\ntitle: 二\n---\n\n二。\n")
+	write(t, root, "raw/别的/三.md", "---\ntitle: 三\n---\n\n三。\n")
+	svc := New(root)
+
+	got, err := svc.MatchDocs("raw/DIR_X/**")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "raw/DIR_X/一.md" || got[1] != "raw/DIR_X/二.md" {
+		t.Errorf("glob 该匹配到 2 篇且按路径排序：%v", got)
+	}
+	if got, _ := svc.MatchDocs("docs/*.md"); len(got) != 1 {
+		t.Errorf("`docs/*.md` 该只匹配一层：%v", got)
+	}
+
+	// ExpandArgs：glob 展开成多篇，普通路径原样留着去校验存在性。
+	docs, patterns, err := svc.ExpandArgs([]string{"raw/DIR_X/**", "docs/甲.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if patterns != 1 || len(docs) != 3 {
+		t.Errorf("该展开成 3 篇（1 个 glob）：%v patterns=%d", docs, patterns)
+	}
+	if _, _, err := svc.ExpandArgs([]string{"raw/不存在/**"}); err == nil {
+		t.Error("glob 匹配不到东西该报错，而不是静默删 0 篇")
+	}
+}
