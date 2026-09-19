@@ -55,6 +55,31 @@ function thoughtPreview(text: string): string {
   return one.length > 48 ? one.slice(0, 48) + "…" : one;
 }
 
+/**
+ * 会话在下拉里怎么显示。
+ *
+ * 后端（DSH 的 `session/list`）只回 sessionId 与 cwd，**不给 title**——原来退化成显示一整串 UUID，
+ * 又长又不认人。所以：
+ *   1. 有 title 就用（将来后端给了就自动生效）；
+ *   2. 有 updatedAt 就显示成「07-22 14:03」这种时间戳（人认「什么时候那次」比认 id 强）；
+ *   3. 都没有就退成短 id（前 8 位）+ 时间都没有时也只到这一步。
+ */
+function sessionLabel(s: { id: string; title?: string; updatedAt?: string }): string {
+  if (s.title && s.title.trim()) return s.title;
+  const when = formatWhen(s.updatedAt);
+  if (when) return `会话 · ${when}`;
+  return `会话 ${s.id.slice(0, 8)}`;
+}
+
+/** 把后端给的时间戳压成「07-22 14:03」；解析不了就返回空（不显示假的）。 */
+function formatWhen(raw?: string): string {
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function AgentPane({ onOpenSettings }: Props) {
   const a = useAgent();
 
@@ -156,7 +181,7 @@ export function AgentPane({ onOpenSettings }: Props) {
               <SelectItem value="new">＋ 新会话（清空的）</SelectItem>
               {a.sessions.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {(s.title || s.id) + (s.current ? "（当前）" : "")}
+                  {sessionLabel(s) + (s.current ? "（当前）" : "")}
                 </SelectItem>
               ))}
             </SelectContent>
