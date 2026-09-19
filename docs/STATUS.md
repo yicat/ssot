@@ -18,6 +18,9 @@
 | 2026-09-18 | P3 第一轮 | 抽取**内核**落地：提示词（LightRAG 结构 + doc/行号要求）+ 回包解析（能从噪声/围栏里挑 JSON）+ 块级溯源校验（越界丢、缺行号退回区间并记说明、悬空关系丢）+ 补抽轮；7 条测试**不花钱**跑通。接线（谁跑调用）撞上 Windows 命令行长度上限 → 计划走 ACP | `vextract/`、`extraction-spike.md`「命令行长度」、`OPEN.md` #23/#24 |
 | 2026-09-18 | P3 第二轮 | **ACP 接线跑通并真跑**：`ssot vault extract`（后端 `deepseek-harness-acp`、0 权限提示）；一篇 8 块 → 44 实体/38 关系、**0 丢弃**、60 秒；量出**固定开销 ≈13k token/次调用**（2 块 13～15k、8 块 21.2k）→ 批越大越省 | `extraction-spike.md`「P3 生产实测」、`OPEN.md` #23/#25 |
 | 2026-09-18 | P3 第三轮 | **入库**：`entity`/`relation` 两表（结构版本→3）+ `-store` 写入口；来源各占一行、归并只合条目、纠错优先、**不复制文档状态**（读时 join）；3 篇真跑 23 块 → **92 实体 / 65 关系 / 1 丢弃**，入库 92 行 / 89 个实体 / 65 行关系；产出里 `Other` 最多（26/92）且有表名被当实体 → 提示词要调 | `vaultindex/graph.go`、`extraction-spike.md`「P3 第三轮」 |
+| 2026-09-18 | 删除与管理 | `vault rm`（含 glob 批量、`-dry`、连带清派生层、git 留痕、断链提醒）+ `vault restore`（从 git 历史恢复）+ `vault stat`（按目录的管理视图）；MCP 加 `doc_delete`（agent 能删） | `vaultapp/remove.go`、`stat.go`、`cmd/ssot/remove.go`、`mcp/tools.go` |
+| 2026-09-18 | 收录范围落地 | `scope` 纯规则 + `.ssot/derived-scope.yml` 读写 + CLI `scope show/propose/set/check` + MCP `scope_show`/`scope_propose`；**抽取按声明办事**；拆掉 `vextract` 三处硬编码 | `domain/vault/scope.go`、`scopefile/`、`vaultapp/scope.go`、`cmd/ssot/scope.go` |
+| 2026-09-18 | 收尾两条问题 | #26 端点按批校验 → 「本批 + 图里已有」；#27 索引无互斥 → `.data/index.lock`（报人话、老锁当死锁清） | `OPEN.md` #26/#27 |
 
 ## 现在在哪
 
