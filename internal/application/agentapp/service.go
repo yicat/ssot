@@ -21,6 +21,7 @@ import (
 
 	"github.com/ngnl5/ssot/internal/infrastructure/acp"
 	"github.com/ngnl5/ssot/internal/infrastructure/dshstore"
+	"github.com/ngnl5/ssot/internal/infrastructure/sessionstore"
 )
 
 // client 是本层用到的 ACP 能力。
@@ -221,6 +222,17 @@ func (s *Service) Send(ctx context.Context, text string) (string, error) {
 	s.busy = true
 	s.mu.Unlock()
 
+	// 会话标题：**第一句用户消息**就是这次会话在干什么，先拿它当标题（只补空标题，不覆盖）。
+	// 存进 vault（`<vault>/.ssot/sessions.json`，见 sessionstore），所以删 DSH 的会话文件不再把它弄丢；
+	// 将来 agent 生成更好的标题走同一个字段（force=true）。
+	if err := sessionstore.SetTitle(s.cfg.Vault, sid, text, "first-message", false); err != nil {
+		// 标题存不下不该挡住说话（它是便利信息）。
+		s.mu.Lock()
+		s.lastErr = "会话标题没记上：" + err.Error()
+		s.mu.Unlock()
+	}
+	_ = sessionstore.Touch(s.cfg.Vault, sid)
+
 	defer func() {
 		s.mu.Lock()
 		s.busy = false
@@ -275,12 +287,18 @@ func (s *Service) Sessions(ctx context.Context) ([]acp.Summary, error) {
 	}
 	list = kept
 
-	// 标题：ACP 的 session/list **不回**，但 DSH 自己把标题落在盘上了（见 dshstore 的包注释）。
-	// 读它，老会话也就有可读标题了——不用猜、不用调模型。读不到就保持空（界面显示「未命名会话」）。
-	if titles := dshstore.Titles(s.dshHome()); len(titles) > 0 {
+	// 标题的来源顺序：**我们自己存的（vault 里）** → DSH 存的（只当老会话的种子）→ 空。
+	// 为什么自己存的优先：那是我们拥有的数据；DSH 那份是别人的私有实现细节，且会被清理动作影响。
+	own := sessionstore.Titles(s.cfg.Vault)
+	external := dshstore.Titles(s.dshHome())
+	if len(own) > 0 || len(external) > 0 {
 		for i := range list {
+			if t, ok := own[list[i].ID]; ok && t != "" {
+				list[i].Title = t
+				continue
+			}
 			if list[i].Title == "" {
-				list[i].Title = titles[list[i].ID]
+				list[i].Title = external[list[i].ID]
 			}
 		}
 	}
