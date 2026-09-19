@@ -58,6 +58,10 @@ export function useVaultBrowser() {
         tables: overview.tables ?? [],
         tableInfos: tableInfos ?? [],
       });
+      // **打开应用就把后端备好，并落回上次那个会话**（用户要的）。
+      // ⚠️ 必须放在这儿：挂载那一刻 `root` 还是空的（它要等 Overview 回来），
+      // 早先写在 mount 的 effect 里读 store，条件是空字符串 -> 从来没执行过（用户问「你确定启动了吗」）。
+      void resumeLastSession(overview.root);
       // 预取表数据：文档里的 `![[表.csv]]` 是同步渲染的，渲染函数不该等 IO。
       const tableData: Record<string, { columns: string[]; rows: string[][] }> = {};
       for (const t of tableInfos ?? []) {
@@ -90,17 +94,6 @@ export function useVaultBrowser() {
     void load();
   }, [load]);
 
-  /**
-   * **打开应用就把 Agent 后端备好，并落回上次那个会话**（用户要的行为）。
-   *
-   * 靠 `Resume`：它在后端没起时会顺手拉起来（`agentapp.ensureBackend`），**不建新会话**；
-   * 没有「上次的会话」时什么也不做——等用户真要说第一句话时再懒启动。
-   * 所以「进来一次就多一个空会话」这件事不会再发生。
-   */
-  useEffect(() => {
-    const root = useVaultStore.getState().root;
-    if (root) void resumeLastSession(root);
-  }, []);
 
   /**
    * 文件变了要重载列表——**这一步以前是缺的**：agent 在能力层删/建了文件之后，
