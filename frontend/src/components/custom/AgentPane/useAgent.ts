@@ -162,6 +162,15 @@ export async function resumeLastSession(vault: string): Promise<void> {
   }
 }
 
+/** 控制台行：模块级函数也能写（resumeLastSession 在组件之外）。 */
+function logLine(text: string) {
+  try {
+    useAgentStore.getState().log(text);
+  } catch {
+    // 控制台本身不该把流程带崩。
+  }
+}
+
 export function useAgent() {
   const store = useAgentStore();
   const { set, push } = store;
