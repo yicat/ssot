@@ -8,9 +8,14 @@
  *  - 工具调用**单独一行**、灰色小字：它是过程，不是回答（回答才是要读的东西）。
  *  - 权限提示是**弹窗**、必须人点：agent 不能自己批准自己。
  *  - 模型选择放在这里（会话级），不是配置页——换一次会话就换一次选择。
+ *  - **助手回复按 Markdown 渲染**，用的是文档正文那套渲染器（代码块 / 表格 / 公式 / 列表都在），
+ *    外面套 `.md-body` 拿排版，再用几个类把「文档级」的字号压回聊天的尺度。
+ *    双链（`[[…]]`）在聊天里没有目标状态可依，所以按普通文字显示，**不标成断链**。
  */
 import { Bot, CircleStop, ListTree, Play, Send, Settings2, ShieldAlert, Wrench } from "lucide-react";
 import { useEffect } from "react";
+
+import { renderMarkdown } from "../../../lib/markdown";
 
 import { useAgent } from "./useAgent";
 
@@ -18,6 +23,27 @@ type Props = {
   /** 打开设置（配置页在 VaultBrowser 那边统一管）。 */
   onOpenSettings: () => void;
 };
+
+/**
+ * 助手回复的渲染：**复用文档正文那套渲染器**（CommonMark + GFM + KaTeX），
+ * 所以代码块、表格、列表、公式都能正常显示，不用在聊天里另造一套。
+ *
+ * 两处刻意的取舍：
+ *  - 外面套 `.md-body` 拿排版，再用几个类把「文档级」的字号/间距压回聊天尺度
+ *    （标题不该比气泡还大、段间距不该比消息间距还宽）；
+ *  - 双链在聊天里不跳转、也不标成断链（见下面对 `.md-broken` 的覆盖）。
+ *
+ * ⚠️ 这里**不缓存**渲染结果：markdown-it 解析一条消息很便宜，而 `useMemo` 不能写在
+ * 回调/条件里（React 的规矩），写在这儿会踩 hook 顺序。
+ */
+function Prose({ text }: { text: string }) {
+  return (
+    <div
+      className="md-body text-sm leading-relaxed [&_h1]:mt-0 [&_h1]:text-base [&_h2]:mt-2 [&_h2]:text-[15px] [&_h3]:text-sm [&_p]:my-1.5 [&_pre]:my-2 [&_pre]:text-xs [&_ul]:my-1.5 [&_ol]:my-1.5 [&_table]:my-2 [&_table]:text-xs [&_.md-broken]:text-inherit [&_.md-broken]:no-underline"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(text, { resolve: () => undefined }) }}
+    />
+  );
+}
 
 export function AgentPane({ onOpenSettings }: Props) {
   const a = useAgent();
@@ -126,36 +152,45 @@ export function AgentPane({ onOpenSettings }: Props) {
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           {a.items.map((it) => {
             if (it.kind === "user") {
               return (
-                <div key={it.id} className="self-end max-w-[85%] rounded bg-secondary px-3 py-1.5 text-sm whitespace-pre-wrap">
+                <div
+                  key={it.id}
+                  className="max-w-[85%] self-end rounded-2xl rounded-br-md bg-secondary px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap"
+                >
                   {it.text}
                 </div>
               );
             }
             if (it.kind === "assistant") {
               return (
-                <div key={it.id} className="max-w-[92%] text-sm whitespace-pre-wrap">
-                  {it.text}
+                <div key={it.id} className="max-w-[92%] self-start">
+                  <Prose text={it.text} />
                 </div>
               );
             }
             if (it.kind === "thought") {
+              // 推理是**过程**：留痕但压低，不抢回答的位置。
               return (
-                <div key={it.id} className="max-w-[92%] border-l-2 border-border pl-2 text-xs whitespace-pre-wrap text-muted-foreground">
-                  {it.text}
+                <div key={it.id} className="flex max-w-[92%] gap-2 self-start">
+                  <div className="mt-0.5 shrink-0 text-[10px] tracking-wide text-muted-foreground/60">思考</div>
+                  <div className="min-w-0 border-l border-border/70 pl-2 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground/80 italic">
+                    {it.text}
+                  </div>
                 </div>
               );
             }
             if (it.kind === "tool") {
               return (
-                <div key={it.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <Wrench className="size-3 shrink-0" />
-                  <span className="truncate">{it.title}</span>
-                  <span className="shrink-0 opacity-70">
-                    {it.status === "in_progress" ? "进行中" : it.status === "completed" ? "完成" : it.status}
+                <div key={it.id} className="self-start">
+                  <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-secondary/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <Wrench className="size-3 shrink-0" />
+                    <span className="truncate">{it.title}</span>
+                    <span className="shrink-0 text-[10px] opacity-70">
+                      {it.status === "in_progress" ? "进行中" : it.status === "completed" ? "完成" : it.status}
+                    </span>
                   </span>
                 </div>
               );
@@ -164,8 +199,8 @@ export function AgentPane({ onOpenSettings }: Props) {
               <div
                 key={it.id}
                 className={
-                  "flex items-start gap-1.5 rounded px-2 py-1 text-xs " +
-                  (it.isError ? "bg-rose-50 text-rose-800" : "bg-secondary/60 text-muted-foreground")
+                  "flex max-w-[92%] items-start gap-1.5 self-start rounded-lg px-2.5 py-1.5 text-xs leading-relaxed " +
+                  (it.isError ? "bg-rose-50 text-rose-800" : "bg-secondary/50 text-muted-foreground")
                 }
               >
                 {it.isError && <ShieldAlert className="mt-0.5 size-3 shrink-0" />}
@@ -173,6 +208,11 @@ export function AgentPane({ onOpenSettings }: Props) {
               </div>
             );
           })}
+          {a.busy && (
+            <div className="self-start text-xs text-muted-foreground/70" role="status" aria-live="polite">
+              正在回答…
+            </div>
+          )}
         </div>
       </div>
 
