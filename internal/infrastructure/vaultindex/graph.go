@@ -12,6 +12,7 @@ package vaultindex
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/ngnl5/ssot/internal/domain/vault"
 )
@@ -297,6 +298,132 @@ func (idx *Index) EntityNames() (map[string]bool, error) {
 			return nil, err
 		}
 		out[n] = true
+	}
+	return out, rows.Err()
+}
+
+// ── 图检索要用的查询（P4）────────────────────────────────────────────────
+//
+// 机制照 LightRAG（docs/specs/derived.spec.md「图检索（P4）」）：
+//   local  = 低层关键词（实体名）→ 该实体 + 它的关系 + **它出现的块**；
+//   global = 高层主题 → 按度数（这里用「来源行数」近似）取实体 → 取它们的块。
+// 排序一律确定：同样的库、同样的查询，顺序永远一样（ADR 0010）。
+
+// Neighbor 是图上的一跳：从某个实体出发的一条关系。
+type Neighbor struct {
+	// Dir 是方向：out（我是 src）/ in（我是 dst）。
+	Dir string
+	// Other 是另一端实体的名字。
+	Other string
+	// Rel 是这条关系的来源行（带 doc 与行号，能回查原文）。
+	Rel RelationRow
+}
+
+// Neighbors 取一个实体的一跳邻居（两个方向都要，去重后按名字排序）。
+func (idx *Index) Neighbors(name string, limit int) ([]Neighbor, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT src, dst, keywords, description, authority, doc, from_line, to_line, line,
+	    COALESCE(d.status,'')
+	  FROM relation r LEFT JOIN docs d ON d.path = r.doc
+	  WHERE r.src = ? OR r.dst = ?
+	  ORDER BY r.src, r.dst, r.keywords, r.doc, r.line`, name, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Neighbor
+	seen := map[string]bool{}
+	for rows.Next() {
+		var r RelationRow
+		if err := rows.Scan(&r.Src, &r.Dst, &r.Keywords, &r.Description, &r.Authority, &r.Doc,
+			&r.FromLine, &r.ToLine, &r.Line, &r.Status); err != nil {
+			return nil, err
+		}
+		nb := Neighbor{Rel: r}
+		if r.Src == name {
+			nb.Dir, nb.Other = "out", r.Dst
+		} else {
+			nb.Dir, nb.Other = "in", r.Src
+		}
+		key := nb.Dir + "\x00" + nb.Other + "\x00" + r.Keywords + "\x00" + r.Doc + "\x00" + strconv.Itoa(r.Line)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, nb)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, rows.Err()
+}
+
+// ChunksForEntity 取「提到这个实体的块」：用实体的来源行号区间与块区间求交。
+//
+// 这是 local 模式把「实体」落回「能读的原文」的那一步——比让模型自己找可靠得多。
+func (idx *Index) ChunksForEntity(name string, limit int) ([]ChunkRef, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT DISTINCT c.doc, c.ord, c.text, c.from_line, c.to_line
+	  FROM entity e JOIN chunk c
+	    ON c.doc = e.doc AND c.from_line <= e.to_line AND c.to_line >= e.from_line
+	  WHERE e.name = ?
+	  ORDER BY c.doc, c.ord LIMIT ?`, name, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ChunkRef{}
+	for rows.Next() {
+		var c ChunkRef
+		if err := rows.Scan(&c.Doc, &c.Ord, &c.Text, &c.FromLine, &c.ToLine); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// TopEntities 按「来源行数」取实体（度数近似）：global 模式从一个主题找它罩着的实体。
+func (idx *Index) TopEntities(limit int) ([]EntityRow, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT name, type, MIN(description),
+	    CASE WHEN SUM(authority='corrected')>0 THEN 'corrected' ELSE 'derived' END,
+	    COUNT(*) AS sources
+	  FROM entity GROUP BY name, type
+	  ORDER BY sources DESC, name, type LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []EntityRow{}
+	for rows.Next() {
+		var r EntityRow
+		var sources int
+		if err := rows.Scan(&r.Name, &r.Type, &r.Description, &r.Authority, &sources); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
 	return out, rows.Err()
 }
