@@ -262,6 +262,19 @@ func (s *Service) Sessions(ctx context.Context) ([]acp.Summary, error) {
 	if err != nil {
 		return nil, err
 	}
+	// **自己按 cwd 过滤**：`session/list` 的 cwd 参数**并不可靠**——实测传入本 vault 的路径，
+	// 回来的却有上百个别的目录（.tmp/demo-copy、仓库根…）的会话，于是下拉里一堆不是这个项目的对话。
+	// 与其信它，不如自己筛（会话里带了 cwd，判据在我们手里）。
+	want := strings.TrimRight(s.cfg.Vault, `\/`)
+	kept := make([]acp.Summary, 0, len(list))
+	for _, it := range list {
+		if want != "" && !strings.EqualFold(strings.TrimRight(it.Cwd, `\/`), want) {
+			continue
+		}
+		kept = append(kept, it)
+	}
+	list = kept
+
 	// 标题：ACP 的 session/list **不回**，但 DSH 自己把标题落在盘上了（见 dshstore 的包注释）。
 	// 读它，老会话也就有可读标题了——不用猜、不用调模型。读不到就保持空（界面显示「未命名会话」）。
 	if titles := dshstore.Titles(s.dshHome()); len(titles) > 0 {
