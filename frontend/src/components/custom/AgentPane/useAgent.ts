@@ -93,6 +93,19 @@ export function useAgent() {
     }
   }, [applyStatus, push, start]);
 
+  /**
+   * 新开一个会话：`stop → start`。
+   *
+   * 为什么不直接 newSession：后端的能力层里**没有**「新开会话」这个用例——`Start` 在已运行时会
+   * 直接返回状态（那是复用，不是新会话）。用 stop+start 拿到的是**真新的**会话（上下文空、
+   * 工作区还是同一个 vault），旧会话照旧留在历史里可 resume。
+   * ⚠️ 代价是重启后端进程（几秒）；等能力层补上 `NewSession` 再换成轻量做法。
+   */
+  async function newSession() {
+    set({ items: [], sessionId: "", permission: null, busyMessage: null });
+    await stop();
+    await start();
+  }
   /** 发一句。 */
   const send = useCallback(async () => {
     const text = store.draft.trim();
@@ -232,6 +245,7 @@ export function useAgent() {
   return {
     ...store,
     boot,
+    newSession,
     refresh,
     start,
     send,

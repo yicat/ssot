@@ -16,6 +16,7 @@ import { Bot, CircleStop, ListTree, Play, Power, Send, Settings2, ShieldAlert, W
 import { useEffect, useRef } from "react";
 
 import { renderMarkdown } from "../../../lib/markdown";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 
 import { useAgent } from "./useAgent";
 
@@ -135,16 +136,31 @@ export function AgentPane({ onOpenSettings }: Props) {
               ))}
             </select>
           )}
-          <button
-            type="button"
-            onClick={() => void a.loadSessions()}
-            disabled={!a.running}
-            className="inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary disabled:opacity-40"
-            title="这个 vault 的历史会话（不会串到别的项目）"
+          {/* 会话：**标准下拉**（跟模型选择一个样式），不是自己搓的按钮+列表。
+              打开时才去拉历史（onOpenChange），省得每次切进来都查一遍。 */}
+          <Select
+            value={a.sessionId || "new"}
+            onValueChange={(v) => {
+              if (v === "new") void a.newSession();
+              else void a.resume(v);
+            }}
+            onOpenChange={(open) => {
+              if (open) void a.loadSessions();
+            }}
           >
-            <ListTree className="size-3" />
-            会话
-          </button>
+            <SelectTrigger className="h-6 w-52 gap-1 text-xs" title="切换会话 / 新开一个（不会串到别的项目）">
+              <ListTree className="size-3 shrink-0" />
+              <SelectValue placeholder="会话" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">＋ 新会话（清空的）</SelectItem>
+              {a.sessions.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {(s.title || s.id) + (s.current ? "（当前）" : "")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <button
             type="button"
             onClick={onOpenSettings}
@@ -156,32 +172,6 @@ export function AgentPane({ onOpenSettings }: Props) {
           </button>
         </div>
       </div>
-
-      {/* 会话列表（点「会话」才出来） */}
-      {a.sessionsOpen && (
-        <div className="border-b border-border bg-secondary/40 px-4 py-2 text-xs">
-          {a.sessions.length === 0 ? (
-            <span className="text-muted-foreground">这个 vault 还没有历史会话。</span>
-          ) : (
-            <ul className="flex flex-col gap-1">
-              {a.sessions.map((s) => (
-                <li key={s.id} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void a.resume(s.id)}
-                    disabled={s.current}
-                    className="truncate rounded px-1 py-0.5 text-left hover:bg-secondary disabled:opacity-60"
-                    title={s.cwd}
-                  >
-                    {s.title || s.id}
-                  </button>
-                  {s.current && <span className="shrink-0 text-[10px] text-muted-foreground">当前</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
       {/* 消息流 */}
       <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto px-4 py-3">
