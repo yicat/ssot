@@ -15,10 +15,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/infrastructure/acp"
+	"github.com/ngnl5/ssot/internal/infrastructure/dshstore"
 )
 
 // client 是本层用到的 ACP 能力。
@@ -256,7 +258,33 @@ func (s *Service) Sessions(ctx context.Context) ([]acp.Summary, error) {
 	if cli == nil {
 		return nil, errors.New("还没有起后端")
 	}
-	return cli.ListSessions(ctx, s.cfg.Vault)
+	list, err := cli.ListSessions(ctx, s.cfg.Vault)
+	if err != nil {
+		return nil, err
+	}
+	// 标题：ACP 的 session/list **不回**，但 DSH 自己把标题落在盘上了（见 dshstore 的包注释）。
+	// 读它，老会话也就有可读标题了——不用猜、不用调模型。读不到就保持空（界面显示「未命名会话」）。
+	if titles := dshstore.Titles(s.dshHome()); len(titles) > 0 {
+		for i := range list {
+			if list[i].Title == "" {
+				list[i].Title = titles[list[i].ID]
+			}
+		}
+	}
+	return list, nil
+}
+
+// dshHome 从后端环境里取 DSH_HOME（组合根就是这么把它传进来的）。
+//
+// 为什么不加 Config 字段：那要改组合根与调用方；这里只是**读一个已经在环境里的值**，
+// 取不到就当没有（标题是便利信息）。将来 Config 有专门的字段再换。
+func (s *Service) dshHome() string {
+	for _, kv := range s.cfg.BackendEnv {
+		if v, ok := strings.CutPrefix(kv, "DSH_HOME="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 // Resume 恢复一个历史会话：换掉当前会话，后端进程不重开。
