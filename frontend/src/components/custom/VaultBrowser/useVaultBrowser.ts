@@ -5,6 +5,7 @@
  * 所以「谁能发布」那条门在界面上绕不过去（点按钮和敲命令是同一份实现）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { useAgentStore } from "../AgentPane/store";
 
 import {
   Backlinks,
@@ -86,6 +87,32 @@ export function useVaultBrowser() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  /**
+   * 文件变了要重载列表——**这一步以前是缺的**：agent 在能力层删/建了文件之后，
+   * 左边那棵树还拿着旧列表（实测：删了 121 篇剧情，左栏照样列着它们）。
+   *
+   * 两个触发点，覆盖两种改动来源：
+   *  1. **agent 一轮结束**（busy: true → false）：本应用里的 agent 改的（走 MCP 能力层）；
+   *  2. **窗口重新聚焦**：从外部改的（另一个 session 的 CLI、git checkout、编辑器）——
+   *     外部改时应用收不到通知，切回来对一次是最省事的办法。
+   *
+   * ⚠️ 不做目录监听（fsnotify）：那要给 Go 侧加 watcher 并往界面推事件；这两个点已覆盖
+   * 实际会遇到的情形，等真需要「改一下树立刻动」再上监听。
+   */
+  useEffect(() => {
+    let wasBusy = useAgentStore.getState().busy;
+    const unsub = useAgentStore.subscribe((st) => {
+      if (wasBusy && !st.busy) void load();
+      wasBusy = st.busy;
+    });
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      unsub();
+      window.removeEventListener("focus", onFocus);
+    };
   }, [load]);
 
   /**
