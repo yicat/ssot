@@ -9,7 +9,7 @@
 
 ### 1. 项目根目录
 
-- 默认 `projects`，来自 `main.go:22` 的 `-projects` flag（可覆盖）。
+- 默认 `projects`，来自 `main.go` 的 `-projects` flag（可覆盖；另有 `-project` 指定初始项目）。
 - 项目根目录下**只扫一层**：`root/*/project.yml`，**不递归**。
 
 ### 2. 一个项目 = 一个含 `project.yml` 的目录
@@ -55,8 +55,9 @@
 ### 7. 项目实例数据不进版本控制
 
 - `.gitignore` 里 **`projects/` 整段被忽略**：vault 各自是独立 git 仓库，工具仓库不跟踪它
-  （见 `vault.spec.md` §5）。`.data/` 作为派生索引的忽略规则，已经包含在这整段忽略里。
-- 由此推出一件事：空目录 git 不提交，所以 clone 出来**不会有 `projects/`**，界面必然是空状态。
+  （见 `vault.spec.md` §5）。`.data/` 的忽略规则已经包含在这一整段里。
+- 由此推出一件事：clone 出来**不会有 `projects/`**（因为它整段不进版本控制，
+  不是因为「空目录 git 不提交」），界面必然是空状态——因果链见 `shell.spec.md` §4。
 
 ## 未定
 

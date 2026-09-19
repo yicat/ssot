@@ -23,21 +23,30 @@
 ## 一、分层（水面上下）
 
 ```
-用户看得见的（水下、可重建、不进 git）
+用户看得见的（唯一事实源，进 git）
   docs/  raw/  tables/        ← 唯一事实源；写入即 commit（vault.spec.md §5）
 ────────────────────────── 水面 ──────────────────────────
+水下的（可重建、不进 git、不进人眼）
   .data/index.db              ← 派生层：KV / 图 / 向量 / 状态，全是表
-    docs / links / tables_meta / meta   现有四张（检索是 LIKE，没有分块）
-    chunk(id, doc, from_line, to_line, text, status, hash)      分块（**新增**；块自带行号区间）
-    embedding(owner_kind, owner_id, dim, vec)                   向量（chunk / doc / entity / relation）
-    entity(id, name, type, status, doc, line, ...)              实体（带块级溯源）
-    relation(src, dst, keywords, desc, status, doc, line, ...)   关系
-    sync(doc, hash, mtime, built_at, stale)                     自动维护的状态
+    docs / links / tables_meta / meta                 文档、链接、表的登记、索引自己的元信息
+    chunk(id, doc, ord, from_line, to_line, text, status, hash)          嵌入单位（默认 512 token）
+    extract_chunk(id, doc, ord, from_line, to_line, text)                抽取单位（默认 2000 token）
+    sync(doc, hash, mtime, built_at, stale, reason)   每篇的同步状态（「不静默」的落地）
+    embedding(owner_kind, owner_id, dim, vec)         向量：float32 小端裸字节，512 维 = 2048B
+    entity(name, type, description, authority, doc, from_line, to_line, line)
+    relation(src, dst, keywords, description, authority, doc, from_line, to_line, line)
+    另：每张数据表按 tables_meta 建一张**同名表**（列由表头推断）
 ```
 
-> ⚠️ 现状**没有** `chunks` 表：检索只在 `docs.body` 上做 `LIKE`（`vaultindex` 里就 `docs`
-> `links` `tables_meta` `meta` 四张 + 每张数据表一张）。所以分块与嵌入都是**要新增**的东西，
-> 不是「现有表的扩展」。
+> ⚠️ **上面这段是索引的真实结构，以代码为准**：`internal/infrastructure/vaultindex/index.go` 的
+> `schema` 常量 + `SchemaVersion = 3`（结构改了就把版本 +1，旧索引自动重建）。
+> 加表/改列时**先改这里**，别让它和代码对不上。
+>
+> 两条与直觉不同的地方，写清楚免得读错：
+> - `entity` / `relation` **没有 `status` 列**：文档状态读时 join `docs`（不复制，免得两边打架）；
+>   这里管的是 `authority`（`derived` / `corrected`，纠错优先）。
+> - 每条来源**各占一行**，主键就是「来源」（`name/type/doc/from_line/to_line/line`），
+>   所以重复跑抽取是幂等的——归并只合**条目**，不丢出处（`docs/plans/derived-layer.md` §3）。
 
 - **唯一事实源仍是文件**：删掉 `.data/` 应当只损失检索质量，不损失任何内容。
 - **不进 git**：与 `vault.spec.md` §4/§5 一致（`.data/` 永不提交）。
@@ -444,8 +453,6 @@ demo 现在的量（410 篇 × 约 30 块 = 12,512 条块向量，再加实体/�
     **待确认后落**——见 §十。
 - 提醒（MaxKB 那条教训）：合成文本与纠正文本都要**带来源状态**；
   从 `draft` 文档合成的描述，在界面上不能看起来像「已确认的事实」。
-
-
 
 
 

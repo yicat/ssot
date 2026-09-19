@@ -67,13 +67,18 @@ App **不做 agent 框架**。它提供两样东西：
 | `vault_list` | 列文档 / raw / 表 | 只读 |
 | `doc_read` | 读一篇文档（正文、状态、front matter、链接） | 只读 |
 | `doc_write` | 写文档正文（带 `actor`，**回落 draft**） | 写 |
-| `vault_search` | 全文检索（标题 + 正文）；结果带 `total` / `returned` / `truncated`，**被截断时给一句怎么办**（`limit` 默认 10、上限 200） | 只读 |
+| `scope_show` | 看当前项目的**收录范围声明**（哪些不进派生层、实体类型词表、要忽略的名字形状）与派生层跟它一致不一致 | 只读 |
+| `scope_propose` | **建议**改收录范围（带一句理由）——**不生效**，只有人用 `ssot vault scope set` 确认后才生效 | 写**建议文件**（不改生效范围） |
 | `doc_delete` | **删除文档**（连带清派生层里的块/向量/实体/关系）；`path` 支持 glob 批量；`dry=1` 只报影响；删完列出断链 | 写（**不可逆，但有 git 留痕**） |
+| `vault_search` | 全文检索（标题 + 正文）；结果带 `total` / `returned` / `truncated`，**被截断时给一句怎么办**（`limit` 默认 10、上限 200） | 只读 |
 | `link_backlinks` | 某文档的反链 + 它链出去的问题链接 | 只读 |
 | `link_resolve` | 解析 `[[...]]`（含块级锚点）到文档与段落 | 只读 |
 | `file_read` | 只读地读 vault 里任意**文本**文件（按行分页；限定 vault 内，拒绝绝对路径与 `..`） | 只读 |
 | `table_infos` | 有哪些数据表、列与类型 | 只读 |
 | `table_query` | 对索引跑只读 SQL：**只放行数据表与 `docs` 的 front matter 字段**（派生层的表在水下，见 `derived.spec.md` §一） | 只读 |
+
+⚠️ **这一表要保持与代码一致**：工具表在 `internal/mcp/tools.go`，**12 个**；
+`scripts/check/mcp-smoke.mjs` 就是这么数的（实测 31/31 通过）。
 
 - **`status.set` 不在第一批**：MCP 侧 `actor` 恒为 `agent`（`dsh.spec.md` §4），
   这个工具在 MCP 上永远失败；暴露它只会白占模型的上下文。发布/归档走界面与 CLI。
@@ -134,9 +139,22 @@ overlay 那条路（`dsh.spec.md`）留给「用 DSH 自己的界面聊天」的
 ⚠️ 但**发布仍然只能在文档页点**：MCP 里根本没有 `status_set`（§5），
 不因为多了个聊天界面就放宽。
 
-**会话由后端持久化，我们不自建一份**：ACP 提供 `session/list`、`session/resume`、`session/close`，
-所以「未定 #2 会话与上下文存哪」到此定了：**后端管**，我们只做列表与恢复的界面。
-（原先倾向「我们也存一份只读记录」，现在有实证：后端的持久化就是那份记录，再存一份是重复。）
+**会话分两半：日志归后端，元数据归我们。**
+
+- **会话日志与上下文**由后端持久化（ACP 的 `session/list` / `session/resume` / `session/close`）——
+  这部分是重复不了的，我们只做「列表 + 恢复」的界面。
+- **会话元数据（标题、创建/最近使用时间）由我们自己存**：`<vault>/.ssot/sessions.json`
+  （`internal/infrastructure/sessionstore`），界面只显示 Go 返回的东西。
+  理由（踩过的）：`session/list` 只回 id 与 cwd、**不回标题**；标题原本是去读 DSH 的私有存储
+  （`storages/session_projcache/sessions/<id>.json`）捡来的，一次「删会话」把标题连锅端了——
+  会话还在、标题全没了。DSH 那份现在只当**老会话的种子**：标题按「自己 → DSH 存储 → 空」三级合并。
+- 标题的来源记在 `titleFrom`：`first-message`（第一句用户消息，截 40 字）或 `agent`（将来由 agent
+  生成更好的一句，`SetTitle(force=true)` 覆盖）。存法与界面不区分谁写的（`OPEN.md` #28）。
+- ⚠️ 这是**便利信息**，不是事实：文件坏了/读不到就当没有，绝不让它把会话列表搞崩。
+
+**起后端与开会话是两件事**（2026-09-20 定）：`EnsureBackend` 只保证后端进程起着（打开面板、
+点顶栏「启动后端」都走它），**不建会话**；只有「＋ 新会话」调 `NewSession`。
+否则每开一次面板就攒一个空会话，列表全是空壳。
 
 **模型与推理强度不进配置页**：它们来自 `session/new` 返回的 `configOptions`，
 用 `session/set_config_option` 改——是**这一次会话**的选择，所以放在 Agent 面板里，
@@ -153,7 +171,7 @@ overlay 那条路（`dsh.spec.md`）留给「用 DSH 自己的界面聊天」的
 3. 换掉 DSH 之后，四个角色的 skill 怎么随 App 分发（现在靠 `.dsh/skills/`，那是 DSH 的发现规则）。
 
 > 「四个子 Agent 的实现形态」已定（DSH 场景 = `.dsh/skills/`，见 §6）；
-> 「会话与上下文存哪」已定（后端持久化，见 §7）；
+> 「会话与上下文存哪」已定（日志在后端、元数据在我们，见 §7）；
 > 「聊天壳的界面形态」已定（主体区第三个模式，见 §7）。
 
 ## 怎么验证
@@ -169,6 +187,3 @@ overlay 那条路（`dsh.spec.md`）留给「用 DSH 自己的界面聊天」的
 - 聊天界面（§7）：用**假 ACP 后端**（一个照协议说话的测试替身）验界面行为——
   发一句话能收到流式更新、工具调用有轨迹、权限提示能允许/拒绝、能中止；
   **不拿真模型跑测试**（慢、花钱、结果不稳）
-
-
-

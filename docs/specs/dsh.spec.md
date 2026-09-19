@@ -26,7 +26,7 @@
 ### 1. **不写全局 profile**，用会话级 overlay
 
 写进 `~/.dsh/profiles/web/cordis.patch.yml` 是**全局生效**的：之后每次开 DSH——包括写代码那次——
-工具列表里都会多出八个 `mcp__ssot__*`，白吃 token，还有被误调的风险。**明确不采用。**
+工具列表里都会多出十二个 `mcp__ssot__*`，白吃 token，还有被误调的风险。**明确不采用。**
 
 改用 overlay：条目放仓库内 `.dsh/mcp.patch.yml`，启动时显式带上：
 
@@ -241,7 +241,7 @@ tool-bash  tool-pwsh  tool-fs  tool-fs-search  tool-str-replace-editor   （+ sk
 # 1) overlay 真能组装进去（只打印、不启动，零副作用）
 pwsh -File scripts\dsh\dsh-ssot.ps1 -DumpConfig      # 看有没有 "# == <仓库>\.dsh\mcp.patch.yml" 那一段
 
-# 2) 服务端行为：自写 JSON-RPC 客户端驱动真二进制（协议、八个工具、读写、门、留痕）
+# 2) 服务端行为：自写 JSON-RPC 客户端驱动真二进制（协议、十二个工具、读写、门、留痕）
 node scripts/check/mcp-smoke.mjs
 
 # 3) 同一条权限规则在 CLI 与 MCP 上一致（agent 不能发布、写入回落 draft）
@@ -252,7 +252,8 @@ go test ./internal/...
 
 - `-DumpConfig` 输出里有 `# == C:\Users\ngnl5\workspace\ssot\.dsh\mcp.patch.yml` 那一段，
   内容是我们的 `mcp-ssot` 行，**无警告无错误**；`args` / `command` 里的 `!!js` 原样打印（未求值）。
-- `mcp-smoke.mjs` 29/29，其中包含真二进制的 stdio 会话、git trailer、以及「stdout 里只有协议消息」。
+- `mcp-smoke.mjs` **31/31**（2026-09-20 复核；脚本自带计数，跑一次就知道对不对），
+  其中包含真二进制的 stdio 会话、git trailer、以及「stdout 里只有协议消息」。
 - 四个 skill 被真实会话目录**当场发现**（写进 `.dsh/skills/` 后，会话的 skill 目录立刻列出
   `vault-find` / `vault-organize` / `vault-rewrite` / `vault-verify`）——发现链路不用猜。
 - `internal/mcp` 的 Go 测试里也有一条走**真进程真 stdio** 的（内存管道证不了 CLI 接线对不对）。

@@ -18,8 +18,18 @@
 
 ## 动这一层之前
 
-先确认落位（见上）；当前 `domain/` 与 `application/` **都还不存在**——
-新方案定下来再建，不要为了「结构完整」先摆空目录。
+先确认落位（见上）。当前各层的实际落位（改动前先看这一行，别照旧印象找）：
+
+| 层 | 包 |
+|---|---|
+| `domain/` | `domain/vault`（文档、双链、状态机、切块、排序、`querygate`） |
+| `application/` | `vaultapp`（读写/检索/删除/统计/范围/抽取接线）· `agentapp`（起后端/会话/流） |
+| `infrastructure/` | `vaultfs` · `vaultgit` · `vaultindex`(SQLite) · `vembed`(ONNX) · `vextract` · `acp` · `appconfig` · `projectfile` · `scopefile` · `sessionstore` · `dshstore` |
+| `api/` | `project` · `vault` · `agent` 三个 wails 服务 |
+| （不在 `internal/` 下的适配） | `internal/mcp`（stdio MCP 服务端）、`cmd/ssot`（CLI） |
+
+`domain/vault` 是唯一有「只 stdlib」这条硬约束的包；别的包按需引依赖，但方向不许反。
+`derivedapp`（派生层专用用例包）**还没建**——现在重建/嵌入/抽取的编排落在 `vaultapp`。
 
 依赖检查（纯手工，旧的 `layering-guard` skill 已随旧方案删除）：
 

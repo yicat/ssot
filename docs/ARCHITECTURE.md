@@ -35,16 +35,16 @@
                       ┌────────▼─────────┐
 用例层                │ application/     │  vaultapp（读写/检索/状态）
                       │                  │  agentapp（起后端/会话/流）
-                      │                  │  derivedapp（重建/增量）*  * 未做
+                      │                  │  derivedapp（重建/增量）*  * 未建：重建现在落在 vaultapp
                       └────────┬─────────┘
                       ┌────────▼─────────┐
 领域层                │ domain/vault     │  文档 · 双链 · 状态机（谁能发布）
-（只 stdlib）         │                  │  切块 · 检索排序 · 确定性
+（只 stdlib）         │                  │  切块 · 检索排序 · 确定性 · 查询门
                       └────────▲─────────┘
                       ┌────────┴─────────┐
 适配层                │ infrastructure/  │  vaultfs · vaultindex(SQLite)
-                      │                  │  vaultgit · projectfile · appconfig
-                      │                  │  acp（客户端）· mcp · vembed* · vextract*
+                      │                  │  vaultgit · projectfile · appconfig · scopefile
+                      │                  │  acp（客户端）· vembed* · vextract* · sessionstore
                       └──────────────────┘
 ```
 
@@ -55,9 +55,16 @@
 
 1. **人/agent 写**：`doc_write`（MCP）或界面编辑 → `vaultapp` → `vaultfs` 落盘 →
    `vaultgit` 提交（只提交那一个文件，带 `Edited-By` trailer）→ agent 写入强制回落 `draft`。
-2. **检索**（现在）：SQLite `LIKE`（`vault_search`）。
-   **目标**：FTS + 向量 + 图邻居的混合检索（顺序见 `docs/plans/derived-layer.md`）。
-3. **派生层**（目标）：文件一变 → 标 `stale` → 后台按批重建（切块 → 抽取 → 嵌入）→ 标 `fresh`。
+2. **检索**（现在有两条路，别混）：
+   - **MCP 的 `vault_search`** 还是 SQLite `LIKE`——`OPEN.md` #32 已定：先做 P4 的 CLI 对照实验，
+     达标了再把 agent 这条路切过去；
+   - **CLI `vault find` 与界面**走 `vaultindex.Searcher`：向量 + 标题/标签字面融合
+     （P2 已验收，数字见 `docs/notes/embedding-spike.md`）。
+
+   **目标**：FTS + 向量 + 图邻居的混合检索（P4 做图，顺序见 `docs/plans/derived-layer.md`）。
+3. **派生层**：**P0–P3 已完成**（切块 → 嵌入 → 混合检索 → 抽取入库，都能手跑、有实测数字）。
+   **没完成的是「自动」那一半**（P5）：文件一变 → 标 `stale` → 后台按批重建 → 标 `fresh`，
+   以及把索引状态接到界面。现在重建是显式跑 CLI（`vault index` / `vault embed` / `vault extract`）。
 
 ## 四、边界（明确不做）
 

@@ -28,6 +28,8 @@
   症状是「界面起不来」或「MCP 工具调的是一份老代码」，都很难查（踩过）。
 - 构建：`wails3 task build`；服务模式：`wails3 task build:server` / `wails3 task run:server`
 - 测试：`wails3 task test`（= `go test ./...` + 前端 `npm run test`（vitest））
+  ⚠️ 前端那条是 `vitest run --passWithNoTests`，而 `frontend/` 目前**一个测试文件都没有**——
+  「通过」在这里等于「没跑任何前端测试」，别拿它当覆盖（界面靠 `scripts/check/*.mjs` 验）。
 - 界面测试（要应用带 `SSOT_WEBVIEW_DEBUG_PORT=9222` 跑着）：
   - `node scripts/check/ui-test.mjs`：文档渲染、文件树、检索——**内容依赖当前打开的 vault**
   - `node scripts/check/agent-ui-test.mjs`：聊天界面与配置页——**不依赖 vault 内容**
@@ -36,26 +38,34 @@
 
 ## 目录约定
 
-> ⚠️ **当前是骨架，方案重写中。** 上一套方案（六部件 + 断言库 + 核验流程）已整体作废并
-> **全部清除**：业务代码、规格集、示例项目数据、抓取脚本、调研笔记与项目 skill 都已删掉
-> （作废实现在分支 `legacy/mvp-v1` 备查）。下面这棵树是**现在真实存在的**；
-> 新方案的结构定下来再补，不要照抄旧树。
+> 旧方案（六部件 + 断言库 + 核验流程）已整体作废，实现留在分支 `legacy/mvp-v1` 备查。
+> 下面这棵树是**现在真实存在的**（改结构时记得回来改它）。
 
 ```
-├─ main.go                  # 入口（Wails 桌面应用）
-├─ cmd/ssot/                # CLI 入口（当前只有 help；新命令按用例层加）
+├─ main.go                  # 入口（Wails 桌面应用：无边框 + 自绘标题栏，见 shell.spec.md）
+├─ cmd/ssot/                # CLI 入口，同时是 MCP 服务端（`ssot mcp`，stdio）
 ├─ internal/
-│  ├─ compose/              # 组合根：唯一允许同时依赖各层的包（会话 + 项目装配）
-│  ├─ api/                  # 接口层：wails3 bindings（当前只有项目列表与切换）
-│  └─ infrastructure/       # 外部适配（当前只有 projectfile：project.yml 与项目发现）
+│  ├─ api/                  # 接口层：wails3 bindings（project / vault / agent 三个服务）
+│  ├─ application/          # 用例层：vaultapp（读写/检索/删除/统计/范围/抽取接线）、
+│  │                        #         agentapp（起后端/开会话/发话/流）
+│  ├─ domain/vault/         # 领域层（**只 stdlib**）：文档、双链、状态机、切块、排序、查询门
+│  ├─ infrastructure/       # 外部适配：vaultfs · vaultgit · vaultindex(SQLite) · vembed(ONNX)
+│  │                        #           vextract(抽取) · acp(后端协议) · appconfig
+│  │                        #           projectfile · scopefile · sessionstore · dshstore
+│  ├─ mcp/                  # MCP 服务端（stdio）：server.go + tools.go（12 个工具）
+│  └─ compose/              # 组合根：唯一允许同时依赖各层的包（会话 + 项目装配）
 ├─ frontend/
-│  ├─ src/components/ui/        # shadcn 生成，勿手改
-│  ├─ src/components/custom/    # 自研业务组件：index.tsx + useXxx.ts + store.ts（新方案按此落位）
-│  ├─ src/pages/                # 页面 = 纯编排，无交互逻辑
-│  └─ bindings/                 # wails3 generate bindings 生成，勿手改
-├─ projects/                # 项目根目录（当前为空，未提交）：一个项目 = 一个含 project.yml 的目录
-├─ docs/specs/              # **我们确认过的事实与规范**（改代码前先改这里；见「开发流程」）
+│  ├─ src/components/ui/     # shadcn 生成，勿手改
+│  ├─ src/components/custom/ # 自研业务组件：index.tsx + useXxx.ts + store.ts
+│  ├─ src/pages/             # 页面 = 纯编排，无交互逻辑
+│  └─ bindings/              # wails3 generate bindings 生成，勿手改
+├─ projects/                # 项目根目录（**整段忽略，未提交**）：一个项目 = 一个含 project.yml
+│                           # 的目录，各是独立 git 仓库（workspace.spec.md §7）
+├─ docs/                    # specs（已确认的规范）/ adr（决策）/ plans（方案）/ notes（实验）
+│                           # + STATUS.md（进度）/ OPEN.md（问题）
+├─ .dsh/                    # 接给 DSH 的：mcp.patch.yml（会话级 overlay）+ skills/ 四个角色
 └─ scripts/                 # 脚本单独放这里；每个脚本写明做什么、适用范围、什么时候不该用
+                            # 子目录：check/（只读探针）· ingest/（外部数据 → vault）· dsh/（启动）
 ```
 
 ## 分层铁律

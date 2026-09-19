@@ -43,10 +43,15 @@ internal/
 chunk(id, doc, ord, from_line, to_line, text, status, hash)        -- 嵌入单位（512）
 extract_chunk(id, doc, ord, from_line, to_line, text)              -- 抽取单位（2000）
 embedding(owner_kind, owner_id, dim, vec BLOB)                     -- chunk / entity / relation
-entity(id, name, type, description, authority, status, doc, line)  
-relation(id, src, dst, keywords, description, authority, status, doc, line)
+entity(name, type, description, authority, doc, from_line, to_line, line)
+relation(src, dst, keywords, description, authority, doc, from_line, to_line, line)
 sync(doc, hash, mtime, built_at, stale, reason)
 ```
+
+> ⚠️ **落地时改了形状（2026-09-20 按代码核对）**：`entity` / `relation` **没有 `id` 与 `status` 列**——
+> 主键就是「来源」（`name/type/doc/from_line/to_line/line`），所以重复跑抽取是幂等的；
+> 文档状态读时 join `docs`，不复制一份（`STATUS.md` 台账「P3 第三轮」）。
+> 上面这两行就是 `vaultindex` 里的真实列（`SchemaVersion = 3`）。
 
 - 唯一键：`entity` 用 (name, type) 归并；`relation` 用 (src, dst, keywords)。
   **归并只合并条目、不丢来源**：每条来源各占一行（`doc`+`line`），合成描述另存
@@ -101,6 +106,9 @@ sync(doc, hash, mtime, built_at, stale, reason)
 | **P3** | 抽取（`vextract`，一次多块 + 关推理 + 受限工具集）→ entity/relation | 小批 3 篇复现 run3 的 token/格式；再跑 20 篇看质量 |
 | **P4** | 图检索并入（local/global/hybrid/mix）+ 关键词抽取 | **对照实验**：同 200 篇 / 302 条查询，比 P2 基线 |
 | **P5** | 增量与状态（stale/进度/失败原因）接到界面 | 改一篇 → 只有它进队列；失败留原因可见 |
+
+**进度（2026-09-20 核对）**：**P0–P3 已完成**（P3 的 20 篇真跑：1,312 实体 / 1,318 关系 / 3 丢弃，
+`Other` 4.0%）；**P4 未做**；**P5 未做**。逐条证据在 `docs/STATUS.md` 的整理台账里。
 
 **P2 是分水岭**：它不花 LLM 钱，却已经把最要命的问题（实体名式查询 R@1 21.6%）解决了大半。
 P3/P4 要花额度，所以放在 P2 之后。

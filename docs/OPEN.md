@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | 1 | **纠正块的书写语法**：文档里怎么标记「这条被人和 agent 纠正过」（callout 关键字 + front matter 字段名） | **阻塞** | P3 抽取（人机纠错要能活过重建） | ADR 0009、`docs/specs/derived.spec.md` §十 |
 | 2 | **抽取的触发方式**：写入即排队 / 空闲批量 / 显式「重建索引」 | **阻塞** | P3（决定任务模型与界面进度语义） | `derived.spec.md` §六.1、ADR 0013 |
-| 3 | **`agent.spec.md` 工具清单要更新**：混合检索后 `vault_search` 的语义与返回变化（多出命中行号、来源状态）；后台抽取任务怎么暴露 | **阻塞** | P3/P4 | `agent.spec.md` §5 |
+| 3 | **`agent.spec.md` 工具清单要更新** → **清单已对齐（2026-09-20）**：§5 补齐 `scope_show`/`scope_propose`（12 个工具）、`vault_search` 的 `total`/`returned`/`truncated` 已写进去；§7 会话持久化那段也按实测改了（日志在后端、元数据在我们）。**剩下没定的**只有「后台抽取任务怎么暴露」——它与 #2（触发方式）是同一个决定 | **阻塞（只剩后半）** | P3 触发方式定了一起做 | `agent.spec.md` §5/§7 |
 | 4 | `ui-test.mjs` 内容依赖：套件吃旧示例 vault 的内容，vault 一换就红 | 待定 | 无（但影响回归可信度） | `docs/STATUS.md`、`scripts/check/README.md` |
 | 5 | 向量先上不上 | 待定（plan 已安排顺序：P2 先上，图在 P4） | — | `derived.spec.md` §六.3 |
 | 6 | 界面上「索引状态」给多少信息（一行 / 可展开） | 待定 | P5 | `derived.spec.md` §六.6 |
@@ -16,7 +16,7 @@
 | 10 | 抓取管线口径（HTTP 先行→403 退 Chromium、钉 IP、readability）只在笔记里，`raw.refresh` 未做 | 待定 | 抓取相关需求 | `docs/notes/oss-comparison.md` §二 |
 | 11 | WeKnora 那几条怎么落：`superseded_by`/有效期（拟长成图上的边）、改动来源四分类、lint 六类 | 待定 | — | `derived.spec.md` §六.5 |
 | 12 | 仓库是 **public**，32 个文件含本机绝对路径（`C:\Users\ngnl5\…`）；build/darwin 的 5.2MB 仍在历史里 | 观察 | — | 用户已知，暂不处理 |
-| 13 | `scripts/ingest/`（另一个 session 的导入脚本）未提交 | 观察 | — | 待其作者决定 |
+| 13 | ~~`scripts/ingest/`（另一个 session 的导入脚本）未提交~~ → **已解决（2026-09-20）**：`huiji-to-vault.mjs` 与它的 README 一起提交，`scripts/README.md` 的目录表也补了 `ingest/` 一行 | 已解决 | — | `scripts/ingest/README.md` |
 | 14 | ADR 0013（定期整理）状态为「提议」 | 待定 | — | ADR 0013 |
 | 15 | **模型与 ONNX 运行时怎么分发**：`onnxruntime.dll`（16.4MB）+ 模型（int8 22.9MB）现在只在本机临时目录里。选项：随包内置（仓库/安装包 +39MB，public 仓库不合适）／首次运行下载（要校验 + 失败提示）／只认用户指定路径 | **阻塞** | 挡住「别人也能用上向量」（开发不受影响：设 `SSOT_EMBED_DIR` 即可） | `embedding-spike.md` §六.5 |
 | 16 | ~~分词器要自己写~~ → **已解决（P1）**：自己实现 BERT WordPiece，落在 `internal/infrastructure/vembed/tokenizer.go`，与 transformers.js 对拍 12 条 token id 逐条一致（见 `STATUS.md` 台账） | 已解决 | — | `embedding-spike.md` §六.6 |

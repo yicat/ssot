@@ -3,7 +3,7 @@
 > 这份文件的**唯一职责**是让「进度」不再靠翻对话。规范在 `docs/specs/`，方案在 `docs/plans/`，
 > 决策在 `docs/adr/`，问题在 `docs/OPEN.md`。**每次收尾（见 ADR 0013）都更新这里。**
 
-**上次整理：2026-09-18（P3 第三轮：抽取产物入库并真跑 3 篇；产出质量要调提示词）**
+**上次整理：2026-09-20（文档与代码对齐：清掉「骨架/作废」的旧描述、索引表清单按代码重写）**
 
 ## 整理台账
 
@@ -29,6 +29,8 @@
 | 2026-09-20 | 检索结果说清「截断」 | #33：实测 `limit` 本来就生效（10/50/70 条），真正的缺口是**结果里看不出被截断** → `vault_search` 加 `total`/`returned`/`truncated` + `hint`，上限明确 200 并写进说明，`limit` 传字符串也认；CLI 打印「命中 N 篇，返回 M 条」 | `mcp/tools.go`、`vaultindex.CountMatches`、`cmd/ssot/main.go`、`OPEN.md` #33 |
 
 | 2026-09-20 | **补单测（按覆盖率找缺口）** | 实测覆盖率后按低的补：`vaultgit` **0 → 86%**（仓库判定含「子目录不算」、只提交一个文件、trailer 独占一段、恢复删除）、`internal/api` **0 → 3.3%**（把 ACP 更新→界面形状的映射拆成纯函数再测）、`agentapp` **58 → 76%**（起后端不建会话、开会话不重开后端、会话只留本 vault、标题三级）、`mcp` **60 → 82%**（`file_read` 越界/分页、`vault_list`、`scope_show/propose`、`doc_delete` 的 dry 与真删）、`cmd/ssot` 参数解析 + 检索那行 | 各包 `*_test.go`、`OPEN.md` #34 |
+
+| 2026-09-20 | **文档与代码对齐（收尾）** | 把「骨架 / 已全部清除」那批旧描述清掉，并按代码核准每一处数字：**README 重写**（原来还写着"当前是骨架、业务代码与规格集都已删掉"）、`AGENTS.md` 目录树按真实结构重画、`internal/AGENTS.md` 去掉「`domain/` 与 `application/` 都还不存在」；spec 侧——`agent.spec.md` §5 补齐 `scope_show`/`scope_propose`（**12 个工具**）、§7 会话改成「日志在后端、元数据在我们（`<vault>/.ssot/sessions.json`）」、`derived.spec.md` §一 索引表清单按 `SchemaVersion = 3` 重写、`dsh.spec.md`「八个工具 / mcp-smoke 29/29」改成十二个 / **31/31**、`shell.spec.md` 与 `workspace.spec.md` 的「空目录 git 不提交」改成「`projects/` 整段 gitignore」、`plans/derived-layer.md` §5 标上 P0–P3 已完成；`scripts/ingest/` 提交（`OPEN.md` #13 消项） | `README.md`、`AGENTS.md`、`internal/AGENTS.md`、`docs/specs/*`、`docs/plans/derived-layer.md`、`docs/OPEN.md` |
 
 ## 现在在哪
 
@@ -115,6 +117,26 @@
 
 ## 最近一次验证（都是跑出来的）
 
+**2026-09-20（文档对齐这一轮，本机实测）**
+
+```
+go build -o bin/ssot-cli.exe ./cmd/ssot   成功
+go vet ./...                              exit 0
+go test ./...                             全绿（cmd/ssot · api · agentapp · vaultapp · vaultgit ·
+                                          vaultindex · vembed · vextract · mcp · compose · domain/vault）
+scripts/check/mcp-smoke.mjs               31/31（脚本自带计数）
+frontend: npm run build                   ✓ built in 5.03s（tsc + vite build）
+frontend: npm run test                    0 个测试文件——`--passWithNoTests`，**不是**「跑过且通过」
+```
+
+`wails3 task check` 的三段（`go vet` + `go test` + 前端构建）这一轮都单独跑到了。
+
+⚠️ 这一轮**没跑**的：`ui-test.mjs`（要应用带 9222 跑着，且吃当前 vault 的内容）、
+`agent-ui-test.mjs` / `ui-chrome-test.mjs`（同样要窗口）、`agent-e2e.mjs`（要起真后端）。
+别把「没跑」当成「通过」。
+
+**历史（之前几轮）**
+
 ```
 go vet ./...                           clean
 go test ./...                          ok（vembed 对拍 3 条、vaultindex 7 条、domain 规则 2 条、vextract 7 条）
@@ -131,7 +153,8 @@ wails3 task check                      exit 0
 scripts/check/mcp-smoke.mjs            31/31
 scripts/check/agent-ui-test.mjs        22/22
 scripts/check/ui-chrome-test.mjs       8/8
-scripts/check/agent-e2e.mjs（可选）     从界面起后端 → deepseek-harness-acp + 会话 + 9 个 MCP 工具
+scripts/check/agent-e2e.mjs（可选）     从界面起后端 → deepseek-harness-acp + 会话 + MCP 工具
+                                        （当时读数是 9 个；`tools.go` 现在是 12 个）
 ```
 
 ⚠️ **已知红**：`scripts/check/ui-test.mjs`（46 条）**依赖旧示例 vault 的内容**（`语法示例`/`罗生门`/第 47 行任务），

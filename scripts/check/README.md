@@ -10,6 +10,7 @@
 | `measure-group.mjs` | 量分组标题几何：标签多宽、线从哪起、到第一条目多少 px（把「不好看」变成数字） | `playwright-core` |
 | `mcp-smoke.mjs` | 把 MCP 服务端当「DSH 会怎么用它」那样跑一遍：协议、工具清单、读写、门、git 留痕 | 无（Node 内置 + 编译好的 `bin\ssot-cli.exe`） |
 | `agent-ui-test.mjs` | 验聊天界面与配置页：三个模式的切换、Agent 面板、配置弹窗与逐条后端检查（**不依赖 vault 内容**） | `playwright-core` |
+| `agent-probe/`（Go） | **不开界面**，从 Go 侧把聊天那条链跑一遍：起后端 → 列会话（自己的元数据 + DSH 存储的标题）→ 切回上次的会话 → 停；`-ask` 还真发一轮、逐条打出模型**实际调用的工具名** | Go + 本机装了 DSH（`-ask` 会**花额度**） |
 | `ui-chrome-test.mjs` | 验界面外壳的口径：滚动条（细 / 半透明 / 轨道透明，见 `shell.spec.md` §7，**不依赖 vault 内容**） | `playwright-core` |
 | `chunk-sizing.mjs` | 只读地量「按不同目标大小切块，vault 会长成什么样」：块数、块大小分布、截断损失、向量内存 | 无（Node 内置；也可被别的脚本 import 复用切块逻辑） |
 | `onnx-probe/`（Go） | 探「纯 Go（免 cgo）能不能加载 ONNX Runtime 跑嵌入模型」：ORT 版本、建会话/推理耗时、输出形状 | Go（`onnxruntime_purego`，离线可装）+ 本机 `onnxruntime.dll` 与模型 |
@@ -29,6 +30,20 @@
 
 什么时候用哪个（补充）：改 **Agent 面板 / 配置页** → `agent-ui-test.mjs`（它特意不依赖 vault 内容，
 所以换 vault 也不会假红）。
+
+改 **聊天那条链的数据**（起后端、开会话、会话列表与标题、后端工具集）→ `agent-probe/`（Go）：
+它不用开界面、不用调试端口，直接调 `agentapp`。
+
+```powershell
+go run ./scripts/check/agent-probe -root projects/demo              # 起后端 + 列会话
+go run ./scripts/check/agent-probe -root projects/demo -no-start    # 不起后端，只看配置与存储
+go run ./scripts/check/agent-probe -root projects/demo -ensure-only # 验「起后端不建会话」
+go run ./scripts/check/agent-probe -root projects/demo -ask "在库里找出提到「增益」的文档"  # 真发一轮（花额度）
+```
+
+⚠️ 三个边界：① 它**不验界面渲染**（那是 `agent-ui-test.mjs`）；② 不带 `-ask` 就不发提示词、
+不花额度；③ `Start` 会在 DSH 里**建一个会话**——不想留就用 `-no-start` 看，或用
+`-rm-session <id>` 精确删（`-delete` 会把本 vault 的会话连同文件**一把全删**，只在收拾测试残留时用）。
 
 改 **嵌入（P1）** → 先跑 `onnx-probe`：它证明「纯 Go 加载 ORT」这条地基还在
 （DLL 换版本、模型损坏、路径写错都会在这儿露出来）。它**不验嵌入质量**，也不含分词——
@@ -83,7 +98,6 @@ node scripts/check/ui-test.mjs                          # 需要先 cd scripts &
    （`search is not a function` 就是这么抓出来的，比读日志快得多）。
 
 每个脚本的详细边界写在各自文件头部（做什么 / 适用范围 / 什么时候不该用）。
-
 
 
 

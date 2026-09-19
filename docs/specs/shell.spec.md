@@ -69,8 +69,9 @@
 #### 这条链路是怎么走到空状态的（排查时照这个顺序看）
 
 1. `main.go` 的 `-projects` flag 默认值就是项目根目录 `projects`。
-2. **`projects/` 目录默认不存在**（空目录 git 不提交；`.gitignore` 只忽略
-   `projects/*/.data/`，没有忽略 `projects/` 本身，所以 clone 出来不会有它）。
+2. **`projects/` 默认不存在**：`.gitignore` 里 **`projects/` 整段被忽略**
+   （vault 各自是独立 git 仓库，见 `workspace.spec.md` §7），
+   所以 clone 出来不会有它——**与「空目录不提交」无关**，是整段不跟踪。
 3. `projectfile.Discover`：root 不存在时**返回空列表而不是错误**——「一个都没有」不是「出错了」。
 4. 于是 `Projects()` 返回空数组：**标题栏的项目按钮组为空**。
 5. 而 `Current()` 走 `Session.Project()`：`dir` 为空且发现 0 个项目时报错
