@@ -137,10 +137,10 @@ export function AgentPane({ onOpenSettings }: Props) {
         {!a.running && (
           <button
             type="button"
-            onClick={() => void a.start()}
+            onClick={() => void a.ensureBackend()}
             disabled={a.busy}
             className="inline-flex items-center gap-1 rounded border border-border px-2 py-0.5 hover:bg-secondary disabled:opacity-40"
-            title="起 Agent 后端（正常打开应用时会自动起；这是手动兜底）"
+            title="起 Agent 后端（不建会话；会话在你说第一句话时才开）"
           >
             <Play className="size-3" />
             启动后端

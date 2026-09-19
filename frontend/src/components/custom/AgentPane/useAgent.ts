@@ -210,6 +210,20 @@ export function useAgent() {
     }
   }, [applyStatus, push]);
 
+  /** 只起后端、**不建会话**（顶栏「启动后端」按钮与打开应用都走这条）。 */
+  const ensureBackend = useCallback(async () => {
+    try {
+      set({ busyMessage: "正在起后端…" });
+      applyStatus(await AgentService.EnsureBackend());
+      set({ busyMessage: null });
+      logLine("起后端（EnsureBackend，不建会话）");
+    } catch (err) {
+      set({ busyMessage: null });
+      push({ kind: "notice", text: String(err), isError: true });
+      logLine("起后端失败：" + String(err));
+    }
+  }, [applyStatus, push, set]);
+
   /** 起后端并开会话。 */
   const start = useCallback(async () => {
     set({ busyMessage: "正在起后端…" });
@@ -457,6 +471,7 @@ export function useAgent() {
   return {
     ...store,
     boot,
+    ensureBackend,
     newSession,
     renameSession,
     currentTitle,
