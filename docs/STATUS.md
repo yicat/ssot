@@ -41,6 +41,14 @@
   + **验收**：正文句查询 61.6%/80.1%（基线 61.6%/79.8%，不降）；实体名式查询 R@1 **34.3% → 37.3%**、R@5 70.6% → 73.5%
   + 顺带修掉切块打包顺序（`chunk.go`）——它让 R@1 少了 13.3pp（`OPEN.md` #20）
 
+**已完成（这一段）**
+- 删除：`vault rm`（glob 批量 / `-dry` 先看影响 / 连带清派生层 / git 留痕 / 断链提醒）+ `vault restore` 回滚
+- 管理：`vault stat` 按目录看体量与派生占用（demo 实测：raw/剧情 125 篇 / 320 万字符 / 图里全部产物 / 被引用 0）
+- Agent 工具：MCP 12 个工具（新增 `doc_delete`、`scope_show`、`scope_propose`）；`mcp-smoke` 31/31
+- 收录范围：声明在 `<vault>/.ssot/derived-scope.yml`（每项目一份、活文件、进 vault 的 git），
+  代码里零数据知识；`set` 只有人能调（实测 agent 被拒）
+- 收尾：端点校验跨批（#26）、索引互斥（#27）
+
 **进行中**
 - **P3 第三轮：抽取→入库全线通了；下一步是质量与成本**
   - ✅ `entity` / `relation` 两表（结构版本 → 3，旧索引自动重建）+ `ssot vault extract -store`

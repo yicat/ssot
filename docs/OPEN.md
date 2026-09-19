@@ -29,8 +29,8 @@
 | 23 | ~~抽取的模型调用走哪条路~~ → **已解决（P3 实测）**：走 ACP 已跑通（`ssot vault extract`，后端 `deepseek-harness-acp`，0 权限提示，提示词走协议、不受命令行长度限制）。为什么不能走 headless one-shot：任务文本是命令行参数，撞 Windows 32,767 字符上限，一次只放得下 5～6 块 | 已解决 | — | `extraction-spike.md`「命令行长度」 |
 | 24 | 抽取的**提示词与实体类型词表没定稿**（spec §六.4）：现在有一版起点（LightRAG 结构 + 我们的 doc/行号要求 + 9 类词表），要用跑批产出与坏例来调。**已有证据（3 篇真跑）**：`Other` 最多（26/92 行），还有把表名（`增益减益.csv`）当实体、把命令示例（`ssot vault`）当关系端点的——提示词要明确「不要文件名/命令示例」**（已加）+ 代码里落地确定性过滤（`vextract/filter.go`）；20 篇干净版实测：坏例形状实体 0 行、`Other` 4.0%** | 待定 | P3 质量 | `internal/infrastructure/vextract/prompt.go`、`extraction-spike.md`「P3 第三轮」 |
 | 25 | **抽取每次调用的固定开销 ≈13k token**（实测：2 块一次就用 13～15k，8 块一次 21.2k），比 spike 里 headless 的（工具 5,220 + system 1,174）高一倍多，原因未查。**先别拿 spike 的 3.2M 外推当承诺**；下一步：试**另一个能挂 ACP 的 profile**（`headless` 不行——它是一次性任务 profile，握手就关）或直接数配置里的工具定义 | 待定 | P3 成本 | `extraction-spike.md`「P3 生产实测」 |
-| 26 | **关系的端点校验是按批做的**：实体在上一批抽出、下一批引用 → 被当成「端点不存在」丢掉（20 篇丢 3 条，全库会放大）。要改成**按全库（或按文档）校验** | 待定 | P3 质量 | `extraction-spike.md`「干净版 20 篇」 |
-| 27 | **同一份 vault 的索引没有互斥**：一个进程在 `Rebuild`（先删 `index.db`）、另一个进程也要重建 → 后来者报 `The process cannot access the file`。P5 的「索引状态」应带锁或至少健康提示 | 待定 | P5 | 实测（2026-09-18 并发探针） |
+| 26 | ~~关系的端点校验是按批做的~~ → **已解决**：端点校验改成「本批 + 图里已有」（`Options.Known`，由 `vaultindex.EntityNames` 提供）；测试钉住「图里已知的端点不该被丢」 | 已解决 | — | `vextract/extract.go`、`OPEN.md` 本条 |
+| 27 | ~~同一份 vault 的索引没有互斥~~ → **已解决**：`.data/index.lock` 抢创建，抢不到给**人话**（「另一道进程正在重建索引…」），老锁（>10 分钟）当死锁清掉 | 已解决 | — | `vaultindex/lock.go` |
 
 ## 怎么用这份清单
 
