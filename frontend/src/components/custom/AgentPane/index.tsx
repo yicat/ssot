@@ -279,12 +279,10 @@ export function AgentPane({ onOpenSettings }: Props) {
             </button>
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-          {a.busyMessage && <span>{a.busyMessage}</span>}
-          <span className="ml-auto">
-            agent 不能发布：改完是 draft，发布只能你在文档页点。
-          </span>
-        </div>
+        {/* 忙碌提示：只在真忙的时候出现，不占一行空位。
+            这里**不再**写「agent 不能发布」那句提示——门在能力层（agent.spec.md §1），
+            界面上少摆一句口号，规则照样成立。 */}
+        {a.busyMessage && <div className="mt-1 text-[11px] text-muted-foreground">{a.busyMessage}</div>}
       </div>
 
       {/* 权限提示：**必须人点** */}
