@@ -88,3 +88,25 @@ func (idx *Index) PurgePreview(doc string) (int, error) {
 	}
 	return total, nil
 }
+
+// CountByDocPrefix 数一张表里 doc 以某前缀开头的行数（管理视图用）。
+//
+// table 由**调用方给白名单常量**（不拼用户输入）；用 substr 而不是 LIKE：
+// 文档名里可能有 `%` `_` 这类 LIKE 元字符。
+func (idx *Index) CountByDocPrefix(table, prefix, exact string) (int, error) {
+	switch table {
+	case "chunk", "extract_chunk", "entity", "relation":
+	default:
+		return 0, fmt.Errorf("未知的表 %q", table)
+	}
+	db, err := idx.open()
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	var n int
+	err = db.QueryRow(fmt.Sprintf(
+		`SELECT COUNT(*) FROM %s WHERE substr(doc,1,length(?)) = ? OR doc = ?`, table),
+		prefix, prefix, exact).Scan(&n)
+	return n, err
+}

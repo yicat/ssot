@@ -133,6 +133,10 @@ func runVault(args []string) error {
 		return vaultExtract(svc, f)
 	case "rm":
 		return vaultRemove(svc, rest, f.actor, f.dry)
+	case "restore":
+		return vaultRestore(svc, rest, f.actor)
+	case "stat":
+		return vaultStat(svc)
 	default:
 		vaultUsage()
 		return fmt.Errorf("未知子命令 %q", cmd)
@@ -743,7 +747,9 @@ vault 子命令（写）：
   embed [-limit <n>]                         把还没嵌入的块嵌入（分批写回；中断了能接着跑）
   vector <词>                                向量检索（需要模型目录；-limit 控制条数）
   find <词>                                  混合检索（向量 + 标题/标签字面项；-beta 调权重）
-  rm [-dry] <路径...>                       删除文档（连带清派生层；-actor 必填，-dry 只看影响）
+  stat                                      管理视图：各目录的体量与派生占用（谁是大头）
+  restore <路径...>                         从 git 历史恢复被删的文档（-actor 必填）
+  rm [-dry] <路径|glob...>                       删除文档（连带清派生层；-actor 必填，-dry 只看影响）
   extract [-docs <n>] [-batch <n>]           抽取实体/关系（多块合一次调用；-gleaning 补抽轮数，默认 1）
           [-gleaning <n>] [-out <文件>]        ⚠️ 现在只验证不入库，产物打到屏幕或 JSON
 

@@ -125,3 +125,22 @@ func (r *Repo) Commit(rel, subject, trailer string) (string, error) {
 
 // 让调用方能判断「不是 git 仓库」这类前置条件，而不用解析错误字符串。
 var ErrNotRepo = errors.New("vault 不是独立的 git 仓库")
+
+// RestoreDeleted 把 rel 从 git 历史里恢复出来（它现在是「已删除」状态）。
+//
+// 做法：找**最近一次删除它的提交**，从那个提交的父版本里 checkout 出来。
+// 找不到（历史里没删过）就报错——不装作成功。
+func (r *Repo) RestoreDeleted(rel string) error {
+	sha, err := r.git("log", "--diff-filter=D", "--format=%H", "-n", "1", "--", rel)
+	if err != nil {
+		return err
+	}
+	sha = strings.TrimSpace(sha)
+	if sha == "" {
+		return fmt.Errorf("git 历史里找不到 %s 的删除记录", rel)
+	}
+	if _, err := r.git("checkout", sha+"^", "--", rel); err != nil {
+		return fmt.Errorf("从 %s 的父版本恢复 %s 失败：%w", sha[:7], rel, err)
+	}
+	return nil
+}
