@@ -37,6 +37,7 @@ func main() {
 	root := flag.String("root", "projects/demo", "vault 目录")
 	noStart := flag.Bool("no-start", false, "不起后端，只看配置与 DSH 存储里的会话标题")
 	del := flag.Bool("delete", false, "把**本 vault** 的会话连同文件删掉（按 id 精确定位；会打印每个被删的文件）")
+	ensureOnly := flag.Bool("ensure-only", false, "只调 EnsureBackend（起后端但**不建会话**），前后各数一次 DSH 里的会话目录数")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*root)
@@ -67,6 +68,35 @@ func main() {
 
 	if *noStart {
 		fmt.Println("\n(-no-start：不起后端)")
+		return
+	}
+
+	// -ensure-only：验「起后端会不会新开会话」——数 DSH 里 sessions/ 的目录数（前后各一次）。
+	// 数文件系统而不是数 `Sessions()`：后者要求后端已经在跑，那就成了先用被测对象来造条件。
+	if *ensureOnly {
+		before := countSessionDirs(agent.DSHHome)
+		fmt.Printf("\n=== EnsureBackend 前：sessions/ 目录 %d 个 ===\n", before)
+		svc := newService(agent, abs)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer cancel()
+		start := time.Now()
+		st, err := svc.EnsureBackend(ctx)
+		if err != nil {
+			fmt.Printf("EnsureBackend 失败：%v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("EnsureBackend 好了：running=%v session=%q（%.1f 秒）\n",
+			st.Running, short(st.SessionID), time.Since(start).Seconds())
+		after := countSessionDirs(agent.DSHHome)
+		fmt.Printf("=== EnsureBackend 后：sessions/ 目录 %d 个 ===\n", after)
+		if after == before {
+			fmt.Println("结论：**没有新开会话** ✓")
+		} else {
+			fmt.Printf("结论：多了 %d 个 —— 还会新开，得继续查\n", after-before)
+		}
+		if err := svc.Stop(); err != nil {
+			fmt.Printf("停后端失败：%v\n", err)
+		}
 		return
 	}
 
@@ -184,6 +214,39 @@ func short(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// countSessionDirs 数 DSH 里 `sessions/` 下的目录数（一个会话一个目录）。
+func countSessionDirs(dshHome string) int {
+	dir := filepath.Join(dshHome, "sessions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return -1
+	}
+	n := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			n++
+		}
+	}
+	return n
+}
+
+// newService 按配置造一个 agentapp（探针与主流程共用，免得两处写法漂移）。
+func newService(agent appconfig.Agent, vaultAbs string) *agentapp.Service {
+	return agentapp.New(agentapp.Config{
+		Vault:          vaultAbs,
+		BackendCommand: agent.DSHExe(),
+		BackendArgs:    agent.Args(),
+		BackendEnv:     agent.Env(),
+		Actor:          "probe",
+		MCPServer: acp.MCPServer{
+			Name:    "ssot",
+			Command: agent.CLIBin,
+			Args:    []string{"mcp", "-root", vaultAbs},
+		},
+		OnLog: func(s string) { fmt.Printf("[后端] %s\n", s) },
+	})
 }
 
 func exists(p string) bool {
