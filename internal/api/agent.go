@@ -368,6 +368,40 @@ func (s *AgentService) Start() (AgentStatus, error) {
 	return s.toStatus(st), nil
 }
 
+// EnsureBackend 只起后端，**不建会话**。
+//
+// 界面「打开应用就把后端备好」走这条：以前走 Start 会顺带建一个会话，
+// 于是每进一次面板/每启一次应用就多一个空会话（实测攒过上百个）。
+// 要开会话时用 NewSession（用户真要说第一句）或 Resume（切回上次那个）。
+func (s *AgentService) EnsureBackend() (AgentStatus, error) {
+	svc, err := s.service()
+	if err != nil {
+		return AgentStatus{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	st, err := svc.EnsureBackend(ctx)
+	if err != nil {
+		return AgentStatus{}, err
+	}
+	return s.toStatus(st), nil
+}
+
+// NewSession 在当前后端上开一个**新会话**（用户主动要新开、或者第一次说话时才调）。
+func (s *AgentService) NewSession() (AgentStatus, error) {
+	svc, err := s.service()
+	if err != nil {
+		return AgentStatus{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	st, err := svc.NewSession(ctx)
+	if err != nil {
+		return AgentStatus{}, err
+	}
+	return s.toStatus(st), nil
+}
+
 // Send 发一句。
 //
 // **立刻返回**：一轮可能跑几分钟，界面靠事件拿更新；一轮结束会发 EventAgentTurn。

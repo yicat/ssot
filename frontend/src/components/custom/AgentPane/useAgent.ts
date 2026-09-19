@@ -111,10 +111,9 @@ export async function resumeLastSession(vault: string): Promise<void> {
     return;
   }
   if (!id) {
-    // 没有「上次的会话」：退化成 Start（起后端；它会顺带建一个会话）。
-    // 这样**打开应用后端一定是备好的**——不能等用户点一下（他要的就是这个）。
+    // 没有「上次的会话」：**只起后端**（EnsureBackend 不建会话），会话等他真说第一句时才建。
     try {
-      const st = await AgentService.Start();
+      const st = await AgentService.EnsureBackend();
       useAgentStore.getState().set({
         running: st.running,
         busy: st.busy,
@@ -143,10 +142,10 @@ export async function resumeLastSession(vault: string): Promise<void> {
       models: st.models ?? [],
     });
   } catch {
-    // 切不过去（会话可能已经被删了）：**退化成 Start**——不然后端就一直不启动，
-    // 用户又要手动点一次（这个抱怨已经出现过）。
+    // 切不过去（会话可能已经被删了）：**只起后端**（EnsureBackend），不再退化成 Start——
+    // Start 会顺带建一个空会话（那正是「一堆空会话」的来源）。
     try {
-      const st = await AgentService.Start();
+      const st = await AgentService.EnsureBackend();
       useAgentStore.getState().set({
         running: st.running,
         busy: st.busy,
@@ -230,17 +229,20 @@ export function useAgent() {
   }, [applyStatus, push]);
 
   /**
-   * 新开一个会话：`stop → start`。
+   * 新开一个会话。
    *
-   * 为什么不直接 newSession：后端的能力层里**没有**「新开会话」这个用例——`Start` 在已运行时会
-   * 直接返回状态（那是复用，不是新会话）。用 stop+start 拿到的是**真新的**会话（上下文空、
-   * 工作区还是同一个 vault），旧会话照旧留在历史里可 resume。
-   * ⚠️ 代价是重启后端进程（几秒）；等能力层补上 `NewSession` 再换成轻量做法。
+   * 以前是 `stop → start`（重启后端进程，几秒）；现在能力层有了 `NewSession`：
+   * **只在后端上开一个新会话**，不重启进程、也不影响别的会话。
    */
   async function newSession() {
     set({ items: [], sessionId: "", permission: null, busyMessage: null });
-    await stop();
-    await start();
+    try {
+      applyStatus(await AgentService.NewSession());
+      logLine("新会话 " + useAgentStore.getState().sessionId.slice(0, 8));
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+      logLine("开新会话失败：" + String(err));
+    }
   }
   /**
    * 给会话改名 / 设标题。
@@ -278,11 +280,27 @@ export function useAgent() {
   const send = useCallback(async () => {
     const text = store.draft.trim();
     if (!text) return;
-    // **懒启动**：真的要说第一句话时才起后端（起后端会顺带建一个会话）。
-    // 以前是「打开面板就自动起」——于是每次进来都多一个空会话（实测攒了一堆 2KB 的空会话）。
-    if (!store.running) {
-      await start();
-      if (!useAgentStore.getState().running) return; // 起不来就算了，start 里已经把原因推出来了
+    // **懒启动**：真要说第一句话时才把后端备好。
+    // 两条都**不建会话**：EnsureBackend 只起进程，真没会话时才 NewSession 开一个（这时本来也该开）。
+    if (!useAgentStore.getState().running) {
+      try {
+        applyStatus(await AgentService.EnsureBackend());
+        logLine("起后端（EnsureBackend，不建会话）");
+      } catch (err) {
+        push({ kind: "notice", text: String(err), isError: true });
+        logLine("起后端失败：" + String(err));
+        return;
+      }
+    }
+    if (!useAgentStore.getState().sessionId) {
+      try {
+        applyStatus(await AgentService.NewSession());
+        logLine("开会话 " + useAgentStore.getState().sessionId.slice(0, 8));
+      } catch (err) {
+        push({ kind: "notice", text: String(err), isError: true });
+        logLine("开会话失败：" + String(err));
+        return;
+      }
     }
     push({ kind: "user", text });
     // 会话的**初始描述**：第一句话就是这次会话在干什么——先拿它当标题（机械截断，不调模型）。

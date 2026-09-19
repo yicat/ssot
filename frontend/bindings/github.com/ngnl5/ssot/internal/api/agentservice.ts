@@ -8,7 +8,7 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Create } from "@wailsio/runtime";
+import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wailsio/runtime";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -29,6 +29,17 @@ export function Cancel(): $CancellablePromise<void> {
 }
 
 /**
+ * EnsureBackend 只起后端，**不建会话**。
+ * 
+ * 界面「打开应用就把后端备好」走这条：以前走 Start 会顺带建一个会话，
+ * 于是每进一次面板/每启一次应用就多一个空会话（实测攒过上百个）。
+ * 要开会话时用 NewSession（用户真要说第一句）或 Resume（切回上次那个）。
+ */
+export function EnsureBackend(): $CancellablePromise<$models.AgentStatus> {
+    return $Call.ByID(50366133);
+}
+
+/**
  * HarnessLogPath 是后端日志的位置（配置页要能告诉人去哪看）。
  */
 export function HarnessLogPath(): $CancellablePromise<string> {
@@ -36,21 +47,24 @@ export function HarnessLogPath(): $CancellablePromise<string> {
 }
 
 /**
+ * NewSession 在当前后端上开一个**新会话**（用户主动要新开、或者第一次说话时才调）。
+ */
+export function NewSession(): $CancellablePromise<$models.AgentStatus> {
+    return $Call.ByID(1186579363);
+}
+
+/**
  * Resume 恢复历史会话。
  */
 export function Resume(sessionID: string): $CancellablePromise<$models.AgentStatus> {
-    return $Call.ByID(528559866, sessionID).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(528559866, sessionID);
 }
 
 /**
  * SaveSettings 存设置。存完立刻重新检查一次（让人当场看到「补齐了没有」）。
  */
 export function SaveSettings(v: $models.AppSettingsView): $CancellablePromise<$models.AppSettingsView> {
-    return $Call.ByID(1999048037, v).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(1999048037, v);
 }
 
 /**
@@ -65,46 +79,36 @@ export function Send(text: string): $CancellablePromise<void> {
 /**
  * Sessions 列当前 vault 的历史会话（已按 cwd 过滤，不会串到别的项目）。
  */
-export function Sessions(): $CancellablePromise<$models.AgentSessionRef[]> {
-    return $Call.ByID(1371309756).then(($result: any) => {
-        return $$createType3($result);
-    });
+export function Sessions(): $CancellablePromise<$models.AgentSessionRef[] | null> {
+    return $Call.ByID(1371309756);
 }
 
 /**
  * SetModel 改当前会话的模型（会话级，不是全局配置）。
  */
 export function SetModel(value: string): $CancellablePromise<$models.AgentStatus> {
-    return $Call.ByID(4242829424, value).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(4242829424, value);
 }
 
 /**
  * Settings 读设置（含逐条后端检查）。
  */
 export function Settings(): $CancellablePromise<$models.AppSettingsView> {
-    return $Call.ByID(3908835128).then(($result: any) => {
-        return $$createType1($result);
-    });
+    return $Call.ByID(3908835128);
 }
 
 /**
  * Start 起后端并开会话。
  */
 export function Start(): $CancellablePromise<$models.AgentStatus> {
-    return $Call.ByID(3039591599).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(3039591599);
 }
 
 /**
  * Status 返回聊天面板状态。
  */
 export function Status(): $CancellablePromise<$models.AgentStatus> {
-    return $Call.ByID(3659612799).then(($result: any) => {
-        return $$createType0($result);
-    });
+    return $Call.ByID(3659612799);
 }
 
 /**
@@ -113,9 +117,3 @@ export function Status(): $CancellablePromise<$models.AgentStatus> {
 export function Stop(): $CancellablePromise<void> {
     return $Call.ByID(2999683061);
 }
-
-// Private type creation functions
-const $$createType0 = $models.AgentStatus.createFrom;
-const $$createType1 = $models.AppSettingsView.createFrom;
-const $$createType2 = $models.AgentSessionRef.createFrom;
-const $$createType3 = $Create.Array($$createType2);

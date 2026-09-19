@@ -318,6 +318,44 @@ func (s *Service) dshHome() string {
 	return ""
 }
 
+// EnsureBackend 起后端并握手，**不建会话**；已经有了就直接返回状态。
+//
+// 这是界面「打开应用就备好后端」该走的路：以前走 Start 会顺带建一个会话，
+// 于是每进一次面板就多一个空会话（实测攒过上百个，用户的原话是「我进来一次就创建一个吗」）。
+func (s *Service) EnsureBackend(ctx context.Context) (Status, error) {
+	if err := s.ensureBackend(ctx); err != nil {
+		return Status{}, err
+	}
+	return s.Status(), nil
+}
+
+// NewSession 在当前后端上开一个**新会话**（用户主动新开，或第一次说话时才调）。
+func (s *Service) NewSession(ctx context.Context) (Status, error) {
+	if err := s.ensureBackend(ctx); err != nil {
+		return Status{}, err
+	}
+	s.mu.Lock()
+	cli := s.cli
+	s.mu.Unlock()
+	if cli == nil {
+		return Status{}, errors.New("还没有起后端")
+	}
+	sess, err := cli.NewSession(ctx, s.cfg.Vault, []acp.MCPServer{s.cfg.MCPServer})
+	if err != nil {
+		return Status{}, fmt.Errorf("开会话失败（工作区 %s）：%w", s.cfg.Vault, err)
+	}
+	if err := sessionstore.Touch(s.cfg.Vault, sess.ID); err != nil {
+		s.mu.Lock()
+		s.lastErr = "会话没记上：" + err.Error()
+		s.mu.Unlock()
+	}
+	s.mu.Lock()
+	s.session = sess
+	st := s.statusLocked()
+	s.mu.Unlock()
+	return st, nil
+}
+
 // ensureBackend 起后端进程并握手，**不建会话**（会话由 Start 或 Resume 负责）。
 func (s *Service) ensureBackend(ctx context.Context) error {
 	s.mu.Lock()
