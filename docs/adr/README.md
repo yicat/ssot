@@ -21,7 +21,7 @@
 | [0003](0003-gate-in-capability-layer.md) | 审批门在能力层：agent 不能发布 | 已定 |
 | [0004](0004-conflicts-in-parallel.md) | 冲突并列、系统不裁决 | **被 0009 修订** |
 | [0005](0005-dsh-session-scoped-overlay.md) | 接 DSH 用会话级 overlay，不写全局 profile | 已定 |
-| [0006](0006-toolset-read-open-write-gated.md) | 后端工具集：读放开、写收口 | 已定 |
+| [0006](0006-toolset-read-open-write-gated.md) | 后端工具集：读放开、写收口 | **被 0014 推翻一条** |
 | [0007](0007-derived-layer-underwater.md) | 派生层沉到水下，用户只见文档与数据表 | 已定 |
 | [0008](0008-embedding-plan-b.md) | 嵌入走 B（512 块 + bge-small-zh），C 被实测否掉 | 已定 |
 | [0009](0009-llm-summary-plus-human-correction.md) | 多来源描述照 LightRAG 合成 + 人机纠错优先 | 已定（修订 0004） |
@@ -29,6 +29,7 @@
 | [0011](0011-extraction-off-reasoning.md) | 抽取任务：关推理 + 受限工具集 + 批量调用 | 已定 |
 | [0012](0012-no-rag-generation.md) | 不做问答/RAG 生成链 | 已定 |
 | [0013](0013-periodic-consolidation.md) | 定期整理：触发式为主 + 台账 | **提议（待确认）** |
+| [0014](0014-no-fs-search-in-backend-toolset.md) | 后端工具集再收紧：连只读的 `glob`/`grep` 也不给 | 已定（修订 0006） |
 
 ## 与别处的分工
 

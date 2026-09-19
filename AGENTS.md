@@ -125,6 +125,20 @@ Go + Wails v3 + Vite/React/shadcn。构建编排走 Taskfile（`wails3 task ...`
    - 前端依赖走 npm 缓存：`npm ci --offline`（registry 已配置 npmmirror）
    - `wails3 init` 不可用（需联网拉模板），骨架是从既有项目复制的
 
+### 读 DSH 的 `--dump-config`（后端工具集怎么验）
+
+1. **必须显式给 profile**：App 的后端是 `ssot-agent`，而 `scripts\dsh\dsh-ssot.ps1` 起的是 `web`——
+   照抄脚本的 `-DumpConfig` 验的是**写代码那个会话**，不是后端。
+2. **`--dump-config` 只能写在 app 名之前**：写在 `acp` 之后会被 acp 当未知选项拒掉
+   （`web` 那侧恰好容忍，所以看起来「通用」，其实不是）。
+3. **输出必须走管道**：`DSH Desktop.exe` 是 GUI 子系统进程，`> dump.yml` 会得到 **0 字节**。
+   管道 + `Out-String` 才拿得到 892 行那种完整 dump。
+4. **别用正则「上一个 `id:` 配下一个 `disabled:`」**：`disabled: true` 排在
+   `__dshPluginOwner:` 块之后，配对必然错位（我因此写出过假清单）。
+   **按条目边界切**（每个 `- id:` 到下一个 `- id:` 之间）。
+
+完整命令与实测结果见 `docs/specs/dsh.spec.md`「能验到哪一步」。
+
 ### 受限文件沙箱下的三处失败
 
 当前会话文件策略为 `danger-full-access`，不受限；但在 `read-only` / `workspace-write` 下：

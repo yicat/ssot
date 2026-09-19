@@ -33,6 +33,9 @@
 | 27 | ~~同一份 vault 的索引没有互斥~~ → **已解决**：`.data/index.lock` 抢创建，抢不到给**人话**（「另一道进程正在重建索引…」），老锁（>10 分钟）当死锁清掉 | 已解决 | — | `vaultindex/lock.go` |
 | 28 | **会话标题**：后端 `session/list` 不回 title → 现在用**第一句用户消息**（截 24 字）当初始描述，存本地（按 vault 分组）；**将来由 agent 生成**更好的一句（读第一轮对话 → 走 `renameSession` / 能力层 `set_session_title`），存法与现在一致，界面不区分谁写的 | 待定 | 会话体验 | `useAgent.ts` 的 titleKey/rememberTitle/renameSession |
 
+| 29 | 关掉 `grep`/`glob` 之后（ADR 0014），agent「按文件名找」只能靠 `vault_list`——而它**没有参数**，一次把全部文档列出来：文档一多就把上下文顶满，也没法按模式筛。选项：给 `vault_list` 加 `prefix`（只读、限 vault 内）／给 `file_read` 加「按名找」／先这样（几百篇还塞得下） | 待定 | 关 grep 之后 | `internal/mcp/tools.go` 的 `vault_list`、ADR 0014 |
+| 30 | **后端 profile 还开着 20 多个「会话机制」插件**：`tool-goal`/`tool-ralph`/`tool-workflow`/`plan-mode`/`compaction-basic`/`tool-result-pruner`/`tool-subagent*`…… 它们不给写能力（与 0003 的门不冲突），但**每个都往每次请求里塞工具定义**——与 #25 那 13k 固定开销同源。选项：按需再收一批（省 token）／保留（agent 复杂任务能自己调度子任务） | 待定 | P3 成本 | ADR 0014 的实测 dump、`OPEN.md` #25 |
+
 ## 怎么用这份清单
 
 - 新问题先加行，再决定状态；**阻塞项要在 `STATUS.md` 的「卡在哪」里再提一次**（免得埋掉）。

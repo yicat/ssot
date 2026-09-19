@@ -125,11 +125,27 @@ dsh web --patch <仓库>\.dsh\mcp.patch.yml      # 只有这次会话有这些�
 | **禁用** | `tool-pwsh`、`tool-bash` | 能跑任意命令 → 能改文件、能 commit |
 | **禁用** | `tool-fs` | 它把 `read` 与 `write`/`edit` 绑在同一个插件里，没法只要读；整块关掉，**读用我们自己的 `file_read` 补** |
 | **禁用** | `tool-str-replace-editor` | 同上（`view` 是读，但 `create`/`str_replace`/`insert` 是写） |
-| **保留** | `tool-fs-search`（`glob` / `grep`） | **纯只读**（走打包的 ripgrep，一个字节都写不了）。关掉它 agent 连找文件都不会 |
-| 保留 | MCP（`mcp__ssot__*` 九个工具） | **这就是能力层**，vault 的读/写/查都在里面 |
+| **禁用** | `tool-fs-search`（`glob` / `grep`） | 只读，但**不受 vault 约束**，且会绕开我们的检索（见下） |
+| 保留 | MCP（`mcp__ssot__*` 十二个工具） | **这就是能力层**，vault 的读/写/查都在里面 |
 | 保留 | `tool-skill`、`dsh-skill-filesystem` | 四个角色靠它分发（`agent.spec.md` §6） |
 | 保留 | `tool-subagent`、`tool-todo` | 主 Agent 的调度用，**不碰文件** |
 | 保留 | `tool-web` | 只读外部；要落进 vault 仍得走 `doc_write`，绕不过门 |
+
+**为什么连只读的 `tool-fs-search` 也关掉**（2025-01 定的，推翻了第一版「读放开」里的例外）：
+它的只读是事实，但**只读不等于受约束**——
+
+1. **没有 vault 边界**。插件 `@deepseek-ai/dsh-tool-fs-search` 的 `toWorkdirRelative` 只做一件事：
+   在 workdir 内就转相对路径，**在 workdir 外的绝对路径原样放行**（`lib/index.js` 附近）；
+   它的 `Config` 全是**输出与结果上限**（`rawOutputMaxBytes`、`searchMetaMaxBytes`、结果条数这类），
+   **没有任何 root / workdir 限制项**。也就是说 agent 可以 `grep C:\Users\...` 翻整个磁盘。
+2. **它会绕开我们的检索**。「哪篇文档说过 X」正是 `vault_search`（分块 + 向量 + 图）要回答的问题；
+   留着 `grep`，agent 必然改用关键词匹配，于是**收录范围（`derived.spec.md` §4）
+   白定**——范围之外的文件照样能被 grep 出来、被当成事实写进整理稿，而我们在派生层做的
+   一切（范围、留痕、可核验）全被旁路。当时用户的判断很直接：**有 grep 还要 RAG 干什么。**
+
+**代价**：agent 失去「按文件名找文件」的能力。补法是能力层给**受约束的只读检索**：
+「这个地方有哪些文档」用 `vault_list`，「哪篇说过 X」用 `vault_search`。
+代价是明确的：agent 找不到「vault 外的东西」——**而这正是我们要的**。
 
 **能力层因此要提供只读的文件读取**：`file_read`（带行号分页、限定在 vault 内、拒绝绝对路径与
 `..`、非 UTF-8 明确报错）。这样 agent 能读原文/JSON 导出/`project.yml`/表说明，
@@ -141,7 +157,7 @@ stderr 与 `<用户配置目录>/ssot/mcp.log`。看到
 
 ```
 initialize 客户端=dsh-mcp-client 0.0.1 协议=2025-11-25
-tools/list 被调用，返回 9 个工具
+tools/list 被调用，返回 12 个工具
 ```
 
 就说明客户端连上了并取走了工具清单。⚠️ 这**证明到「工具被取走」为止**；
@@ -149,12 +165,47 @@ tools/list 被调用，返回 9 个工具
 出现 `pwsh`/`read`/`write` 就说明没堵住或工具集变了）。
 
 **落地形态**：专属 profile `ssot-agent`（不是通用的 `acp`）——名字就说明它是给谁用的。
-App 默认指向它；配置页的「后端检查」要能看出**这个 profile 到底堵没堵住**，
+App 默认指向它（`appconfig.DefaultProfile = "ssot-agent"`，起后端时参数里带
+`--profile ssot-agent`）；配置页的「后端检查」要能看出**这个 profile 到底堵没堵住**，
 而不是只看目录在不在。
 
-**能验到哪一步**：`--dump-config` 里那些行必须是 `disabled: true`（组合层面的事实）；
-而**模型最终看到的工具清单**只有真跑一轮才看得见——界面里的工具调用行会显示工具名，
-如果那一行出现 `pwsh`/`read`/`write`，就说明没堵住（这条要人看一眼，我不假装能自动验）。
+**能验到哪一步**：dump 出**后端真正用的那个 profile**，再按**条目**看 `disabled`。
+两个细节都会把人带沟里，先写清楚：
+
+```powershell
+# profile 要显式给（App 用的是 ssot-agent；scripts\dsh\dsh-ssot.ps1 用的是 web，两者不同！）
+# --dump-config 只能写在 app 名**之前**：写在 `acp` 之后会被 acp 当成未知选项拒掉
+# （`web` 那侧恰好容忍，所以照抄脚本会以为通用）
+# ⚠️ 必须用管道取输出：DSH Desktop.exe 是 GUI 子系统进程，`> 文件` 会得到 **0 字节**
+$env:ELECTRON_RUN_AS_NODE="1"
+& "$env:LOCALAPPDATA\Programs\DSH Desktop\DSH Desktop.exe" --expose-internals `
+  "$env:LOCALAPPDATA\Programs\DSH Desktop\resources\harness-node-entry.mjs" `
+  "$env:LOCALAPPDATA\Programs\DSH Desktop\resources\app\node_modules\@deepseek-ai\dsh\lib\bin.js" `
+  --profile ssot-agent --dump-config 2>&1 | Out-String
+```
+
+2026-09-19 实测（本机，892 行 dump）：**被禁的只有这 5 个 + bundle 自带的 `skill-badge`**
+
+```
+tool-bash  tool-pwsh  tool-fs  tool-fs-search  tool-str-replace-editor   （+ skill-badge）
+```
+
+其余照常开着（**不碰文件**的那批）：`tool-todo`、`tool-skill`、`skill-filesystem`、
+`tool-subagent*`、`tool-goal`、`tool-ralph`、`tool-workflow`、`plan-mode`、`compaction-basic`、
+`command-compact`、`tool-result-pruner`、`tool-web`、`fs-observation-policy` 等。
+它们不给写能力，所以与 0003 的门不冲突（要不要再收，见 `OPEN.md` #30）。
+
+⚠️ **踩过的坑（两次，都是读数方法错，不是配置错）**：
+1. **别用「上一个 `- id:` 配下一个 `disabled:`」这种正则**。dump 的每个条目里
+   `disabled: true` 排在 `__dshPluginOwner:` 块**之后**，配对必然错位——我因此写出过一份
+   「27 个插件全被禁」的假清单（把保留的 `tool-todo`/`tool-web` 也算成禁用了）。
+   **要按条目边界切**（每个 `- id:` 到下一个 `- id:` 之间）再看块里有没有 `disabled:`。
+2. **别读输出文件**。GUI 子系统进程不往文件句柄写，`> dump.yml` 得到的是 0 字节——
+   我当时读到空文件，误判成「patch 静默失效」，还据此怀疑了半天配置文件。
+
+⚠️ 另一半要人看一眼：**模型最终看到的工具清单**只有真跑一轮才看得见——
+界面里的工具调用行会显示工具名，如果那一行出现 `pwsh`/`read`/`write`/`grep`，
+就说明没堵住（这条我不假装能自动验）。
 
 ## 不做
 

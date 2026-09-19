@@ -80,9 +80,12 @@ App **不做 agent 框架**。它提供两样东西：
 - 工具名用 **snake_case**，不用点号——DSH 只接受 `[A-Za-z0-9_-]`，点号会被换成 `_` 加 hash
   （`dsh.spec.md` §3）。
 - **读放开、写收口**：agent 需要读原文、JSON 导出、`project.yml`、表的说明文件……
-  所以我们给它**只读**的 `file_read`（外加 DSH 那侧纯只读的 `glob`/`grep`），
+  所以我们给它**只读**的 `file_read`、`vault_list`、`vault_search`，
   但**不给任何能写文件的工具**：写只有 `doc_write` 一条路，于是「回落 draft + 留痕」
   与「只有人能发布」两条规则都还在。理由与清单见 `dsh.spec.md`「后端工具集必须收紧」。
+- **「读放开」不等于「什么读都给」**：DSH 那侧的 `glob`/`grep`（`tool-fs-search`）**不给**——
+  它只读，但不受 vault 约束，而且会让 agent 用关键词匹配替掉我们的检索，
+  把收录范围绕过去。见 ADR 0014。
 
 **未做（写下来免得被当成漏了）**：
 

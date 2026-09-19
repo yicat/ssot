@@ -1,7 +1,7 @@
 # 0006 后端工具集：读放开、写收口
 
-状态：已定（含一次自我纠正）
-关联：`docs/specs/dsh.spec.md`「后端工具集必须收紧」、`internal/infrastructure/appconfig`、`.dsh/extraction.patch.yml`
+状态：部分被推翻（`tool-fs-search` 那一条，见 0014）；「写收口」原则不变
+关联：`docs/specs/dsh.spec.md`「后端工具集必须收紧」、`internal/infrastructure/appconfig`、`.dsh/extraction.patch.yml`、`docs/adr/0014-no-fs-search-in-backend-toolset.md`
 
 ## 背景
 
@@ -18,7 +18,7 @@ ACP profile 继承 `dsh-base`，里面带着一整套编码 agent 工具：`tool
 | `tool-pwsh` / `tool-bash` | 禁用 | 能跑任意命令 → 能改文件、能 commit |
 | `tool-fs` | 禁用 | `read` 与 `write`/`edit` 绑在同一个插件里，没法只要读 → 读由我们自己的 `file_read` 补 |
 | `tool-str-replace-editor` | 禁用 | 同上（`view` 是读，`create`/`str_replace` 是写） |
-| `tool-fs-search`（glob/grep） | **保留** | 纯只读（走打包的 ripgrep，写不了一个字节） |
+| `tool-fs-search`（glob/grep） | ~~保留~~ → **已改：禁用**（0014） | 只读是真的，但**不受 vault 约束**，且会替掉我们自己的检索 |
 | MCP 的九个工具 | 保留 | 这就是能力层 |
 | `tool-skill`、`tool-subagent`、`tool-todo`、`tool-web` | 保留 | 角色分发与调度；不碰文件 |
 
