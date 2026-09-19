@@ -73,7 +73,7 @@ App **不做 agent 框架**。它提供两样东西：
 | `link_resolve` | 解析 `[[...]]`（含块级锚点）到文档与段落 | 只读 |
 | `file_read` | 只读地读 vault 里任意**文本**文件（按行分页；限定 vault 内，拒绝绝对路径与 `..`） | 只读 |
 | `table_infos` | 有哪些数据表、列与类型 | 只读 |
-| `table_query` | 对索引跑只读 SQL（表与 front matter） | 只读 |
+| `table_query` | 对索引跑只读 SQL：**只放行数据表与 `docs` 的 front matter 字段**（派生层的表在水下，见 `derived.spec.md` §一） | 只读 |
 
 - **`status.set` 不在第一批**：MCP 侧 `actor` 恒为 `agent`（`dsh.spec.md` §4），
   这个工具在 MCP 上永远失败；暴露它只会白占模型的上下文。发布/归档走界面与 CLI。

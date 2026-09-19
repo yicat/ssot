@@ -149,6 +149,42 @@ func TestQueryIsReadOnly(t *testing.T) {
 	}
 }
 
+// 派生层的表**不对外**：查询口只放数据表与 `docs`（`derived.spec.md` §一、ADR 0007）。
+//
+// 这条是被真跑逼出来的：模型检索撞到上限后，转头 `SELECT ... FROM chunk` 去凑清单，
+// 向量与图检索就成了可选。所以这里把「换着法子拿派生层」的几种写法都钉住。
+func TestQueryRefusesUnderwaterTables(t *testing.T) {
+	root := newVault(t)
+	idx := New(root)
+	if err := idx.Rebuild(); err != nil {
+		t.Fatal(err)
+	}
+
+	// docs 仍然可查（front matter 是给人和 agent 明明白白读的）。
+	if _, err := idx.Query("SELECT count(*) FROM docs", 10); err != nil {
+		t.Errorf("docs 该能查：%v", err)
+	}
+
+	bad := []string{
+		`SELECT text FROM chunk LIMIT 5`,                     // 直接查
+		`SELECT * FROM (SELECT name FROM entity) x`,          // 藏在子查询里
+		`WITH t AS (SELECT * FROM relation) SELECT * FROM t`, // 藏在 CTE 里
+		`SELECT * FROM pragma_table_info('embedding')`,       // 表值函数
+		`SELECT * FROM sqlite_master`,                        // 库自己的目录
+		`SELECT * FROM embedding, docs`,                      // 逗号列表里混一个
+	}
+	for _, sql := range bad {
+		_, err := idx.Query(sql, 10)
+		if err == nil {
+			t.Errorf("这条该被拒：%s", sql)
+			continue
+		}
+		if !strings.Contains(err.Error(), "水下") {
+			t.Errorf("拒绝的理由要说清「沉在水下」：%v", err)
+		}
+	}
+}
+
 func TestQueryLimitAndTableNameSanitising(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "tables/技能 倍率-v2.csv", "a,b\n1,2\n3,4\n5,6\n")

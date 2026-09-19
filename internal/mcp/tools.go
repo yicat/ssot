@@ -429,7 +429,7 @@ var tools = []tool{
 	},
 	{
 		name: "table_query", title: "查询数据表", readOnly: true,
-		description: "对派生索引跑一条**只读** SELECT/WITH：能查 tables/ 里的表，也能查 docs 表（path/title/status/tags/source 等 front matter 字段）。",
+		description: "对派生索引跑一条**只读** SELECT/WITH，**只放行数据表**（tables/ 里那些，先看 table_infos 拿表名）**与 docs 表**（path/title/status/tags/source 等 front matter 字段）。派生层的表（分块/向量/实体/关系）不从这里查——按内容找文档要用 vault_search。",
 		schema: obj(map[string]any{
 			"sql":   str2("只读 SQL，必须以 SELECT 或 WITH 开头"),
 			"limit": int2("最多返回几行，默认 100"),

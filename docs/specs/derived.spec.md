@@ -43,6 +43,16 @@
 - **不进 git**：与 `vault.spec.md` §4/§5 一致（`.data/` 永不提交）。
 - **不做「影子真相」**：派生层里的任何一条都要能回指到「哪篇文档的哪一段」，
   回指不到的一律不允许存在——否则它就成了一份没有出处、却看起来像事实的东西。
+- **水面以下的表不对外**（2026-09-20 补，ADR 0007 的落地）。`table_query` 之前跑在索引库上，
+  等于把 `chunk`（**含块正文**）/`embedding`/`entity`/`relation`/`tables_meta` 全放出来了：
+  真跑时的表现就是——模型检索撞到上限，转头 `SELECT ... FROM chunk` 去凑清单，
+  **向量与图检索成了可选**。所以查询口只放行两类：
+  - 数据表（`tables_meta` 里登记的那些，名字是动态的）；
+  - `docs`（文档的 front matter 字段：path/title/status/tags/source）。
+
+  门落在 `vaultindex.Query`（**所有入口一致**：CLI、界面、agent 都过这道门；
+  ADR 0007 说的是「用户只见文档与数据表」，所以界面也不该特殊）。
+  想直接看派生层的表，用任意 sqlite 客户端打开 `.data/index.db`——**那是调试，不该有代码通道**。
 
 ## 二、从 LightRAG 借什么、改什么
 

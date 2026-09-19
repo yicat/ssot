@@ -599,10 +599,35 @@ func (idx *Index) Tables() ([]vault.TableInfo, error) {
 	return out, rows.Err()
 }
 
+// queryableNames 读出**数据表**的表名（`tables_meta` 里登记的那些）。
+// 查询口放行的就是这些 + `docs`（见 Query）。
+func queryableNames(db *sql.DB) ([]string, error) {
+	rows, err := db.Query(`SELECT name FROM tables_meta ORDER BY file`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
 // Query 跑一条只读查询。
 //
 // 只放行 SELECT / WITH，并且连接上置 `PRAGMA query_only`：**派生数据不在这里改**。
 // 行数上限在读取时截断，不改写调用方的 SQL（改写 SQL 容易在奇怪语法上翻车）。
+//
+// ⚠️ **只放行数据表与 `docs`**（2026-09-20 收紧，见 `derived.spec.md` §一、ADR 0007）：
+// 这条查询跑在索引库上，原来等于把派生层的 `chunk`（**含块正文**）/`embedding`/`entity`/
+// `relation` 全放出来。实测里模型就是这么绕过检索的——撞到条数上限后转头
+// `SELECT ... FROM chunk` 去凑清单，向量与图检索成了可选。判定规则在
+// `domain/vault` 的 `SQLTableRefs` / `TableQueryable`（纯规则、fail closed），这里只接线。
 func (idx *Index) Query(stmt string, limit int) (vault.ResultSet, error) {
 	s := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(stmt), ";"))
 	if s == "" {
@@ -611,6 +636,15 @@ func (idx *Index) Query(stmt string, limit int) (vault.ResultSet, error) {
 	up := strings.ToUpper(s)
 	if !strings.HasPrefix(up, "SELECT") && !strings.HasPrefix(up, "WITH") {
 		return vault.ResultSet{}, fmt.Errorf("只允许查询（SELECT / WITH）——vault 的数据改文档与表格文件，不在这里改 SQL")
+	}
+	// 一条一条来：去掉末尾分号之后还剩分号，就是想把几条语句塞一起（不认这种写法）。
+	if strings.Contains(s, ";") {
+		return vault.ResultSet{}, fmt.Errorf("一次只跑一条查询（语句里还有分号）")
+	}
+	refs, err := vault.SQLTableRefs(s)
+	if err != nil {
+		// fail closed：读不懂就不放行（宁可拒一条合法查询，也不能放过一条读不懂的）。
+		return vault.ResultSet{}, fmt.Errorf("这条查询读不出它要查哪些表：%v", err)
 	}
 	if limit <= 0 {
 		limit = 200
@@ -622,6 +656,18 @@ func (idx *Index) Query(stmt string, limit int) (vault.ResultSet, error) {
 	defer db.Close()
 	if _, err := db.Exec(`PRAGMA query_only = 1`); err != nil {
 		return vault.ResultSet{}, err
+	}
+	dataTables, err := queryableNames(db)
+	if err != nil {
+		return vault.ResultSet{}, err
+	}
+	for _, ref := range refs {
+		if vault.TableQueryable(ref, dataTables) {
+			continue
+		}
+		return vault.ResultSet{}, fmt.Errorf(
+			"%s 不在可查范围：这里只放**数据表**与 docs（文档字段）。派生层（分块/向量/实体/关系）沉在水下，不从这条口子查——按内容找文档请用检索。当前可查：%s",
+			ref, strings.Join(append([]string{vault.QueryableDocsTable}, dataTables...), "、"))
 	}
 	rows, err := db.Query(s)
 	if err != nil {

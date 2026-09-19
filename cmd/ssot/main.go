@@ -629,7 +629,7 @@ func vaultTables(svc *vaultapp.Service) error {
 
 func vaultQuery(svc *vaultapp.Service, args []string, limit int) error {
 	if len(args) == 0 {
-		return fmt.Errorf("query 后面要跟一条 SELECT（只读：派生索引不在这里改）")
+		return fmt.Errorf("query 后面要跟一条 SELECT（只读；**只能查数据表与 docs**——派生层的表沉在水下，按内容找文档用 `vault vector` / `vault find`）")
 	}
 	rs, err := svc.QueryTables(strings.Join(args, " "), limit)
 	if err != nil {

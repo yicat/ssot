@@ -24,6 +24,8 @@
 | 2026-09-20 | 聊天面板：会话与后端 | 会话元数据改由我们持有（`<vault>/.ssot/sessions.json`）；**只有「＋ 新会话」才开会话**；后端拆成 `EnsureBackend`（起进程、不建会话）+ `NewSession`；标题按「自己 → DSH 存储 → 空」三级合并（界面不再出现 UUID）；起停后端的按钮挪到面板顶栏（状态旁） | `sessionstore/`、`agentapp/service.go`、`AgentPane/useAgent.ts` |
 | 2026-09-20 | 后端工具集收口 + **真跑验证** | 实测 `ssot-agent` 只禁了 5 个写/搜索插件；**连只读的 `glob`/`grep` 也关掉**（ADR 0014：只读但不受 vault 约束、且会替掉我们的检索）；`agent-probe` 加 `-ask` 真跑一轮 → **13 次调用全是 `mcp__ssot__*`、无 grep**；修掉 `-ensure-only` 的假验证（原来数的是 cwd 桶、不是会话）；真跑还挖出 #31/#32/#33 | ADR 0014、`dsh.spec.md`、`scripts/check/agent-probe/`、`OPEN.md` #30–33 |
 
+| 2026-09-20 | 收住派生层的查询口 | #31 落地：`table_query` 改**白名单**（数据表 + `docs`），纯规则在 `domain/vault/querygate.go`（fail closed），门在 `vaultindex.Query`，CLI/界面/agent 一致；子查询 / CTE / 表值函数 / `sqlite_master` 四种绕法都有测试 | `querygate.go`、`vaultindex/index.go`、`derived.spec.md` §一、`OPEN.md` #31 |
+
 ## 现在在哪
 
 **已完成**
