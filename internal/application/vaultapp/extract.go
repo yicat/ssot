@@ -72,16 +72,29 @@ const ExtractBatch = 8
 // ExtractChunksForDocs 取前 docs 篇（按路径排序）的**抽取块**（2000 口径），并按 batch 分批。
 //
 // batch<=0 用 ExtractBatch；docs<=0 表示全部。
-func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, error) {
+func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, int, error) {
 	if err := s.ensureIndex(); err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	// 收录范围：**按声明**跳过不进派生层的文档（规则在 domain，声明在 .ssot/derived-scope.yml）。
+	view, err := s.Scope()
+	if err != nil {
+		return nil, 0, err
+	}
+	tagsOf := map[string][]string{}
+	docsList, err := s.Docs()
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, d := range docsList {
+		tagsOf[d.Path] = d.Tags
 	}
 	all, err := s.index.AllChunks(vaultindex.KindExtract)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(all) == 0 {
-		return nil, fmt.Errorf("索引里没有抽取块：先跑 `ssot vault index`")
+		return nil, 0, fmt.Errorf("索引里没有抽取块：先跑 `ssot vault index`")
 	}
 
 	// 按顺序取前 docs 篇（AllChunks 已按 doc, ord 排序）。
@@ -91,7 +104,12 @@ func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, err
 	}
 	seen := map[string]bool{}
 	var picked []vextract.Chunk
+	skipped := map[string]bool{}
 	for _, c := range all {
+		if ok, _ := view.Effective.Scope.Covers(c.Doc, tagsOf[c.Doc]); !ok {
+			skipped[c.Doc] = true
+			continue
+		}
 		if !seen[c.Doc] {
 			if len(seen) >= limitDocs {
 				continue
@@ -103,7 +121,7 @@ func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, err
 		})
 	}
 	if len(picked) == 0 {
-		return nil, fmt.Errorf("没取到块")
+		return nil, len(skipped), fmt.Errorf("没取到块（按声明跳过了 %d 篇）", len(skipped))
 	}
 
 	if batch <= 0 {
@@ -117,5 +135,5 @@ func (s *Service) ExtractChunksForDocs(docs, batch int) ([][]vextract.Chunk, err
 		}
 		out = append(out, picked[i:end])
 	}
-	return out, nil
+	return out, len(skipped), nil
 }

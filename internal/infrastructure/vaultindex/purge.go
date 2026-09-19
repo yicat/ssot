@@ -110,3 +110,26 @@ func (idx *Index) CountByDocPrefix(table, prefix, exact string) (int, error) {
 		prefix, prefix, exact).Scan(&n)
 	return n, err
 }
+
+// IndexedDocs 返回已经进了派生层的文档集合（有块就算进了）。
+func (idx *Index) IndexedDocs() (map[string]bool, error) {
+	db, err := idx.open()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT DISTINCT doc FROM chunk`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			return nil, err
+		}
+		out[d] = true
+	}
+	return out, rows.Err()
+}

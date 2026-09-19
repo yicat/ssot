@@ -22,9 +22,21 @@ import (
 // ⚠️ 这一版**只验证、不入库**：入库要等 entity/relation 表与归并规则（plan §3），
 // 触发方式也要等 OPEN.md #2 拍板。所以它按显式参数跑一批，结果打到屏幕/JSON。
 func vaultExtract(svc *vaultapp.Service, f vaultFlags) error {
-	batches, err := svc.ExtractChunksForDocs(f.docs, f.batch)
+	// 抽取配置来自**项目声明**（类型词表、忽略的名字形状、反例）——代码里没有默认数据知识。
+	view, err := svc.Scope()
 	if err != nil {
 		return err
+	}
+	cfg := view.Effective.Extract
+	if len(cfg.EntityTypes) == 0 {
+		fmt.Println("⚠️ 声明里没写实体类型词表：所有实体都会落到兜底 Other（见 .ssot/derived-scope.yml）")
+	}
+	batches, skipped, err := svc.ExtractChunksForDocs(f.docs, f.batch)
+	if err != nil {
+		return err
+	}
+	if skipped > 0 {
+		fmt.Printf("按声明跳过 %d 篇（不进派生层；规则见 .ssot/derived-scope.yml）\n", skipped)
 	}
 	opt, err := extractionACP(svc.Root())
 	if err != nil {
@@ -41,7 +53,7 @@ func vaultExtract(svc *vaultapp.Service, f vaultFlags) error {
 			chars += len([]rune(c.Text))
 		}
 		t0 := time.Now()
-		res, err := vextract.Extract(context.Background(), comp, b, vextract.Options{Gleaning: f.gleaning})
+		res, err := vextract.Extract(context.Background(), comp, b, vextract.Options{Gleaning: f.gleaning, Config: cfg})
 		if err != nil {
 			return fmt.Errorf("第 %d/%d 批失败：%w", i+1, len(batches), err)
 		}
