@@ -124,6 +124,12 @@ func (idx *Index) Rebuild() error {
 	if err := os.MkdirAll(filepath.Dir(idx.Path()), 0o755); err != nil {
 		return err
 	}
+	// 互斥：同一份 vault 只让一个进程重建（否则后来者拿到的是「文件忙」这种看不懂的错）。
+	unlock, err := idx.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	// 先删旧文件：不然改过的表会留下旧列。
 	if err := os.Remove(idx.Path()); err != nil && !os.IsNotExist(err) {
 		return err
