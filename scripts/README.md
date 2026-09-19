@@ -12,6 +12,8 @@
 | 子目录 | 放什么 |
 |---|---|
 | `check/` | 只读探针：把看不见的东西变成文本证据（见 `check/README.md`） |
+| `ingest/` | 导入：外部数据 → vault（**会写文件**，见 `ingest/README.md`） |
+| `dsh/` | 起 DSH 会话：把 MCP overlay 拼进参数、用 Electron 当 node（见 `dsh/README.md`） |
 
 需要时再按用途分子目录（例如 `scripts/fetch/`），子目录里放一个 `README.md` 说明这一组是干什么的。
 
