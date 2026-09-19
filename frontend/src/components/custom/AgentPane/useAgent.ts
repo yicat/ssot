@@ -82,6 +82,52 @@ function rememberTitle(vault: string, id: string, firstMessage: string) {
 let pendingTitle = "";
 let pendingVault = "";
 
+const lastKey = (vault: string) => `ssot:last-session:${vault || "(未打开项目)"}`;
+
+/** 记住这个 vault 上次用的会话。 */
+function rememberLastSession(vault: string, id: string) {
+  try {
+    localStorage.setItem(lastKey(vault), id);
+  } catch {
+    // 存不下就算了：只是下次打开时落不回那个会话，不影响聊天。
+  }
+}
+
+/**
+ * 打开应用时调：切回这个 vault 上次用的会话。
+ *
+ * 为什么走 Resume 而不是 Start：`Start` 会**顺带建一个新会话**——以前「打开面板自动起后端」
+ * 就是这么攒出一堆空会话的。改过之后的 `Resume` 会在后端没起时把它拉起来（`agentapp.ensureBackend`），
+ * 只切会话、不建新的。
+ *
+ * 切不过去（会话被删了、后端起不来）就安静放弃：等用户真要说第一句话时再按懒启动处理。
+ */
+export async function resumeLastSession(vault: string): Promise<void> {
+  if (!vault) return;
+  let id = "";
+  try {
+    id = localStorage.getItem(lastKey(vault)) ?? "";
+  } catch {
+    return;
+  }
+  if (!id) return;
+  try {
+    const st = await AgentService.Resume(id);
+    useAgentStore.getState().set({
+      running: st.running,
+      busy: st.busy,
+      agent: st.agent,
+      version: st.version,
+      sessionId: st.sessionId,
+      vault: st.vault,
+      model: st.model,
+      models: st.models ?? [],
+    });
+  } catch {
+    // 安静放弃（见函数注释）。
+  }
+}
+
 export function useAgent() {
   const store = useAgentStore();
   const { set, push } = store;
@@ -96,6 +142,8 @@ export function useAgent() {
         rememberTitle(st.vault || pendingVault, st.sessionId, pendingTitle);
         pendingTitle = "";
       }
+      // 记住「这个 vault 上次用的会话」：下次打开应用就落回它（见 resumeLastSession）。
+      if (st.sessionId) rememberLastSession(st.vault, st.sessionId);
       set({
         running: st.running,
         busy: st.busy,

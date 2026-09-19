@@ -5,6 +5,7 @@
  * 所以「谁能发布」那条门在界面上绕不过去（点按钮和敲命令是同一份实现）。
  */
 import { useCallback, useEffect, useState } from "react";
+import { resumeLastSession } from "../AgentPane/useAgent";
 import { useAgentStore } from "../AgentPane/store";
 
 import {
@@ -88,6 +89,18 @@ export function useVaultBrowser() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * **打开应用就把 Agent 后端备好，并落回上次那个会话**（用户要的行为）。
+   *
+   * 靠 `Resume`：它在后端没起时会顺手拉起来（`agentapp.ensureBackend`），**不建新会话**；
+   * 没有「上次的会话」时什么也不做——等用户真要说第一句话时再懒启动。
+   * 所以「进来一次就多一个空会话」这件事不会再发生。
+   */
+  useEffect(() => {
+    const root = useVaultStore.getState().root;
+    if (root) void resumeLastSession(root);
+  }, []);
 
   /**
    * 文件变了要重载列表——**这一步以前是缺的**：agent 在能力层删/建了文件之后，

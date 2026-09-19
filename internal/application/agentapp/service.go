@@ -287,6 +287,46 @@ func (s *Service) dshHome() string {
 	return ""
 }
 
+// ensureBackend 起后端进程并握手，**不建会话**（会话由 Start 或 Resume 负责）。
+func (s *Service) ensureBackend(ctx context.Context) error {
+	s.mu.Lock()
+	if s.cli != nil {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+
+	if s.cfg.BackendCommand == "" {
+		return errors.New("还没配 Agent 后端（设置里给 DSH 的安装目录）")
+	}
+	if s.cfg.Vault == "" {
+		return errors.New("还没有打开的项目——聊天要有个 vault 当工作区")
+	}
+	if s.cfg.MCPServer.Command == "" {
+		return errors.New("没有可用的 ssot CLI——MCP 服务器起不来（跑 wails3 task build:cli）")
+	}
+	cli, err := s.cfg.newClient(acp.Config{
+		Command:      s.cfg.BackendCommand,
+		Args:         s.cfg.BackendArgs,
+		Env:          s.cfg.BackendEnv,
+		OnUpdate:     s.cfg.OnUpdate,
+		OnPermission: s.cfg.AskPermission,
+		OnLog:        s.cfg.OnLog,
+	})
+	if err != nil {
+		return err
+	}
+	caps, err := cli.Initialize(ctx)
+	if err != nil {
+		_ = cli.Stop()
+		return fmt.Errorf("后端握手失败：%w", err)
+	}
+	s.mu.Lock()
+	s.cli, s.caps = cli, caps
+	s.mu.Unlock()
+	return nil
+}
+
 // Resume 恢复一个历史会话：换掉当前会话，后端进程不重开。
 //
 // 为什么不做成「并行开多个会话」：同时跟两个会话说话会让「现在在跟谁说话」说不清
@@ -295,6 +335,17 @@ func (s *Service) Resume(ctx context.Context, sessionID string) (Status, error) 
 	s.mu.Lock()
 	cli, current := s.cli, s.session.ID
 	s.mu.Unlock()
+	if cli == nil {
+		// **顺手把后端拉起来**：界面「打开应用就落回上次那个会话」靠的就是这条——
+		// 走 Start() 会顺带建一个**新**会话（于是每次进来都多一个空会话，实测攒过一堆）；
+		// 走 Resume 则只把后端拉起来、把会话切过去，不产生任何新会话。
+		if err := s.ensureBackend(ctx); err != nil {
+			return Status{}, err
+		}
+		s.mu.Lock()
+		cli = s.cli
+		s.mu.Unlock()
+	}
 	if cli == nil {
 		return Status{}, errors.New("还没有起后端")
 	}
