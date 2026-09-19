@@ -87,6 +87,12 @@ export type AgentState = {
   sessions: AgentSessionRef[];
   /** 会话列表是否展开。 */
   sessionsOpen: boolean;
+  /** 控制台面板开着没（顶栏开关）。 */
+  consoleOpen: boolean;
+  /** 界面里的控制台：关键事件与错误都记一行（让人看得见，不用开 DevTools）。 */
+  console: string[];
+  /** 往控制台写一行（带时间；封顶 200 行，免得无限涨）。 */
+  log: (text: string) => void;
   busyMessage: string | null;
   set: (patch: Partial<AgentState>) => void;
   /** 往聊天里追加一条（自动分配 id）。 */
@@ -111,6 +117,8 @@ const initial = {
   sessions: [] as AgentSessionRef[],
   sessionsOpen: false,
   busyMessage: null as string | null,
+  consoleOpen: false,
+  console: [] as string[],
 };
 
 export const useAgentStore = create<AgentState>((set) => ({
@@ -118,5 +126,15 @@ export const useAgentStore = create<AgentState>((set) => ({
   set: (patch) => set(patch),
   push: (item) => set((s) => ({ items: [...s.items, { ...item, id: ++seq } as ChatItem] })),
   reset: () => set({ ...initial, items: [] }),
+  log: (text) =>
+    set((s) => {
+      const stamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      const line = `${stamp}  ${text}`;
+      // 同时打到真正的控制台：有调试端口时两边都能看。
+      // eslint-disable-next-line no-console
+      console.log("[ssot]", text);
+      const next = [...s.console, line];
+      return { console: next.length > 200 ? next.slice(next.length - 200) : next };
+    }),
 }));
 

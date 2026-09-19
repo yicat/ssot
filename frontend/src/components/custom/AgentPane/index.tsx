@@ -12,7 +12,7 @@
  *    外面套 `.md-body` 拿排版，再用几个类把「文档级」的字号压回聊天的尺度。
  *    双链（`[[…]]`）在聊天里没有目标状态可依，所以按普通文字显示，**不标成断链**。
  */
-import { Bot, CircleStop, ListTree, Play, Power, Send, Settings2, ShieldAlert, Wrench } from "lucide-react";
+import { Bot, CircleStop, ListTree, Play, Power, Send, Settings2, ShieldAlert, Terminal, Wrench } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { renderMarkdown } from "../../../lib/markdown";
@@ -209,6 +209,15 @@ export function AgentPane({ onOpenSettings }: Props) {
           </Select>
           <button
             type="button"
+            onClick={() => a.set({ consoleOpen: !a.consoleOpen })}
+            className="inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary"
+            title="界面控制台：关键事件与错误（没有 DevTools 时用它）"
+          >
+            <Terminal className="size-3" />
+            控制台{a.console.length > 0 ? ` ${a.console.length}` : ""}
+          </button>
+          <button
+            type="button"
             onClick={onOpenSettings}
             className="inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary"
             title="配置（项目 / Agent 后端 / 外观）"
@@ -294,6 +303,25 @@ export function AgentPane({ onOpenSettings }: Props) {
           )}
         </div>
       </div>
+
+{/* 控制台：点顶栏「控制台」开关。关键事件与错误都在这里——没有 DevTools 时靠它。 */}
+      {a.consoleOpen && (
+        <div className="max-h-40 shrink-0 overflow-auto border-t border-border bg-secondary/30 px-4 py-2">
+          <div className="mb-1 flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span>界面控制台（{a.console.length} 行）</span>
+            <button type="button" onClick={() => a.set({ console: [] })} className="hover:underline">
+              清空
+            </button>
+          </div>
+          {a.console.length === 0 ? (
+            <div className="text-[11px] text-muted-foreground">还没有记录。</div>
+          ) : (
+            <pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+              {a.console.join("\n")}
+            </pre>
+          )}
+        </div>
+      )}
 
       {/* 输入区 */}
       <div className="shrink-0 border-t border-border bg-background px-4 py-2">
