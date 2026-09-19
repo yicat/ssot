@@ -479,6 +479,170 @@ func numOf(v any) int {
 	return -1
 }
 
+// `file_read` 是给 agent 的只读读文件口（`tool-fs` 被关掉后由它补），所以
+// **边界必须从 MCP 这层也验一遍**：越界要报错（不能悄悄读到 vault 外），分页字段要齐。
+// （越界判定的规则本身在 vaultapp 测过，这里验的是接线没把它短路。）
+func TestFileReadPagingAndConfinement(t *testing.T) {
+	root := newVault(t)
+	// 40 行的原文，够验分页与截断。
+	var b strings.Builder
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&b, "第%d行\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(root, "raw", "长文件.txt"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := start(t, root)
+
+	res, isErr := s.callTool("file_read", map[string]any{"path": "raw/长文件.txt", "fromLine": 10, "maxLines": 5})
+	if isErr {
+		t.Fatalf("读文件失败了：%+v", res)
+	}
+	if numOf(res["fromLine"]) != 10 || numOf(res["toLine"]) != 14 {
+		t.Errorf("分页范围不对：fromLine=%v toLine=%v", res["fromLine"], res["toLine"])
+	}
+	if numOf(res["totalLines"]) != 40 {
+		t.Errorf("总行数该是 40：%v", res["totalLines"])
+	}
+	if res["truncated"] != true {
+		t.Errorf("只读了 5 行而共 40 行，truncated 该是 true：%+v", res)
+	}
+	if txt, _ := res["text"].(string); !strings.Contains(txt, "第10行") || strings.Contains(txt, "第15行") {
+		t.Errorf("该读到第 10~14 行：%q", txt)
+	}
+
+	// 越界：一条都不许放行（绝对路径、`..`、Windows 风格的反斜杠）。
+	for _, bad := range []string{`C:\Windows\win.ini`, "/etc/passwd", "../外面.txt", `..\外面.txt`} {
+		if _, isErr := s.callTool("file_read", map[string]any{"path": bad}); !isErr {
+			t.Errorf("越界路径该被拒：%q", bad)
+		}
+	}
+	// 缺参数也要明确报错，而不是读了个空文件。
+	if _, isErr := s.callTool("file_read", map[string]any{}); !isErr {
+		t.Error("没有 path 该报错")
+	}
+}
+
+// `vault_list` 是 agent 的入口（「别猜路径」）：文档与数据表都要给出来。
+func TestVaultListShape(t *testing.T) {
+	root := newVault(t)
+	s := start(t, root)
+
+	res, isErr := s.callTool("vault_list", map[string]any{})
+	if isErr {
+		t.Fatalf("列文档失败了：%+v", res)
+	}
+	docs, ok := res["documents"].([]any)
+	if !ok || len(docs) == 0 {
+		t.Fatalf("该列出文档：%+v", res["documents"])
+	}
+	first, _ := docs[0].(map[string]any)
+	for _, key := range []string{"path", "layer", "title", "status"} {
+		if _, ok := first[key]; !ok {
+			t.Errorf("文档条目该带 %s：%+v", key, first)
+		}
+	}
+	tables, ok := res["tables"].([]any)
+	if !ok || len(tables) == 0 {
+		t.Errorf("该列出数据表（fixture 里有一张）：%+v", res["tables"])
+	}
+}
+
+// `scope_show`：读得出声明与一致性统计（没有声明文件时也要能返回，不是报错）。
+func TestScopeShowWithoutDeclaration(t *testing.T) {
+	s := start(t, newVault(t))
+	res, isErr := s.callTool("scope_show", map[string]any{})
+	if isErr {
+		t.Fatalf("没有范围文件时也该能看现状：%+v", res)
+	}
+	if res["exists"] != false {
+		t.Errorf("fixture 没有范围文件，exists 该是 false：%+v", res)
+	}
+	if res["has_proposal"] != false {
+		t.Errorf("还没提建议，has_proposal 该是 false：%+v", res)
+	}
+	if summary, _ := res["summary"].(string); summary == "" {
+		t.Error("该给一句人看的总结")
+	}
+}
+
+// `scope_propose` **只是建议**：写下建议文件，但生效范围一个字都不动
+// （agent 不能替人定范围——`agent.spec.md` §1 的门）。
+func TestScopeProposeDoesNotTakeEffect(t *testing.T) {
+	root := newVault(t)
+	s := start(t, root)
+
+	before, isErr := s.callTool("scope_show", map[string]any{})
+	if isErr {
+		t.Fatalf("看现状失败：%+v", before)
+	}
+
+	res, isErr := s.callTool("scope_propose", map[string]any{
+		"reason":        "raw/ 是原始素材，不进派生层",
+		"exclude_paths": []string{"raw/**"},
+	})
+	if isErr {
+		t.Fatalf("提建议失败了：%+v", res)
+	}
+	if res["effective"] != false {
+		t.Errorf("建议必须明确不生效：%+v", res)
+	}
+	if p, _ := res["proposal_path"].(string); p == "" {
+		t.Error("该给出建议文件的位置")
+	}
+
+	after, isErr := s.callTool("scope_show", map[string]any{})
+	if isErr {
+		t.Fatalf("看现状失败：%+v", after)
+	}
+	if after["has_proposal"] != true {
+		t.Errorf("提了建议之后该看得到：%+v", after)
+	}
+	// 生效范围没变：声明还不存在。
+	if after["exists"] != before["exists"] {
+		t.Errorf("建议不该改动生效范围：before=%v after=%v", before["exists"], after["exists"])
+	}
+}
+
+// `doc_delete`：dry=1 **什么都不删**（只报影响），dry=0 才真删。
+// 顺序不能反——批量删除前先用 dry 看影响，是这一段的用法说明里教的。
+func TestDocDeleteDryThenReal(t *testing.T) {
+	root := newVault(t)
+	if err := os.WriteFile(filepath.Join(root, "raw", "待删.md"), []byte("---\ntitle: 待删\n---\n\n内容。\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := start(t, root)
+
+	dry, isErr := s.callTool("doc_delete", map[string]any{"path": "raw/待删.md", "dry": 1})
+	if isErr {
+		t.Fatalf("dry 失败：%+v", dry)
+	}
+	if dry["dry"] != true || numOf(dry["matched"]) != 1 {
+		t.Errorf("dry 该报「匹配 1 篇」：%+v", dry)
+	}
+	if _, err := os.Stat(filepath.Join(root, "raw", "待删.md")); err != nil {
+		t.Fatalf("dry 阶段不该删文件：%v", err)
+	}
+
+	real, isErr := s.callTool("doc_delete", map[string]any{"path": "raw/待删.md"})
+	if isErr {
+		t.Fatalf("真删失败：%+v", real)
+	}
+	if _, err := os.Stat(filepath.Join(root, "raw", "待删.md")); !os.IsNotExist(err) {
+		t.Error("真删之后文件该不在了")
+	}
+	// glob 一条都没匹配到：**报错**而不是静默成功。
+	// 理由：这个口子是给 agent 用的，路径/glob 写错时要说出来——「删了 0 篇」看起来像成功，
+	// 会让它以为清理做完了（真删的语义是「这堆文件没了」，不是 rm 那样的幂等）。
+	none, isErr := s.callTool("doc_delete", map[string]any{"path": "raw/根本不存在/**", "dry": 1})
+	if !isErr {
+		t.Fatalf("glob 匹配不到该报错：%+v", none)
+	}
+	if text, _ := none["content"].([]any); len(text) == 0 {
+		t.Errorf("错误要带一句人话：%+v", none)
+	}
+}
+
 // （docs/specs/dsh.spec.md §4）。这是编译真二进制跑一遍 CLI 的拒绝路径。
 func TestRejectsHumanActor(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {

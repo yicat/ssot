@@ -553,6 +553,14 @@ func (s *AgentService) HarnessLogPath() string {
 
 // emitUpdate 把 ACP 更新转成界面好用的形状并推过去。
 func (s *AgentService) emitUpdate(u acp.Update) {
+	application.Get().Event.Emit(EventAgentUpdate, toAgentUpdate(u))
+}
+
+// toAgentUpdate 是纯映射：ACP 的一条更新 → 界面的形状。
+//
+// 拆出来是为了**能测**：界面的消息气泡、思考折叠、工具行全靠这几个字段
+// （kind / text / tool），映射错了界面就悄悄少东西，而这一层原本一行测试都没有。
+func toAgentUpdate(u acp.Update) AgentUpdate {
 	out := AgentUpdate{SessionID: u.SessionID, Kind: u.Kind(), Raw: string(u.Raw)}
 	var body struct {
 		Content struct {
@@ -566,10 +574,20 @@ func (s *AgentService) emitUpdate(u acp.Update) {
 	}
 	_ = json.Unmarshal(u.Raw, &body)
 	out.Text = body.Content.Text
+	// 只在这条更新**带工具调用 id** 时才给 Tool：别的类型不该凭空多出一个工具行。
 	if body.ToolCallID != "" {
 		out.Tool = &AgentToolCall{ID: body.ToolCallID, Title: body.Title, Status: body.Status, Kind: body.Kind}
 	}
-	application.Get().Event.Emit(EventAgentUpdate, out)
+	return out
+}
+
+// toPermissionPrompt 也是纯映射：ACP 的权限请求 → 界面的弹窗内容。
+func toPermissionPrompt(id string, req acp.Request) AgentPermissionPrompt {
+	ops := make([]AgentPermissionOp, 0, len(req.Options))
+	for _, o := range req.Options {
+		ops = append(ops, AgentPermissionOp{OptionID: o.OptionID, Name: o.Name, Kind: o.Kind})
+	}
+	return AgentPermissionPrompt{ID: id, SessionID: req.SessionID, Tool: req.ToolCall.Title, Options: ops}
 }
 
 // askPermission 是「批准必须是人」在聊天里的落地：把问题推给界面，等人在弹窗上点。
@@ -581,13 +599,7 @@ func (s *AgentService) askPermission(req acp.Request) string {
 	s.pending[id] = ch
 	s.permMu.Unlock()
 
-	ops := make([]AgentPermissionOp, 0, len(req.Options))
-	for _, o := range req.Options {
-		ops = append(ops, AgentPermissionOp{OptionID: o.OptionID, Name: o.Name, Kind: o.Kind})
-	}
-	application.Get().Event.Emit(EventAgentPermission, AgentPermissionPrompt{
-		ID: id, SessionID: req.SessionID, Tool: req.ToolCall.Title, Options: ops,
-	})
+	application.Get().Event.Emit(EventAgentPermission, toPermissionPrompt(id, req))
 
 	defer func() {
 		s.permMu.Lock()

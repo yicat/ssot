@@ -28,6 +28,8 @@
 
 | 2026-09-20 | 检索结果说清「截断」 | #33：实测 `limit` 本来就生效（10/50/70 条），真正的缺口是**结果里看不出被截断** → `vault_search` 加 `total`/`returned`/`truncated` + `hint`，上限明确 200 并写进说明，`limit` 传字符串也认；CLI 打印「命中 N 篇，返回 M 条」 | `mcp/tools.go`、`vaultindex.CountMatches`、`cmd/ssot/main.go`、`OPEN.md` #33 |
 
+| 2026-09-20 | **补单测（按覆盖率找缺口）** | 实测覆盖率后按低的补：`vaultgit` **0 → 86%**（仓库判定含「子目录不算」、只提交一个文件、trailer 独占一段、恢复删除）、`internal/api` **0 → 3.3%**（把 ACP 更新→界面形状的映射拆成纯函数再测）、`agentapp` **58 → 76%**（起后端不建会话、开会话不重开后端、会话只留本 vault、标题三级）、`mcp` **60 → 82%**（`file_read` 越界/分页、`vault_list`、`scope_show/propose`、`doc_delete` 的 dry 与真删）、`cmd/ssot` 参数解析 + 检索那行 | 各包 `*_test.go`、`OPEN.md` #34 |
+
 ## 现在在哪
 
 **已完成**
