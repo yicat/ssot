@@ -45,25 +45,35 @@ function Prose({ text }: { text: string }) {
   );
 }
 
+/**
+ * 思考那一行的小预览：收起时给一句人话，让人知道里面大概在想什么（太长就截断）。
+ * 换行压成空格，免得 summary 被撑成多行。
+ */
+function thoughtPreview(text: string): string {
+  const one = text.replace(/\s+/g, " ").trim();
+  return one.length > 48 ? one.slice(0, 48) + "…" : one;
+}
+
 export function AgentPane({ onOpenSettings }: Props) {
   const a = useAgent();
 
-  // 打开面板就把状态拉一次：后端可能早就起着，切走再切回来不该显示成「没起」。
+  // 打开面板就拉状态；**没起后端就自动起**。
   //
   // ⚠️ 这里**不能**加 `if (a.vault)` 这类条件：`vault` 本身就是从 Status 拿的，
   // 首次挂载时它还是空字符串，条件不成立 → 根本不查 → 界面一直显示「后端未启动」，
   // 而后端其实在跑（踩过：切走再切回来、或页面 reload 之后就是这样）。
   useEffect(() => {
-    void a.refresh();
+    // 打开面板就把后端拉起来：DSH 那样的体感（不用人先点一下）。boot 会先拉状态，没起才起。
+    void a.boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canSend = a.running && !a.busy && a.draft.trim().length > 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* 顶部：后端状态 + 模型 + 会话 */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-xs">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2 text-xs">
         <Bot className="size-3.5 text-muted-foreground" />
         <span className="text-muted-foreground">
           {a.running ? `${a.agent || "后端"}${a.version ? " " + a.version : ""}` : "后端未启动"}
@@ -172,14 +182,17 @@ export function AgentPane({ onOpenSettings }: Props) {
               );
             }
             if (it.kind === "thought") {
-              // 推理是**过程**：留痕但压低，不抢回答的位置。
+              // 推理是**过程**：默认收起（跟 DSH 一样），需要时点开看。
+              // 用原生 <details> 而不是 state：不用管展开状态，也不会被流式更新冲掉。
               return (
-                <div key={it.id} className="flex max-w-[92%] gap-2 self-start">
-                  <div className="mt-0.5 shrink-0 text-[10px] tracking-wide text-muted-foreground/60">思考</div>
-                  <div className="min-w-0 border-l border-border/70 pl-2 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground/80 italic">
+                <details key={it.id} className="max-w-[92%] self-start">
+                  <summary className="cursor-pointer list-none text-[10px] tracking-wide text-muted-foreground/60 hover:text-muted-foreground">
+                    思考 <span className="opacity-70">{thoughtPreview(it.text)}</span>
+                  </summary>
+                  <div className="mt-1 border-l border-border/70 pl-2 text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground/80 italic">
                     {it.text}
                   </div>
-                </div>
+                </details>
               );
             }
             if (it.kind === "tool") {
@@ -217,7 +230,7 @@ export function AgentPane({ onOpenSettings }: Props) {
       </div>
 
       {/* 输入区 */}
-      <div className="border-t border-border px-4 py-2">
+      <div className="shrink-0 border-t border-border bg-background px-4 py-2">
         <div className="flex items-end gap-2">
           <textarea
             value={a.draft}

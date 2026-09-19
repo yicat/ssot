@@ -75,6 +75,24 @@ export function useAgent() {
     }
   }, [applyStatus, push, set]);
 
+  /**
+   * 打开面板时调：拉一次状态；**没起后端就自动起**（DSH 那样的体感——不用人先点一下）。
+   *
+   * ⚠️ 判断要用**刚拉回来的**状态，不能读 store：`applyStatus` 是 set 之后才生效，
+   * 同一次调用里读到的是旧值（这种时序错很隐蔽，所以这里直接把 st 用在判断上）。
+   */
+  const boot = useCallback(async () => {
+    try {
+      const st = await AgentService.Status();
+      applyStatus(st);
+      if (!st.running) {
+        await start();
+      }
+    } catch (err) {
+      push({ kind: "notice", text: String(err), isError: true });
+    }
+  }, [applyStatus, push, start]);
+
   /** 发一句。 */
   const send = useCallback(async () => {
     const text = store.draft.trim();
@@ -213,6 +231,7 @@ export function useAgent() {
 
   return {
     ...store,
+    boot,
     refresh,
     start,
     send,
