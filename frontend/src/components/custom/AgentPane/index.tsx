@@ -12,7 +12,7 @@
  *    外面套 `.md-body` 拿排版，再用几个类把「文档级」的字号压回聊天的尺度。
  *    双链（`[[…]]`）在聊天里没有目标状态可依，所以按普通文字显示，**不标成断链**。
  */
-import { Bot, CircleStop, ListTree, Play, Send, Settings2, ShieldAlert, Wrench } from "lucide-react";
+import { Bot, CircleStop, ListTree, Play, Power, Send, Settings2, ShieldAlert, Wrench } from "lucide-react";
 import { useEffect } from "react";
 
 import { renderMarkdown } from "../../../lib/markdown";
@@ -81,6 +81,18 @@ export function AgentPane({ onOpenSettings }: Props) {
         {a.sessionId && <span className="truncate text-[11px] text-muted-foreground/70">会话 {a.sessionId.slice(0, 8)}</span>}
 
         <div className="ml-auto flex items-center gap-2">
+          {a.running && (
+            <button
+              type="button"
+              onClick={() => void a.stop()}
+              disabled={a.busy}
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 hover:bg-secondary disabled:opacity-40"
+              title={a.busy ? "正在跑，等这一轮结束再关" : "关掉后端进程（下次打开面板会自动起来）"}
+            >
+              <Power className="size-3" />
+              关掉后端
+            </button>
+          )}
           {a.models.length > 0 && (
             <select
               value={a.model}
@@ -269,11 +281,6 @@ export function AgentPane({ onOpenSettings }: Props) {
         </div>
         <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
           {a.busyMessage && <span>{a.busyMessage}</span>}
-          {a.running && !a.busy && (
-            <button type="button" onClick={() => void a.stop()} className="hover:underline">
-              关掉后端
-            </button>
-          )}
           <span className="ml-auto">
             agent 不能发布：改完是 draft，发布只能你在文档页点。
           </span>
