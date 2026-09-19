@@ -140,15 +140,11 @@ export function useAgent() {
    */
   const boot = useCallback(async () => {
     try {
-      const st = await AgentService.Status();
-      applyStatus(st);
-      if (!st.running) {
-        await start();
-      }
+      applyStatus(await AgentService.Status());
     } catch (err) {
       push({ kind: "notice", text: String(err), isError: true });
     }
-  }, [applyStatus, push, start]);
+  }, [applyStatus, push]);
 
   /**
    * 新开一个会话：`stop → start`。
@@ -199,6 +195,12 @@ export function useAgent() {
   const send = useCallback(async () => {
     const text = store.draft.trim();
     if (!text) return;
+    // **懒启动**：真的要说第一句话时才起后端（起后端会顺带建一个会话）。
+    // 以前是「打开面板就自动起」——于是每次进来都多一个空会话（实测攒了一堆 2KB 的空会话）。
+    if (!store.running) {
+      await start();
+      if (!useAgentStore.getState().running) return; // 起不来就算了，start 里已经把原因推出来了
+    }
     push({ kind: "user", text });
     // 会话的**初始描述**：第一句话就是这次会话在干什么——先拿它当标题（机械截断，不调模型）。
     // 之后可以由 agent 生成更好的标题，走同一个存储（见 renameSession 与 docs/OPEN.md）。
