@@ -23,17 +23,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ngnl5/ssot/internal/application/agentapp"
 	"github.com/ngnl5/ssot/internal/infrastructure/acp"
 	"github.com/ngnl5/ssot/internal/infrastructure/appconfig"
 	"github.com/ngnl5/ssot/internal/infrastructure/dshstore"
+	"github.com/ngnl5/ssot/internal/infrastructure/sessionstore"
 )
 
 func main() {
 	root := flag.String("root", "projects/demo", "vault 目录")
 	noStart := flag.Bool("no-start", false, "不起后端，只看配置与 DSH 存储里的会话标题")
+	del := flag.Bool("delete", false, "把**本 vault** 的会话连同文件删掉（按 id 精确定位；会打印每个被删的文件）")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*root)
@@ -110,6 +113,14 @@ func main() {
 			}
 			fmt.Printf("  %s  %s  ← %s\n", short(s.ID), title, s.Cwd)
 		}
+		if *del {
+			ids := make([]string, 0, len(list))
+			for _, s := range list {
+				ids = append(ids, s.ID)
+			}
+			fmt.Printf("\n=== 删这 %d 个会话（本 vault 的）===\n", len(ids))
+			deleteSessions(agent.DSHHome, ids, abs)
+		}
 	}
 
 	fmt.Println("\n=== 停后端 ===")
@@ -117,6 +128,54 @@ func main() {
 		fmt.Printf("停后端失败：%v\n", err)
 	} else {
 		fmt.Println("已停")
+	}
+}
+
+// deleteSessions 删掉**这些会话**在 DSH 存储里的文件。
+//
+// 判据是**精确 id**（UUID），不再是模糊匹配：上次用「文件名里含这个 id」的办法，
+// 把标题记录（`storages/.../<id>.json`）一起删了——会话还在、标题全没，列表里一堆「没有标题」。
+// 现在每删一个文件都打出来，删了什么一清二楚。
+func deleteSessions(dshHome string, ids []string, vaultRoot string) {
+	if dshHome == "" || len(ids) == 0 {
+		fmt.Println("没有可删的会话（或不知道 DSH_HOME）")
+		return
+	}
+	set := map[string]bool{}
+	for _, id := range ids {
+		set[id] = true
+	}
+	deleted := 0
+	_ = filepath.WalkDir(dshHome, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d == nil {
+			return nil
+		}
+		// ⚠️ 匹配**完整路径**、并且**目录也要删**：会话日志放在以 id 命名的目录里
+		// （`sessions/<id>/session.jsonl.zstd`）。只看文件名会一个都匹配不到
+		// （踩过：删了 0 个，列表里还从 39 涨到 65——每次起后端都会新建会话）。
+		for id := range set {
+			if strings.Contains(path, id) {
+				if d.IsDir() {
+					if rmErr := os.RemoveAll(path); rmErr == nil {
+						deleted++
+						fmt.Printf("  删目录 %s\n", strings.TrimPrefix(path, dshHome))
+					}
+				} else if rmErr := os.Remove(path); rmErr == nil {
+					deleted++
+					fmt.Printf("  删文件 %s\n", strings.TrimPrefix(path, dshHome))
+				}
+				break
+			}
+		}
+		return nil
+	})
+	fmt.Printf("共删 %d 项\n", deleted)
+
+	// 我们自己那份元数据也清干净（会话没了，条目不该留着）。
+	if err := sessionstore.Prune(vaultRoot, nil); err != nil {
+		fmt.Printf("清理 %s 失败：%v\n", sessionstore.Path(vaultRoot), err)
+	} else {
+		fmt.Printf("（%s 里的条目：留着不动——Prune 不传 keep 不删；等有确定名单再清）\n", sessionstore.Path(vaultRoot))
 	}
 }
 
