@@ -97,6 +97,17 @@ Go + Wails v3 + Vite/React/shadcn。构建编排走 Taskfile（`wails3 task ...`
 
 ## 环境与已知坑
 
+### 脚本与文本处理
+
+- **改源码只用编辑工具**（`read` → `edit`/`write`）。**不要**用 PowerShell 脚本去 patch 源码：
+  在 Windows 上会被 CRLF（锚点对不上）、反引号（被当转义吃掉）、`-replace`/`.Replace` 的重载
+  这些坑咬住，而且报错往往看不出真正原因（实测一个下午翻车四次）。
+- **写脚本就进 `scripts/`**，并在文件头写清「做什么 / 适用范围 / 什么时候不该用」（见本文开头第 6 条）。
+  临时文件里的一次性补丁脚本**不算脚本**，它既没出处也不可复用。
+- **运行时优先 Deno**（本机 2.8.2）或 Node（v24.9，仓库现有 `scripts/check/*.mjs` 都是它）；
+  TypeScript / 正则 / JSON / 文件遍历这类活别用 PowerShell 干。
+- PowerShell 只用来**跑命令**：构建、测试、git、只读探查（`netstat`、`Get-Process` 这类）。
+
 ### 网络与 TLS
 
 1. **抓 HTTPS 必须用 Node，不能用 curl / PowerShell**。Windows 上 `curl` / `Invoke-WebRequest` / `.NET`
