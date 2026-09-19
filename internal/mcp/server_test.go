@@ -139,8 +139,8 @@ func TestToolsListIsSnakeCaseAndHidesStatusSet(t *testing.T) {
 	s := start(t, newVault(t))
 	resp := s.call("tools/list", nil)
 	list := resp["result"].(map[string]any)["tools"].([]any)
-	if len(list) != 9 {
-		t.Fatalf("工具该有 9 个（含只读的 file_read），实际 %d", len(list))
+	if len(list) != 10 {
+		t.Fatalf("工具该有 10 个（含只读的 file_read 与能删的 doc_delete），实际 %d", len(list))
 	}
 	names := map[string]bool{}
 	for _, raw := range list {

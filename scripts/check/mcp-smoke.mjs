@@ -151,7 +151,7 @@ async function main() {
 
     const list = await cli.call(2, "tools/list");
     const names = list.result.tools.map((t) => t.name);
-    check("工具数是 9（含只读的 file_read）", names.length === 9, names.join(", "));
+    check("工具数是 10（含只读的 file_read 与能删的 doc_delete）", names.length === 10, names.join(", "));
     check(
       "工具名都是 snake_case（DSH 只接受 [A-Za-z0-9_-]）",
       names.every((n) => /^[a-z0-9_]+$/.test(n)),

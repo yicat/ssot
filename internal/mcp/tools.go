@@ -127,6 +127,68 @@ var tools = []tool{
 		},
 	},
 	{
+		name: "doc_delete", title: "删除文档（连带清派生层）",
+		description: "删除一篇文档，并清掉派生层里属于它的块/向量/实体/关系。" +
+			"path 支持 glob（例如 raw/子目录/**）用于批量删除；先给 dry=1 只报影响（删几篇、清几行、会造成几条断链），" +
+			"确认后再真删。删完会列出还链着它的文档（断链）。删除会在 vault 的 git 里留痕。",
+		schema: obj(map[string]any{
+			"path": str2("文档路径或 glob（相对 vault 根）"),
+			"dry":  int2("1 = 只报影响不删，0 = 真删（默认 0）"),
+		}, "path"),
+		run: func(s *Server, a args) (any, error) {
+			p, err := a.str("path")
+			if err != nil {
+				return nil, err
+			}
+			dry, err := a.num("dry", 0)
+			if err != nil {
+				return nil, err
+			}
+			docs, patterns, err := s.svc.ExpandArgs([]string{p})
+			if err != nil {
+				return nil, err
+			}
+			if dry != 0 {
+				rows, broken, n := 0, 0, 0
+				for _, d := range docs {
+					r, err := s.svc.WouldRemove(d)
+					if err != nil {
+						return nil, err
+					}
+					rows += r.DerivedRows
+					broken += len(r.BrokenLinks)
+					n++
+				}
+				return map[string]any{
+					"dry": true, "matched": n, "patterns": patterns,
+					"derived_rows": rows, "broken_links": broken,
+					"note": "什么都没删；确认后再用 dry=0 调一次",
+				}, nil
+			}
+			results, err := s.svc.RemoveMany(docs, s.actor)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]map[string]any, 0, len(results))
+			rows, committed := 0, 0
+			for _, r := range results {
+				rows += r.DerivedRows
+				if r.Change.Committed {
+					committed++
+				}
+				out = append(out, map[string]any{
+					"path": r.Path, "derived_rows": r.DerivedRows,
+					"broken_links": r.BrokenLinks,
+					"committed":    r.Change.Committed, "commit": r.Change.CommitSHA,
+					"version_note": r.Change.VersionNote,
+				})
+			}
+			return map[string]any{
+				"deleted": len(results), "derived_rows": rows, "committed": committed,
+				"items": out,
+			}, nil
+		},
+	}, {
 		name: "vault_search", title: "全文检索", readOnly: true,
 		description: "在文档标题与正文里检索，返回命中的文档与附近原文。找东西先用它，再 doc_read 看全篇。",
 		schema: obj(map[string]any{
